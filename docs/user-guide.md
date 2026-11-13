@@ -9,6 +9,7 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 - [Launching an item](#launching-an-item)
 - [Reading a run](#reading-a-run)
 - [Testing a theory: launch settings](#testing-a-theory-launch-settings)
+- [What the content wants from its server](#what-the-content-wants-from-its-server)
 - [Testing resume and progress saving](#testing-resume-and-progress-saving)
 - [Comparing with a working copy (optional)](#comparing-with-a-working-copy-optional)
 - [Saved runs](#saved-runs)
@@ -51,7 +52,7 @@ Only one SCORM Lab window runs at a time. Opening another package sends it to th
   - the status line
 - **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the tabs.
   The **R** and **F** buttons are for comparing.
-- **Tabs:** Findings, Boot path, Package, Files, API, Lookups, Network, Scripts, Errors, Console, Frames, Compare and Experiments. The
+- **Tabs:** Findings, Boot path, Package, Files, API, Lookups, Network, Scripts, Errors, Console, Frames, Compare, Experiments and Server needs. The
   **Filter** box filters whichever table is showing.
 
 When no run is selected, the tabs show the package as read from its files. When a run is selected, they show that run.
@@ -265,6 +266,43 @@ default. Click a row to open that run. **Stop** ends the run in progress and ski
 If a variant got further than the default, a finding says so and lists the settings that changed. That tells you
 which setting matters. If nothing helps, the finding says that too. The same thing runs from the command line:
 see [`experiment`](cli.md#experiment).
+
+## What the content wants from its server
+
+Content made for a hosting platform often asks that platform for its settings (`/api/player/config`, a user record)
+before it starts. In an LMS nobody answers, so it stops or falls back to a preview mode. Answering the request by hand
+needs to know what to put in the answer. **Discover** works it out.
+
+1. Launch the item once, then open the **Server needs** tab. It lists the run's fetch and XHR requests to the server's
+   root or another site.
+2. Choose **Discover** on a request, or **Discover all server requests**. **Rounds** limits how many times it tries
+   (5 by default).
+3. SCORM Lab runs the item without an answer, then answers the requests with a stand-in and watches every field the
+   content reads from it, and how it uses each one. Then it runs again, answering with those fields filled in (`""`,
+   `false`, `0`, `[]`), and again, until a round finds no new field. Each round is a run as long as **Stop after**
+   (10 seconds if that says **I stop it**), with the settings in the toolbar.
+
+The result shows, for each request: the code that made it, every field read with its type, how it was used and where,
+and the stand-in response (the fields with placeholder values). The **Rounds** table says how far each run got against
+the one without an answer; click a row to open that run. **Save as response** adds the stand-in to your answers (see
+[Forcing values and answering requests](#forcing-values-and-answering-requests)), so the next launch gets it. Edit the
+values first if the content needs real ones (`true`, a version number). The findings say what the content needs, and how
+much further it got with the stand-in. The result is also saved in the `discoveries` folder next to the saved runs.
+
+What it can't see:
+- A field that doesn't exist yet is answered with a stand-in that is always there and always truthy, so in the first
+  round `if (config.enabled)` takes the true branch and the content reads further than a real `false` would let it.
+  Later rounds use the placeholder values, so they behave like a real answer.
+- `typeof` on a missing field says `object`, `'x' in config` says yes, and listing or iterating it gives nothing.
+  Calling a missing field throws, as it would with a real answer, unless it is named like a list or text method
+  (`map`, `trim`).
+- Types come from how the code used a value. A comparison with `===` or a truthiness test leaves no trace in the
+  value itself, so SCORM Lab reads the code next to it. In minified code on one long line this still works; code built
+  at run time (`eval`) or reading the answer in a worker isn't followed. A field it read but did nothing visible with
+  is shown as true or false.
+- Lists found in a real answer are given as they are and not looked into.
+
+From the command line: [`discover`](cli.md#discover).
 
 ## Testing resume and progress saving
 

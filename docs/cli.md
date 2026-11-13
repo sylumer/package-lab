@@ -9,6 +9,8 @@ Concierge module use it too.
 - [analyze](#analyze)
 - [items](#items)
 - [run](#run)
+- [experiment](#experiment)
+- [discover](#discover)
 - [report](#report)
 - [open](#open)
 - [serve](#serve)
@@ -32,7 +34,7 @@ To put `scorm-lab` on your PATH:
 npm link
 ```
 
-Without linking, use `node bin/scorm-lab.js`. Commands that run a package (`run`, `report --run`, `open`, `serve`)
+Without linking, use `node bin/scorm-lab.js`. Commands that run a package (`run`, `experiment`, `discover`, `report --run`, `open`, `serve`)
 need Electron. That is either this repo's own (installed by `npm install`) or `/Applications/SCORM Lab.app`. `analyze`,
 `items` and plain `report` need only Node.
 
@@ -44,6 +46,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `items <package.zip>` | Lists the items that can be launched, numbered |
 | `run <package.zip>` | Launches an item in a hidden browser, records it, and reports what went wrong |
 | `experiment <package.zip>` | Runs the same launch several ways, one after another, and prints how far each got |
+| `discover <package.zip>` | Works out what the content wants from its server: the fields it reads from each answer, and a stand-in response |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
@@ -240,6 +243,69 @@ findings (see [From an experiment](findings.md#from-an-experiment)).
 
 `better` is 1 if the variant got further than the default, -1 if less far, 0 if the same. `out` is the saved run's
 path, or `null` without `--out`. Exit status is 0 unless the command fails.
+
+## discover
+
+Works out what the content wants from its server, by answering its requests and watching what it reads from the
+answers. See [What the content wants from its server](user-guide.md#what-the-content-wants-from-its-server) for how it
+works and what it can't see.
+
+```bash
+scorm-lab discover course.zip [--item n] [--request pattern] [--rounds n] [--json] [--out folder] [run options]
+```
+
+It runs the item (headless, like `run`) without an answer first. Then it answers the requests with a stand-in that
+records every field the content reads, and runs again answering with those fields filled with placeholders (`""`,
+`false`, `0`, `[]`), until a round reads no new field or `--rounds` is reached. The run options (`--api`, `--wait`,
+`--options`, `--answer`, …) apply to every run; your own `--answer` responses still answer the requests discovery isn't
+working on. Progress goes to standard error.
+
+| Option | Default | What it does |
+|---|---|---|
+| `--request` | every server request | A pattern (a path like `/api/player/config`, a glob, or a `/regex/`) for the request to work on. Without it, every fetch or XHR request the first run made to the server's root or another site, one per path |
+| `--rounds` | 5 | At most this many answered runs (1 to 10), after the one without an answer |
+| `--out` | none | A folder: each run as a saved run (`01-no_answer.json`, `02-round_1.json`, …) and the result as `discovery.json` (the same as `--json`) |
+| `--json` | off | Prints JSON (below) instead of text |
+
+The text output is the rounds table (as for `experiment`, against the run with no answer), then for each request: the
+code that made it, each field with its type, how it was used and where, and the stand-in response. Then the findings
+(see [From a discovery](findings.md#from-a-discovery)). To use the stand-in, put it in a file and pass
+`--answer '/api/player/config=@stand-in.json'` to `run`.
+
+`discover --json`:
+
+```json
+{
+  "package": "course.zip", "item": { "number": 1, "…": "…" },
+  "base": { "expose": "manifest", "…": "…" }, "request": null,
+  "requests": [{
+    "match": "/api/player/config", "url": "lab://run/api/player/config", "method": "GET", "from": "boot.js:1",
+    "fields": [{ "path": "lms.enabled", "type": "boolean", "how": "truthiness test", "at": ["boot.js:3"] },
+               { "path": "lms.version", "type": "string", "how": "compared with a string", "at": ["boot.js:4"] }],
+    "skeleton": { "lms": { "enabled": false, "version": "" } },
+    "response": { "match": "/api/player/config", "status": 200, "headers": {}, "body": "{\"lms\":{\"enabled\":false,\"version\":\"\"}}" }
+  }],
+  "rows": [
+    { "name": "no answer", "furthest": "shown", "furthestLabel": "Content shown", "apiCalls": 0, "errors": 3, "verdict": { "…": "…" }, "progress": "the baseline", "better": 0 },
+    { "name": "round 1", "furthest": "committed", "…": "…", "progress": "got further: reached Committed (was Content shown)", "better": 1 }
+  ],
+  "rounds": 2, "complete": true,
+  "noAnswer": { "furthest": "shown", "label": "Content shown" },
+  "standIn": { "name": "round 2", "furthest": "committed", "label": "Committed", "better": 1 },
+  "findings": ["…"],
+  "out": null
+}
+```
+
+- `fields[].type` is `string`, `number`, `boolean`, `array` or `object`; `how` says what it was judged from; `at` is up to
+  three places in the code (`file:line`) that read it. An object field is listed as well as its fields.
+- `skeleton` is the stand-in: the fields with placeholder values. `response` is the same as an answer (a
+  [response](developer-guide.md#launch-options) for `--options` or the UI).
+- `rounds` is the number of answered runs; `complete` is true when the last one read nothing new (so it ran with the
+  final stand-in), false when `--rounds` stopped it.
+- `standIn` is the last run, against the run with no answer: `better` is 1 if it got further, -1 if less far, 0 if the same.
+
+Exit status is 0 unless the command fails.
 
 ## report
 

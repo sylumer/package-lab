@@ -19,6 +19,9 @@ import { diffLines, unified } from '../src/textdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
 import { pinPathProblem, matcher, answerFor, buildAnswer, pinPrefix, userAgentPin, lexicalDeclaration, pinFindings, parsePinFlag, parseAnswerFlag } from '../src/pins.js'
 import { STEPS, milestones, furthest, firstMissing, milestoneFinding, progress, runCounts } from '../src/milestones.js'
+import { probeBody, shapePrefix, requestPattern, serverRequests, sourceHint, shapeReads, inferShape, discover, discoverFindings, checkDiscover } from '../src/shape.js'
+import { servedBody } from '../src/pins.js'
+import vm from 'node:vm'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
 function fixture(name, edit = () => {}) {
@@ -97,6 +100,23 @@ const lexical = fixture('lexical', d => {
   writeFileSync(join(d, 'boot.js'), "let previewMode = true\naddEventListener('load', function () { if (!previewMode) scorm.start() })\n")
   sub(d, 'lesson.html', /<script/, '<script src="boot.js"></script><script')
   sub(d, 'lesson.js', /scorm\.start\(\)/g, 'true')
+})
+
+// needs: content that fetches its configuration from /api/player/config and only starts with it. Discovery has to
+// find cfg.lms.enabled (a truthiness test), cfg.lms.version (compared with '2004') and cfg.assets.base (joined to text).
+const NEEDS_BOOT = `fetch('/api/player/config').then(function (r) { if (!r.ok) throw new Error('no config'); return r.json() }).then(function (cfg) {
+  var media = cfg.assets.base + 'media/'
+  if (cfg.lms.enabled) {
+    if (cfg.lms.version === '2004') console.log('wants SCORM 2004')
+  }
+  document.getElementById('status').setAttribute('data-media', media)
+  start()
+}).catch(function (e) { document.getElementById('status').textContent = 'Couldn’t load the player configuration: ' + e.message })
+`
+const needs = fixture('needs', d => {
+  writeFileSync(join(d, 'boot.js'), NEEDS_BOOT)
+  sub(d, 'lesson.html', '<script src="lesson.js" defer></script>', '<script src="lesson.js" defer></script><script src="boot.js" defer></script>')
+  sub(d, 'lesson.js', /\nstart\(\)\s*$/, '\n')
 })
 
 // ---- Unit ----
@@ -352,6 +372,103 @@ assert.equal(cliCommand(normaliseOptions({ pins: [{ path: 'previewMode', value: 
 assert.equal(cliCommand(normaliseOptions({ pins: [{ path: 'x', value: 1, frames: 'all' }], responses: [{ match: 'a', headers: { A: 'b' } }] })), 'scorm-lab run package.zip --options options.json', 'cliCommand: what a flag can’t say goes to the options file')
 assert.throws(() => normaliseOptions({ responses: [1, 2, 3].map(i => ({ match: 'a' + i, body: 'x'.repeat(8 * 1024 ** 2) })) }), /more than 20 MB/, 'options: total response size cap')
 assert.match(pinFindings(trace({ requests: [{ url: 'lab://run/api/x', method: 'GET', answerFailed: 'bad header' }] }), normaliseOptions({ responses: [{ match: 'a' }] })).find(f => /Couldn’t answer 1 request/.test(f.title)).evidence[0], /bad header/)
+
+// Shape (P1.3). The recording Proxy runs here in a vm context, with stand-ins for Response, XMLHttpRequest and fetch:
+// the same probe code the browser gets, and the needs fixture's boot.js as the content.
+const SHAPE = readFileSync(new URL('../src/host/shape-probe.js', import.meta.url), 'utf8'), CFG = 'lab://run/api/player/config'
+// Runs code in a fresh page-like context with the given responses (as options.responses); resolves to { reports, ctx }.
+// Each page gets its own classes, as each browser frame has its own: the probe patches their prototypes.
+async function inPage(code, responses, extra = {}) {
+  class FakeResponse { constructor(body, url, status = 200) { Object.assign(this, { body, url, status, ok: status < 400 }) } json() { return Promise.resolve(JSON.parse(this.body)) } text() { return Promise.resolve(this.body) } }
+  class FakeXHR { constructor(body, url, type = '') { this.body = body; this.responseURL = url; this.readyState = 4; this.responseType = type } }
+  Object.defineProperty(FakeXHR.prototype, 'response', { configurable: true, get() { return this.responseType === 'json' ? JSON.parse(this.body) : this.body } })
+  Object.defineProperty(FakeXHR.prototype, 'responseText', { configurable: true, get() { return this.body } })
+  const reports = [], answer = url => responses.find(r => matcher(r.match)(url))
+  const ctx = vm.createContext({ __labReport: s => reports.push(JSON.parse(s)), location: { href: 'lab://run/pkg/lesson.html' }, URL, Response: FakeResponse, XMLHttpRequest: FakeXHR, console: { log() {} },
+    fetch: async u => { const url = 'lab://run' + u, a = answer(url); return a ? new FakeResponse(servedBody(a.body), url) : new FakeResponse('Not found', url, 404) }, ...extra })
+  vm.runInContext(shapePrefix(responses) + SHAPE, ctx, { filename: 'probe' })
+  vm.runInContext(code, ctx, { filename: 'lab://run/pkg/boot.js' })
+  await new Promise(r => setTimeout(r, 20))
+  return { reports, ctx }
+}
+const page = () => ({ document: { getElementById: () => ({ setAttribute() {}, textContent: '' }) }, start() { ctxStarted.n++ } }), ctxStarted = { n: 0 }
+{
+  const { reports } = await inPage(NEEDS_BOOT, [{ match: '/api/player/config', body: '@probe' }], page())
+  assert.equal(ctxStarted.n, 1, 'shape: with @probe the content got past its configuration')
+  const reads = shapeReads({ probe: reports, sources: { 'lab://run/pkg/boot.js': NEEDS_BOOT } }, '/api/player/config'), sh = inferShape(reads), byPath = Object.fromEntries(sh.fields.map(f => [f.path, f]))
+  assert.deepEqual(sh.skeleton, { assets: { base: '' }, lms: { enabled: false, version: '' } }, 'shape: skeleton of the needs fixture')
+  assert.deepEqual([byPath['lms.enabled'].type, byPath['lms.version'].type, byPath['assets.base'].type], ['boolean', 'string', 'string'], 'shape: types')
+  assert.match(byPath['lms.enabled'].how, /truthiness/); assert.match(byPath['lms.version'].how, /compared with a string/); assert.match(byPath['assets.base'].how, /text/)
+  assert.deepEqual(byPath['lms.version'].at, ['boot.js:4'], 'shape: where it was read')
+  // Round 2: answered with the skeleton, the real values are used (enabled is false, so version isn't read) and nothing is new.
+  const r2 = await inPage(NEEDS_BOOT, [{ match: '/api/player/config', body: probeBody(sh.skeleton) }], page())
+  assert.deepEqual([...new Set(r2.reports.map(r => r.path))].sort(), ['assets', 'assets.base', 'lms', 'lms.enabled'], 'shape: with the skeleton, the data is real')
+  // Without an answer the content never starts.
+  ctxStarted.n = 0; await inPage(NEEDS_BOOT, [], page()); assert.equal(ctxStarted.n, 0, 'shape: no answer, no start')
+}
+{
+  // The Proxy's documented behaviour, and the other ways in: text() + JSON.parse, XHR responseText + JSON.parse, XHR json.
+  const code = `var out = globalThis.out = {}
+new Response('{"real":{"n":2},"list":[1]}', '${CFG}').json().then(function (c) {
+  out.truthy = !!c.missing; out.type = typeof c.missing; out.inCheck = 'zz' in c; out.keys = Object.keys(c.missing).length; out.json = JSON.stringify(c.missing)
+  out.num = +c.count; out.text = 'v' + c.label; out.mapped = c.items.map(function (x) { return x }).length; out.iter = [].concat(Array.from(c.rows)).length
+  out.trimmed = c.name.trim(); out.real = c.real.n; out.list = Array.isArray(c.list); out.same = c.real === c.real; c.own = 5; out.own = c.own
+  try { c.missing() } catch (e) { out.callThrows = e instanceof TypeError }
+  return c
+}).then(function (c) { out.thenable = typeof c.then })
+new Response('{}', '${CFG}').text().then(function (t) { out.fromText = JSON.parse(t).viaText; out.again = JSON.stringify(JSON.parse(t)) })
+var x = new XMLHttpRequest('{}', '${CFG}'); out.xhrText = JSON.parse(x.responseText).viaXhr
+var j = new XMLHttpRequest('{}', '${CFG}', 'json'); out.xhrJson = j.response.viaJson; out.xhrSame = j.response === j.response
+new Response('{}', 'lab://run/other').json().then(function (c) { out.other = c.anything })`
+  const { reports, ctx } = await inPage(code, [{ match: '/api/player/config', body: '@probe' }])
+  const o = ctx.out
+  assert.deepEqual([o.truthy, o.type, o.inCheck, o.keys, o.json, o.num, o.text, o.mapped, o.iter, o.trimmed, o.real, o.list, o.same, o.own, o.callThrows, o.thenable],
+    [true, 'object', true, 0, '{}', 0, 'v', 0, 0, '', 2, true, true, 5, true, 'undefined'], 'shape proxy: always truthy, an object, empty when listed or iterated, real data as is')
+  assert.equal(typeof o.fromText, 'object'); assert.equal(o.again, '{}', 'shape: one JSON.parse per text, the next gets the plain value')
+  assert.equal(o.other, undefined, 'shape: other URLs are untouched')
+  const reads = shapeReads({ probe: reports }, '/api/player/config'), sh = inferShape(reads), t = Object.fromEntries(sh.fields.map(f => [f.path, f.type]))
+  assert.deepEqual([t.count, t.label, t.items, t.rows, t.name, t.viaText, t.viaXhr, t.viaJson, t.zz, t['real.n'], t.missing], ['number', 'string', 'array', 'array', 'string', 'boolean', 'boolean', 'boolean', 'boolean', 'boolean', 'object'], 'shape: uses become types: ' + JSON.stringify(t))
+  assert.ok(!reads.some(r => r.path === 'own' || r.path === 'then' || r.path === 'items.map'), 'shape: the content’s own writes, then and method names are not fields')
+  assert.equal(o.xhrSame, true)
+}
+// Source hints, type order, and the helpers.
+const hint = (line, key) => sourceHint(line, 1, line.indexOf(key) + 1, key)?.type ?? null
+assert.deepEqual(['if (c.a === "x")', 'if (2 == c.a)', 'c.a > 3', 'c.a * 2', 'if (typeof c.a === "number")', 'x = c.a || []', 'x = c.a ?? 5', 'if (!c.a) go()', 'c.a && go()', 'go(c.a)', 'c.a.b', 'c.a = 1', 'f(x => c.a)'].map(l => hint(l, 'a')),
+  ['string', 'number', 'number', 'number', 'number', 'array', 'number', 'boolean', 'boolean', null, null, null, null], 'shape: source hints')
+assert.equal(sourceHint('if (c.b === 1)', 1, 3, 'a'), null, 'shape: a column not at the name gives no hint')
+assert.deepEqual(inferShape([{ path: 'a', use: 'text' }, { path: 'a', use: 'read', hint: { type: 'number', how: 'compared with a number' } }, { path: 'b', use: 'keys' }, { path: 'c', use: 'array' }, { path: 'c.d', use: 'read' }]).skeleton,
+  { a: 0, b: {}, c: { d: false } }, 'shape: a hint beats loose text use; children make an object')
+assert.deepEqual(inferShape([]), { skeleton: {}, fields: [] })
+assert.equal(servedBody('@probe'), '{}'); assert.equal(servedBody('@probe {"a":1}'), '{"a":1}'); assert.equal(servedBody('@probed'), '@probed'); assert.equal(probeBody({ a: 1 }), '@probe {"a":1}')
+assert.equal(buildAnswer({ body: '@probe' }).headers.find(h => h.name === 'Content-Type').value, 'application/json', 'shape: a probe answer is JSON')
+assert.equal(shapePrefix([{ match: 'a', body: 'x' }]), ''); const prefixed = JSON.parse(shapePrefix([{ match: '/api/*', body: '@probe' }, { match: 'x', body: '{}' }]).replace(/^globalThis\.__labShape = |;\n$/g, ''))
+assert.deepEqual(prefixed.map(p => new RegExp(p.source, p.flags).test('/api/x')), [true], 'shape: the prefix holds the @probe patterns only')
+assert.equal(requestPattern('lab://run/api/x?y=1'), '/api/x'); assert.equal(requestPattern('https://h.test/a/b?c'), 'https://h.test/a/b')
+assert.deepEqual(serverRequests({ requests: [{ url: 'lab://run/api/x?1', method: 'GET', type: 'Fetch', from: [{ url: 'lab://run/pkg/a.js', line: 3 }] }, { url: 'lab://run/api/x?2', type: 'XHR' }, { url: 'lab://run/pkg/data.json', type: 'Fetch' },
+  { url: 'lab://run/__lab/config.json', type: 'Fetch' }, { url: 'https://cdn.test/lib.js', type: 'Script' }, { url: 'https://h.test/q', method: 'POST', type: 'XHR' }] }),
+  [{ match: '/api/x', url: 'lab://run/api/x?1', method: 'GET', from: 'a.js:3' }, { match: 'https://h.test/q', url: 'https://h.test/q', method: 'POST', from: '' }], 'shape: server requests are fetch and XHR outside the package, one per pattern')
+for (const bad of [{ rounds: 0 }, { rounds: 11 }, { rounds: 1.5 }, { request: '' }, { request: '/(/' }]) assert.throws(() => checkDiscover(bad), /Rounds|pattern/, 'discover: bad settings ' + JSON.stringify(bad))
+// The discovery loop, with runs made in the vm: no answer, @probe, then the skeleton, which adds nothing, so it stops.
+{
+  const fakeRun = async (name, options) => {
+    ctxStarted.n = 0
+    const { reports } = await inPage(NEEDS_BOOT, options.responses, page()), started = ctxStarted.n > 0
+    return { trace: { requests: [{ url: CFG, method: 'GET', type: 'Fetch', from: [{ url: 'lab://run/pkg/boot.js', line: 1 }] }], probe: reports, sources: { 'lab://run/pkg/boot.js': NEEDS_BOOT } },
+      milestones: STEPS.map(([id, label], i) => ({ id, label, reached: i <= (started ? 8 : 2), t: 0, evidence: '' })), findings: [] }
+  }
+  const names = [], d = await discover({ base: { wait: 3 }, run: fakeRun, onRound: r => names.push(r.name) })
+  assert.deepEqual(names, ['no answer', 'round 1', 'round 2'], 'discover: stops when a round adds nothing'); assert.equal(d.complete, true); assert.equal(d.rounds, 2)
+  assert.deepEqual(d.requests[0].skeleton, { assets: { base: '' }, lms: { enabled: false, version: '' } }); assert.equal(d.requests[0].response.body, JSON.stringify(d.requests[0].skeleton))
+  assert.equal(d.requests[0].from, 'boot.js:1'); assert.equal(d.rows[0].progress, 'the baseline'); assert.equal(d.standIn.better, 1)
+  const ft = d.findings.map(f => f.title)
+  assert.deepEqual(ft, ['The content needs these from its server', 'With a stand-in for /api/player/config, the content reaches Committed'], 'discover findings: ' + ft)
+  assert.ok(d.findings[0].evidence.includes('lms.version: string (compared with a string, boot.js:4)'), 'discover: the evidence lists fields and types')
+  const one = await discover({ base: {}, rounds: 1, request: '/api/player/*', run: fakeRun })
+  assert.equal(one.complete, false); assert.equal(one.requests[0].url, CFG, 'discover: a pattern given by hand gets the request it matched'); assert.match(one.findings[0].detail, /stopped after 1 rounds/)
+  const none = await discover({ base: {}, run: async () => ({ trace: { requests: [], probe: [] }, milestones: STEPS.map(([id, label]) => ({ id, label, reached: false })), findings: [] }) })
+  assert.deepEqual(none.findings.map(f => f.title), ['The content made no requests to a server'])
+  assert.match(discoverFindings({ ...d, requests: [{ ...d.requests[0], fields: [] }] }).map(f => f.title).join(), /didn’t read what \/api\/player\/config sent/)
+}
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -504,6 +621,26 @@ if (!process.argv.includes('--unit')) {
   assert.equal(node(['experiment', mismatch, '--preset', 'api', '--variants', 'x.json']).status, 2, 'experiment: both --preset and --variants fails')
   console.log('experiment: ok')
 
+  // Discovery: the needs fixture only starts once /api/player/config answers. Discovery finds the three fields and their
+  // types, and the stand-in gets it past looking for the API.
+  const dv = JSON.parse(node(['discover', needs, '--wait', '3', '--json']).stdout), dvF = Object.fromEntries(dv.requests[0].fields.map(f => [f.path, f.type]))
+  assert.deepEqual([dv.requests[0].match, dvF['lms.enabled'], dvF['lms.version'], dvF['assets.base']], ['/api/player/config', 'boolean', 'string', 'string'], 'discover: fields and types: ' + JSON.stringify(dvF))
+  assert.ok(idx(dv.standIn.furthest) >= idx('looked') && idx(dv.standIn.furthest) > idx(dv.noAnswer.furthest), `discover: the stand-in gets further (${dv.noAnswer.furthest} → ${dv.standIn.furthest})`)
+  assert.deepEqual(dv.findings.map(f => f.sev + ' ' + f.title.replace(/reaches .*/, 'reaches')), ['warn The content needs these from its server', 'warn With a stand-in for /api/player/config, the content reaches'], 'discover: findings')
+  assert.ok(dv.complete && dv.rows.length === 3, 'discover: no answer, @probe, then the skeleton, which found nothing new')
+  if (slow) {
+    const dvDir = join(work, 'discovery'), dvText = node(['discover', needs, '--wait', '3', '--request', '/api/player/*', '--rounds', '1', '--out', dvDir])
+    assert.match(dvText.stdout, /Run\s+Furthest[\s\S]*round 1[\s\S]*lms\.version: string \(compared with a string, boot\.js:4\)[\s\S]*Stand-in response: \{"assets":\{"base":""\},"lms":\{"enabled":false,"version":""\}\}[\s\S]*stopped after 1 rounds/, 'discover: text output: ' + dvText.stdout)
+    const dvSaved = JSON.parse(readFileSync(join(dvDir, 'discovery.json'), 'utf8'))
+    assert.ok(dvSaved.complete === false && dvSaved.request === '/api/player/*' && existsSync(join(dvDir, '02-round_1.json')), 'discover: --out keeps the runs and discovery.json')
+    const dvHosted = JSON.parse(node(['discover', hosted, '--wait', '3', '--json']).stdout)
+    assert.deepEqual(dvHosted.findings.map(f => f.title), ['The content didn’t read what /api/player/config sent'], 'discover: hosted asks but reads nothing')
+    const dvGood = JSON.parse(node(['discover', good, '--wait', '3', '--json']).stdout)
+    assert.deepEqual(dvGood.findings.map(f => f.title), ['The content made no requests to a server'], 'discover: nothing to discover in good')
+  }
+  for (const bad of [['--rounds', '0'], ['--rounds', 'x'], ['--request', '/(/'], ['--rounds']]) assert.equal(node(['discover', needs, ...bad]).status, 2, 'discover: bad flags fail: ' + bad)
+  console.log('discover: ok')
+
   // Live: a frame appears, a click on Next reaches the course, stop ends the run early.
   const live = join(work, 'live')
   const child = spawn(process.execPath, [cli, 'run', good, '--wait', '60', '--live', live, '--json'], { stdio: ['ignore', 'pipe', 'ignore'] })
@@ -597,6 +734,22 @@ if (!process.argv.includes('--unit')) {
     assert.ok(last.findings.some(f => /This run used 1 changed file/.test(f.title)), 'web: override note')
     assert.ok(last.findings.some(f => /^Compared with the run before the changes: got further/.test(f.title)), 'web: progress finding: ' + last.findings.map(f => f.title))
     assert.deepEqual(await invoke('override-revert', {}), [], 'web: revert all')
+    // Discovery over the handlers (slow): events for each round, then the result, which is also saved.
+    await assert.rejects(invoke('discover-start', { item: 0, rounds: 0 }), /Rounds/, 'web: bad rounds refused')
+    if (slow) {
+      assert.equal((await fetch(base + '/api/upload?name=needs.zip', { method: 'POST', headers: H, body: readFileSync(needs) })).status, 200)
+      const dEvs = await fetch(base + '/api/events', { headers: H }), dReader = dEvs.body.getReader()
+      let dText = ''
+      assert.equal(await invoke('discover-start', { item: 0, wait: 3 }), true, 'web: discovery starts')
+      await assert.rejects(invoke('discover-start', { item: 0 }), /already running/, 'web: one at a time')
+      while (!/event: discover\ndata: \{"state":"(done|error)".*\n/.test(dText)) dText += new TextDecoder().decode((await dReader.read()).value)
+      dReader.cancel()
+      const done = JSON.parse(/event: discover\ndata: (\{"state":"done".*)\n/.exec(dText)?.[1] ?? 'null')
+      assert.ok(done, 'web: discovery finished: ' + dText.slice(-500))
+      assert.equal((dText.match(/"state":"round"/g) ?? []).length, 3, 'web: an event per run')
+      assert.deepEqual(done.result.requests[0].skeleton, { assets: { base: '' }, lms: { enabled: false, version: '' } }, 'web: the skeleton')
+      assert.ok(existsSync(done.result.file) && JSON.parse(readFileSync(done.result.file, 'utf8')).format === 'scorm-lab-discovery', 'web: the result is saved')
+    }
     console.log('web: ok')
   } finally { server.kill() }
 

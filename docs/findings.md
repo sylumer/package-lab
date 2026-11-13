@@ -19,6 +19,7 @@ if there are no errors.
 - [From a run: milestones](#from-a-run-milestones)
 - [From a run: progress](#from-a-run-progress)
 - [From an experiment](#from-an-experiment)
+- [From a discovery](#from-a-discovery)
 - [From a comparison](#from-a-comparison)
 
 ## From the manifest
@@ -159,6 +160,18 @@ Only after **Run all** on the Experiments tab, or `scorm-lab experiment`. They c
 |---|---|---|---|
 | *Variant* gets further than the default: reached *step* | warning | With the default settings the run stopped earlier. Changing the settings listed in the evidence got it further, so those settings matter. This is a fact from a run, not a guess | Check what the real LMS offers for those settings, or what the content assumes about them |
 | Nothing tried made a difference | info | No variant got further than the default | Try your own variants, or look at what stops the default run in its own findings |
+
+## From a discovery
+
+Only after **Discover** on the Server needs tab, or `scorm-lab discover`. See
+[What the content wants from its server](user-guide.md#what-the-content-wants-from-its-server).
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| The content needs these from its server | warning | The content asked its server for something (a configuration, settings) and read the fields in the evidence from the answer. The evidence starts with the request and the code that made it, then lists each field, its type, how the code used it (a truthiness test, compared with a string, joined to text…) and where. Without an answer it stops where the detail says. This is why content that works on its own platform doesn't work in an LMS | The export needs a setting that removes this dependency, or the LMS must serve it. A stand-in response with these fields lets the content get as far as the step named in the fix |
+| With a stand-in for *URL*, the content reaches *step* | warning | A response holding just the fields the content read got it further than no answer. The evidence lists how far each round got. That request is what holds it back | Save the stand-in as a response to keep testing past it, and look for the export setting or LMS feature that provides it |
+| The content didn’t read what *URL* sent | info | SCORM Lab answered the request and saw nothing read from the answer. The content may ignore it, stop before reading it, or read it in a way SCORM Lab doesn't follow (a Blob, a stream, a worker) | Look at the code that made the request (the evidence) |
+| The content made no requests to a server | info | Its first run made no fetch or XHR request to the server's root or another site | Nothing to discover. If it should have, check how far it got first |
 
 ## From a comparison
 

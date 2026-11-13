@@ -15,6 +15,7 @@ import { parsePinFlag, parseAnswerFlag } from '../src/pins.js'
 import { entryFor } from '../src/overlay.js'
 import { furthest, strip } from '../src/milestones.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
+import { discover, checkDiscover } from '../src/shape.js'
 import { renderReport, verdict, counts, screens } from '../src/report.js'
 
 const APP_DIR = new URL('..', import.meta.url).pathname
@@ -31,6 +32,7 @@ Commands
   items <package.zip>       List the items that can be launched, with their numbers.
   run <package.zip>         Launch an item in a hidden browser, record it, and report what went wrong.
   experiment <package.zip>  Run the same launch several ways, one after another, and show how far each got.
+  discover <package.zip>    Work out what the content wants from its server: the fields it reads, and a stand-in response.
   report <package.zip | run.json>
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
@@ -68,6 +70,13 @@ Options for experiment (also the run options above, which set the default launch
   --out <folder>            Keep each run in <folder> as a saved run.
   --json                    Print JSON instead of a table.
 
+Options for discover (also the run options above, which set every round's launch)
+  --request <pattern>       The request to work on (a glob like /api/config or a /regex/). Default: every fetch or XHR
+                            request the first run makes to the server's root or another site.
+  --rounds <n>              At most this many rounds of answering and watching (1–10). Default 5.
+  --out <folder>            Keep each round's run in <folder>, and the result as discovery.json.
+  --json                    Print JSON instead of text.
+
 Options for report
   --out <file.html>         Where to write it. Default: print to standard output.
   --open                    Open the report in the browser (written to a temporary file if there's no --out).
@@ -91,7 +100,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'out', 'live', 'port', 'host', 'variants', 'preset']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
     if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
@@ -251,6 +260,17 @@ const runJson = (pkg, item, run, out) => ({ package: pkg.name, item: itemJson(it
   screens: screens(run.trace).map(({ frame, readyState, text, visible, media, loader, hidden, sample }) => ({ frame, readyState, text, visible, media, loader, hidden, sample })),
   out })
 
+// The experiment table (experiments.js summarise rows). first names the first column.
+function printRows(rows, first = 'Variant', base = 'the default') {
+  const cols = [first, 'Furthest', 'API calls', 'Errors', 'Verdict', `Against ${base}`], cell = r => [r.name, r.furthestLabel, r.apiCalls, r.errors, r.verdict.sev === 'ok' ? 'OK' : r.verdict.sev.toUpperCase(), r.progress].map(String)
+  const table = [cols, ...rows.map(cell)], w = cols.map((_, c) => Math.max(...table.map(r => r[c].length)))
+  console.log()
+  for (const [i, r] of table.entries()) {
+    console.log(r.map((c, k) => c.padEnd(w[k])).join('  ').trimEnd())
+    if (i === 0) console.log(paint('2', w.map(n => '─'.repeat(n)).join('  ')))
+  }
+}
+
 // ---- Commands ----
 const commands = {
   analyze(o) {
@@ -309,16 +329,39 @@ const commands = {
     if (o.json) console.log(JSON.stringify({ package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), base: options, variants: rows, findings }, null, 1))
     else {
       printHeader(pkg, item)
-      const cols = ['Variant', 'Furthest', 'API calls', 'Errors', 'Verdict', 'Against the default'], cell = r => [r.name, r.furthestLabel, r.apiCalls, r.errors, r.verdict.sev === 'ok' ? 'OK' : r.verdict.sev.toUpperCase(), r.progress].map(String)
-      const table = [cols, ...rows.map(cell)], w = cols.map((_, c) => Math.max(...table.map(r => r[c].length)))
-      console.log()
-      for (const [i, r] of table.entries()) {
-        console.log(r.map((c, k) => c.padEnd(w[k])).join('  ').trimEnd())
-        if (i === 0) console.log(paint('2', w.map(n => '─'.repeat(n)).join('  ')))
-      }
+      printRows(rows)
       printFindings(findings)
       if (dir) console.log(paint('2', `\nRuns saved in ${dir}`))
     }
+    return 0
+  },
+  async discover(o) {
+    const pkg = openZip(o._[0]), options = buildOptions(o), item = pickItem(pkg.analysis, o.item)
+    for (const k of ['request', 'rounds']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
+    const rounds = o.rounds === undefined ? 5 : /^\d+$/.test(o.rounds) ? +o.rounds : NaN
+    try { checkDiscover({ request: o.request, rounds }) } catch (e) { fail(e.message) }
+    const dir = o.out ? resolve(o.out) : null
+    if (dir) mkdirSync(dir, { recursive: true })
+    let i = 0
+    const result = await discover({ base: options, request: o.request, rounds, run: async (name, opts) => {
+      i++
+      if (!o.json) process.stderr.write(`${name === 'no answer' ? 'Without an answer' : name[0].toUpperCase() + name.slice(1)} (${opts.wait} s)…\n`)
+      const file = dir ? join(dir, `${String(i).padStart(2, '0')}-${name.replace(/[^\w.-]+/g, '_')}.json`) : undefined
+      return runPackage(pkg, { ...o, out: file, live: undefined }, opts).run
+    } })
+    const json = { package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(x => x.index === item.index)), base: options, request: o.request ?? null, ...result, out: dir }
+    if (dir) writeFileSync(join(dir, 'discovery.json'), JSON.stringify(json, null, 1))
+    if (o.json) { console.log(JSON.stringify(json, null, 1)); return 0 }
+    printHeader(pkg, item)
+    printRows(result.rows, 'Run', 'no answer')
+    for (const r of result.requests) {
+      console.log(`\n${paint('1', `${r.method} ${r.url.replace(/^lab:\/\/run(?=\/)/, '')}`)}${r.from ? paint('2', ` from ${r.from}`) : ''}`)
+      if (!r.fields.length) { console.log(paint('2', '  Nothing read from the response.')); continue }
+      for (const f of r.fields) console.log(`  ${f.path}: ${f.type}${paint('2', ` (${f.how}${f.at.length ? ', ' + f.at.join(', ') : ''})`)}`)
+      console.log(`  Stand-in response: ${JSON.stringify(r.skeleton)}`)
+    }
+    printFindings(result.findings)
+    if (dir) console.log(paint('2', `\nRuns and discovery.json saved in ${dir}`))
     return 0
   },
   report(o) {
@@ -376,7 +419,7 @@ const o = parse(process.argv.slice(2)), name = o._.shift() ?? 'help'
 const cmd = o.help || o.h ? commands.help : name === '--version' || o.version ? commands.version : commands[name]
 try {
   if (!cmd) fail(`Unknown command “${name}”. Try scorm-lab help.`)
-  const code = cmd(o)
+  const code = await cmd(o)
   if (code !== null) process.exitCode = code
 } catch (e) {
   console.error(e instanceof Fail ? e.message : e.stack ?? String(e))

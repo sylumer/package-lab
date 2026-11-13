@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
@@ -84,7 +84,7 @@ const VIEWS = {
     const list = (run() ? run().trace.probe : st.live).filter(p => p.type !== 'api')
     return [h('h3', { class: 'section' }, 'Pins'), pinsEditor(), ...table(['s', 'Kind', 'Name', 'Result', 'Frame', 'Where'], list.map(p => [secs(p.t ?? 0), p.type, p.name ?? p.path ?? '',
       p.type === 'pin-read' ? `pinned value read${p.n > 1 ? ` ×${p.n}` : ''}` : p.type === 'pin-write' ? h('span', { class: 'bad' }, `tried to set it to ${p.value}`) : p.type === 'pin-failed' ? h('span', { class: 'bad' }, `couldn’t pin: ${p.error}`) :
-      p.type === 'lookup' ? h('span', { class: p.found ? 'ok' : 'bad' }, (p.found ? 'found' : 'missing') + (p.n > 1 ? ` ×${p.n}` : '')) : p.type === 'frame' ? `depth ${p.depth}${p.topReachable ? '' : ', top unreachable'}${p.opener ? ', has opener' : ''}` : p.type === 'assign' ? `${p.kind} {${(p.keys || []).join(', ')}}` : p.error ?? '',
+      p.type === 'lookup' ? h('span', { class: p.found ? 'ok' : 'bad' }, (p.found ? 'found' : 'missing') + (p.n > 1 ? ` ×${p.n}` : '')) : p.type === 'frame' ? `depth ${p.depth}${p.topReachable ? '' : ', top unreachable'}${p.opener ? ', has opener' : ''}` : p.type === 'assign' ? `${p.kind} {${(p.keys || []).join(', ')}}` : p.type === 'shape' ? `${p.use} from ${host(p.url)}` : p.error ?? '',
       short(p.frame), h('code', {}, (p.stack || []).slice(0, 3).join('\n'))]))]
   },
   Network() {
@@ -276,11 +276,43 @@ VIEWS.Experiments = () => {
       }) }, 'Run all'),
       h('button', { type: 'button', class: 'secondary', disabled: !x.busy, onclick: () => act(() => lab.invoke('experiment-stop')) }, 'Stop'),
       h('span', { class: 'muted small' }, x.note)),
-    rows.length ? h('table', {}, h('thead', {}, h('tr', {}, ['Variant', 'Furthest', 'API calls', 'Errors', 'Verdict', 'Against the default'].map(c => h('th', {}, c)))),
-      h('tbody', {}, rows.map(r => h('tr', { class: r.runId ? 'click' : null, title: r.runId ? 'Open this run' : null, onclick: r.runId ? () => { st.sel = r.runId; st.tab = 'Findings'; render() } : null },
-        r.pending || r.failed ? [h('td', {}, r.name), h('td', { colspan: 5, class: r.failed ? 'bad' : 'muted' }, r.failed ? r.progress : x.busy ? 'waiting…' : 'not run')]
-          : [r.name, r.furthestLabel, r.apiCalls, r.errors, h('span', { class: r.verdict.sev === 'ok' ? 'ok' : 'bad' }, r.verdict.sev === 'ok' ? 'OK' : r.verdict.title), h('span', { class: r.better > 0 ? 'ok' : r.better < 0 ? 'bad' : null }, r.progress)].map(c => h('td', {}, c)))))) : null,
-    findingsList(x.findings)]
+    runRows(rows, x.busy), findingsList(x.findings)]
+}
+// The table of an experiment's (or a discovery's) runs; a click on a row opens that run.
+function runRows(rows, busy, first = 'Variant', against = 'the default') {
+  if (!rows.length) return null
+  return h('table', {}, h('thead', {}, h('tr', {}, [first, 'Furthest', 'API calls', 'Errors', 'Verdict', `Against ${against}`].map(c => h('th', {}, c)))),
+    h('tbody', {}, rows.map(r => h('tr', { class: r.runId ? 'click' : null, title: r.runId ? 'Open this run' : null, onclick: r.runId ? () => { st.sel = r.runId; st.tab = 'Findings'; render() } : null },
+      r.pending || r.failed ? [h('td', {}, r.name), h('td', { colspan: 5, class: r.failed ? 'bad' : 'muted' }, r.failed ? r.progress : busy ? 'waiting…' : 'not run')]
+        : [r.name, r.furthestLabel, r.apiCalls, r.errors, h('span', { class: r.verdict.sev === 'ok' ? 'ok' : 'bad' }, r.verdict.sev === 'ok' ? 'OK' : r.verdict.title), h('span', { class: r.better > 0 ? 'ok' : r.better < 0 ? 'bad' : null }, r.progress)].map(c => h('td', {}, c))))))
+}
+
+// ---- Server needs: what the content wants from its server, found by answering its requests and watching what it reads ----
+st.disc = { rounds: 5, rows: [], result: null, busy: false, note: '' }
+const host = u => (u || '').replace(/^lab:\/\/run(?=\/)/, '')
+// fetch and XHR requests to the server's root or another site, one per pattern (as src/shape.js serverRequests).
+const serverReqs = r => { const seen = new Set(); return (r?.trace.requests ?? []).filter(q => /^(XHR|Fetch)$/.test(q.type) && (/^lab:\/\/run\/(?!pkg\/|__lab\/)/.test(q.url) || /^https?:/.test(q.url)) && !seen.has(answerDraft(q).match) && seen.add(answerDraft(q).match)) }
+const saveResponse = resp => { const i = st.responses.findIndex(x => x.match === resp.match); if (i >= 0) st.responses[i] = resp; else st.responses.push(resp); afterChange(); say(`Added an answer for ${resp.match}. It applies to the next launch (see More options).`) }
+VIEWS['Server needs'] = () => {
+  const x = st.disc, r = run(), reqs = serverReqs(r), off = x.busy || !!st.running || !st.pkg?.items.length
+  const start = request => act(async () => {
+    x.rows = []; x.result = null; x.busy = true; x.note = ''; render()
+    try { await lab.invoke('discover-start', { item: +$('item').value, ...(request ? { request } : {}), rounds: x.rounds, ...launchOptions(), wait: +$('auto').value || 10 }) } catch (e) { x.busy = false; throw e }
+  })
+  const out = [h('p', { class: 'muted small' }, 'Discover answers the content’s requests to its server and watches what it reads from the answer, round after round, until it reads nothing new. Each round is a run of the item with the settings above, as long as “Stop after” (10 s if that is “I stop it”). The answer is a stand-in that is always there: if (setting) is always true, so the content may go further than with a real answer.'),
+    h('div', { class: 'row' }, h('label', {}, 'Rounds ', h('select', { onchange: e => { x.rounds = +e.target.value } }, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => h('option', { value: n, selected: n === x.rounds }, n)))),
+      h('button', { type: 'button', disabled: off, onclick: () => start() }, 'Discover all server requests'),
+      h('button', { type: 'button', class: 'secondary', disabled: !x.busy, onclick: () => act(() => lab.invoke('discover-stop')) }, 'Stop'), h('span', { class: 'muted small' }, x.note)),
+    h('h3', { class: 'section' }, r ? `Server requests in ${r.label}` : 'Server requests'),
+    !r ? h('p', { class: 'muted' }, 'Choose a run to list the requests it made to a server, or discover them all.') : !reqs.length ? h('p', { class: 'muted' }, 'This run made no fetch or XHR requests to a server.')
+      : table(['Method', 'URL', 'From', ''], reqs.map(q => [q.method, host(q.url), h('code', {}, (q.from || []).slice(0, 3).map(at).join('\n')), h('button', { type: 'button', disabled: off, onclick: () => start(answerDraft(q).match) }, 'Discover')])),
+    x.rows.length ? [h('h3', { class: 'section' }, 'Rounds'), runRows(x.rows, x.busy, 'Run', 'no answer')] : null]
+  for (const q of x.result?.requests ?? []) out.push(h('h3', { class: 'section' }, `${q.method} ${host(q.url)}`), h('p', { class: 'muted small' }, q.from ? `Requested from ${q.from}.` : ''),
+    q.fields.length ? [...table(['Field', 'Type', 'How it was used', 'Where'], q.fields.map(f => [h('code', {}, f.path), f.type, f.how, f.at.join(', ')])),
+      h('pre', {}, JSON.stringify(q.skeleton, null, 2)), h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => saveResponse(q.response) }, 'Save as response'))]
+      : h('p', { class: 'muted' }, 'Nothing was read from the response.'))
+  if (x.result) out.push(h('h3', { class: 'section' }, 'Findings'), findingsList(x.result.findings))
+  return out
 }
 
 // ---- Live view (web interface only): the running content, with clicks and keys sent back to it ----
@@ -373,13 +405,21 @@ $('filter').oninput = () => render()
 $('item').onchange = () => render()
 let pending = false
 lab.on('probe', p => { st.live.push(p); if (!run() && !pending) { pending = true; setTimeout(() => { pending = false; if (!run()) render() }, 300) } })
-lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; st.runs.push(r); if (!st.exp.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
+lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; st.runs.push(r); if (!st.exp.busy && !st.disc.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
 lab.on('state', s => { st.running = s.running ? s : null; if (!s.running && st.tab === 'Live') st.tab = 'Findings'; render(); $('stop').disabled = !s.running; $('launch').disabled = !!s.running || !st.pkg?.items.length; $('ref').disabled = !!s.running; if (s.running) say(`Recording ${s.label}. ${s.auto ? `It stops by itself after ${s.auto} s, or` : 'Use the course, then'} Stop and analyse${lab.web ? '' : ' (or close its window)'}.`) })
 lab.on('experiment', e => {
   const x = st.exp
   if (e.state === 'start') { x.names = e.names; x.rows = []; x.findings = []; x.busy = true }
   else if (e.state === 'result') { x.rows[e.index] = e.row; x.note = `Finished ${e.index + 1} of ${x.names.length}.` }
   else if (e.state === 'done') { x.rows = e.rows; x.findings = e.findings; x.busy = false; x.note = e.stopped ? 'Stopped.' : 'Done.' }
+  else { x.busy = false; x.note = e.message }
+  render()
+})
+lab.on('discover', e => {
+  const x = st.disc
+  if (e.state === 'start') { x.rows = []; x.result = null; x.busy = true; x.note = 'Running without an answer first…' }
+  else if (e.state === 'round') { x.rows[e.index] = e.row; x.note = `Finished: ${e.row.name}.` }
+  else if (e.state === 'done') { x.result = e.result; x.rows = e.result.rows; x.busy = false; x.note = `Done after ${e.result.rounds} round${e.result.rounds === 1 ? '' : 's'}.${e.result.file ? ' Saved to ' + e.result.file : ''}` }
   else { x.busy = false; x.note = e.message }
   render()
 })

@@ -35,9 +35,14 @@ export function lexicalDeclaration(text, name) {
 const globRe = g => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$')
 // A matcher for a glob (* any text, ? one character) or /regex/flags (flags i, m, s, u). It looks at the whole URL, the path with its
 // query, and the path alone, so '/api/player/config' works without the host. Throws if the regex is bad.
-export function matcher(match) {
+// The pattern as a regex's { source, flags }, so the probe can match the same way in the page (shape.js).
+export function patternRe(match) {
   const m = /^\/(.+)\/([imsu]*)$/s.exec(match)   // so /api/player/config is a glob: “config” isn't a set of flags
   const re = m ? new RegExp(m[1], m[2]) : globRe(match)
+  return { source: re.source, flags: re.flags }
+}
+export function matcher(match) {
+  const { source, flags } = patternRe(match), re = new RegExp(source, flags)
   return url => {
     let u
     try { u = new URL(url) } catch { u = null }
@@ -55,11 +60,16 @@ export function answerFor(responses, url, method = 'GET') {
 }
 // What Fetch.fulfillRequest needs: the status, headers as { name, value } and the body in base64. A response with no
 // content type gets JSON if the body looks like it, otherwise plain text; CORS is opened unless the response says otherwise.
+// A body of "@probe", or "@probe" and JSON, asks the probe to record what the content reads from the response (P1.3,
+// shape.js). The network gets the JSON after the marker, or {}.
+export const PROBE_BODY = /^@probe(?:\s|$)/
+export const servedBody = body => PROBE_BODY.test(body ?? '') ? body.slice(6).trim() || '{}' : body ?? ''
 export function buildAnswer(r) {
+  const body = servedBody(r.body)
   const headers = Object.entries(r.headers ?? {}).map(([name, value]) => ({ name, value: String(value) })), has = n => headers.some(h => h.name.toLowerCase() === n)
-  if (!has('content-type')) headers.push({ name: 'Content-Type', value: /^\s*[{[]/.test(r.body ?? '') ? 'application/json' : 'text/plain; charset=utf-8' })
+  if (!has('content-type')) headers.push({ name: 'Content-Type', value: /^\s*[{[]/.test(body) ? 'application/json' : 'text/plain; charset=utf-8' })
   if (!has('access-control-allow-origin')) headers.push({ name: 'Access-Control-Allow-Origin', value: '*' })
-  return { status: r.status ?? 200, headers, body: Buffer.from(r.body ?? '', 'utf8').toString('base64') }
+  return { status: r.status ?? 200, headers, body: Buffer.from(body, 'utf8').toString('base64') }
 }
 
 // ---- Findings ----

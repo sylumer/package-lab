@@ -24,6 +24,7 @@ import { normaliseOptions, cliCommand, packagePath } from './options.js'
 import { overlayFiles, overrideList, overrideFinding, overrideProgressFinding, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
+import { discover, checkDiscover } from './shape.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
@@ -305,17 +306,15 @@ async function experimentStart({ item, preset = 'standard', variants, ...rest })
     try {
       for (const [index, v] of plan.entries()) {
         if (job.stop) break
-        await launchItem({ ...v.options, auto: v.options.auto || v.options.wait, item })
-        const a = active
-        while (a && !a.ended) await new Promise(r => setTimeout(r, 200))
+        const run = await runToEnd(item, v.options)
         if (job.stop) break   // a run cut short by Stop is left out
-        if (!a?.run) {        // it ended without being recorded: say so and carry on
+        if (!run) {           // it ended without being recorded: say so and carry on
           if (!index) throw new Error('The default run didn’t finish, so there is nothing to compare with.')
           failed.set(v.name, { name: v.name, failed: true, progress: 'the run didn’t finish' })
           emit('experiment', { state: 'result', index, row: failed.get(v.name) })
           continue
         }
-        results.push(runResult(v.name, v.options, a.run, { runId: a.run.id }))
+        results.push(runResult(v.name, v.options, run, { runId: run.id }))
         emit('experiment', { state: 'result', index, row: summarise(results).at(-1) })
       }
       const rows = new Map([...summarise(results), ...failed.values()].map(r => [r.name, r]))
@@ -323,6 +322,46 @@ async function experimentStart({ item, preset = 'standard', variants, ...rest })
     } catch (e) { emit('experiment', { state: 'error', message: e.message }) } finally { experiment = null }
   })()
   return plan.map(p => p.name)
+}
+
+// One launch, stopped after its wait; the recorded run, or null if it ended without one. Experiments and discovery use it.
+async function runToEnd(item, options) {
+  await launchItem({ ...options, auto: options.auto || options.wait, item })
+  const a = active
+  while (a && !a.ended) await new Promise(r => setTimeout(r, 200))
+  return a?.run ?? null
+}
+
+// ---- Discovery: what the content wanted from its server (see src/shape.js) ----
+// It shares the experiment slot (one at a time; experiment-stop stops it too). Events 'discover': { state: 'start' } ·
+// { state: 'round', index, row } · { state: 'done', result } · { state: 'error', message }. The result is also saved
+// in <userData>/discoveries/.
+async function discoverStart({ item, request, rounds = 5, ...rest }) {
+  rest = { ...rest, files: rest.files ?? pkg?.overrides }
+  if (experiment || active) throw new Error('Something is already running. Stop it first.')
+  if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
+  rounds = +rounds; request = request || undefined
+  checkDiscover({ request, rounds })
+  const base = normaliseOptions(rest), job = experiment = { stop: false }
+  emit('discover', { state: 'start', request: request ?? null })
+  ;(async () => {
+    try {
+      const result = await discover({ base, request, rounds, onRound: (row, index) => emit('discover', { state: 'round', index, row }),
+        run: async (name, options) => {
+          const r = job.stop ? null : await runToEnd(item, options)
+          if (job.stop) throw new Error('Stopped.')
+          if (!r) throw new Error(`The ${name} run didn’t finish.`)
+          return r
+        } })
+      try {
+        const dir = join(app.getPath('userData'), 'discoveries'); mkdirSync(dir, { recursive: true })
+        result.file = join(dir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${pkg.name.replace(/[^\w.-]+/g, '_').slice(0, 60)}.json`)
+        writeFileSync(result.file, JSON.stringify({ format: 'scorm-lab-discovery', version: 1, package: pkg.name, item, base, request: request || null, ...result }))
+      } catch { result.file = '' }
+      emit('discover', { state: 'done', result })
+    } catch (e) { emit('discover', { state: 'error', message: e.message }) } finally { experiment = null }
+  })()
+  return true
 }
 
 // The override for a path, if there is one of its own (not something inherited like “constructor”).
@@ -387,6 +426,8 @@ const handlers = {
   'experiment-presets': () => Object.keys(PRESETS),
   'experiment-start': o => experimentStart(o),
   'experiment-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
+  'discover-start': o => discoverStart(o),
+  'discover-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
   stop: async () => { const r = await finish(); return r ? r.id : null },
   compare: ({ ref, run }) => {
     const a = runs.get(ref), b = runs.get(run)

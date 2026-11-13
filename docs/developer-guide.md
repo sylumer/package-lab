@@ -50,8 +50,10 @@ src/
     wrap.html           An empty LMS frame (for frame depth)
     scorm-runtime.js    SCORM 1.2 and 2004 run-time (from toolbox)
     probe.js            Injected into every frame: API lookups, assignments, wrapped calls, DOM snapshots
+    shape-probe.js      Injected ahead of probe.js when a run answers with @probe: the recording Proxy (P1.3)
   zip.js, xml.js        Readers
   pins.js               Pins and answers: matching, the probe's prefix, the findings, the CLI's spellings
+  shape.js              What the content wants from its server: reads → shape, the discovery loop, its findings
   overlay.js            Overrides: the file set a run is served from, and the findings about changed files
   textdiff.js           A small LCS line diff (diffLines, unified)
   milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
@@ -111,7 +113,7 @@ The rest of the file, in order:
   (`active`: window, popups, recorders, launch settings, boot graph, auto-stop timer). Finished runs are kept in a Map
   for the session.
 - **`emit(channel, data)`:** sends to the desktop window over IPC and to web clients over server-sent events.
-  Channels: `package`, `run`, `state`, `probe`.
+  Channels: `package`, `run`, `state`, `probe`, `experiment`, `discover`.
 - **`begin()` and `finish()`:** open a run window, start the recorder on `about:blank` (the debugger needs a renderer
   before the content loads), then navigate. `finish()` reads the stored data model, stops the recorders (merging
   popups), destroys the windows, computes findings and saves the run.
@@ -159,7 +161,9 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `override-diff` | `{ path }` | `{ binary: false, diff (unified), added }` or `{ binary: true, before, after }` |
 | `experiment-presets` | — | The preset names |
 | `experiment-start` | `{ item, preset? (default `standard`), variants?, …launch options (the base) }` | The variant names, at once; progress comes as `experiment` events. Throws if a run or experiment is under way |
-| `experiment-stop` | — | `true`: stops the run in progress and the rest of the experiment |
+| `experiment-stop` | — | `true`: stops the run in progress and the rest of the experiment (or discovery) |
+| `discover-start` | `{ item, request?, rounds? (1–10, default 5), …launch options (every run's) }` | `true`, at once; progress comes as `discover` events. Throws on bad rounds or pattern, or if a run, experiment or discovery is under way |
+| `discover-stop` | — | `true`: stops the run in progress and the rest of the discovery |
 | `stop` | — | The run's id, or null |
 | `compare` | `{ ref, run }` | `{ cmp, findings }` |
 | `open-run` | — | Run summaries (desktop only: opens a dialog) |
@@ -212,6 +216,7 @@ auto-attached target too). It reports through the `__labReport` binding:
 | `{ type: 'pin-read', path, n, stack }` | Each read of a pinned value (an accessor property). Throttled like lookups |
 | `{ type: 'pin-write', path, value, n, stack }` | Each assignment to a pinned name; the pin ignores it. `value` is a short text preview |
 | `{ type: 'pin-failed', path, error }` | The pin couldn't be defined: a frozen object, a name the browser won't redefine |
+| `{ type: 'shape', url, path, use, n, stack }` | From `shape-probe.js`, only in runs that answer with `@probe`: a read of `path` (dotted, from the top of the response) in the response from `url` (`use: 'read'`), or how a missing value was used: `in`, `keys`, `array` (iterated, `length`, an array method called), `string` (a string method called, or turned into a string), `number` (turned into a number), `text` (`+` or `==`). Throttled like lookups per path, use and call site; at most 3,000 per frame |
 | `{ type: 'dom', readyState, text, sample, visible, media, frames, loader, hidden, elements, w, h }` | What the frame shows. Sent at DOMContentLoaded, load, page hide, and 1–60 s after start, only when it changes. Not sent from SCORM Lab's host pages |
 
 The recorder adds `t` (ms since start), `sid` and `frame` (the frame's URL).
@@ -229,7 +234,7 @@ session it enables:
 | Network | Requests with their initiator and outcome |
 | Log | Browser messages (CSP, mixed content, MIME type) |
 | Profiler | Precise block coverage with call counts |
-| Page | Navigations, and adds the probe (ahead of it, the run's pins) |
+| Page | Navigations, and adds the probe (ahead of it, the run's pins, and `shape-probe.js` with its patterns if a response is `@probe`) |
 | Fetch | Only when the run has `responses`: every request is paused; those a response matches are fulfilled, the rest continue |
 | Emulation | Only with a `navigator.userAgent` pin: `setUserAgentOverride` |
 
@@ -290,9 +295,73 @@ session it enables:
 
 `src/pins.js` is pure. A **pin** is `{ path, value, frames, mode }` in `options.pins` (checked in `options.js`; `mode` is always `'force'` for now, and P1.5's `'watch'` slots in there: `PIN_MODES` in `pins.js`). The recorder puts `globalThis.__labPins = [...]` ahead of `probe.js` (`pinPrefix`, applied through `Page.addScriptToEvaluateOnNewDocument` in every page and iframe); the probe reads and deletes it, drops the pins whose `frames` doesn't cover this frame (`'content'` excludes SCORM Lab's own `lab://run/__lab/` pages) and installs each one. A top-level name becomes an accessor on `window`: the getter returns the value and reports `pin-read`, the setter ignores the assignment and reports `pin-write`, so `var x = …` at the top of a classic script assigns through it. A dotted path is an accessor on the root that, when given an object, installs the next segment on that object, and so on; a frozen object makes `defineProperty` throw, which is reported as `pin-failed`. The accessors are `configurable: true` (the plan said `false`) so that a top-level `let` or `const` in the content creates its own binding instead of a SyntaxError that would stop the whole script; `pinFindings` then recognises that case (the pin was never read or written, and `lexicalDeclaration` finds a column-0 `let`/`const` of the root name in `trace.sources`) and says so. Inline scripts count only if the browser recorded them under their page's URL; a `let` inside a function or an indented block isn't a global and isn't matched. `navigator.userAgent` is the exception: `userAgentPin` gives the value, and the recorder sends `Emulation.setUserAgentOverride` to every session. `location` and the other `navigator` names are refused; `launchParams` goes on the launch URL instead.
 
-An **answer** is `{ match, method?, status, headers, body }` in `options.responses`. With responses set, `Recorder.setup` calls `Fetch.enable` (all URLs, request stage) on every session. `Fetch.requestPaused` runs `answerFor(responses, url, method)`: the first response that matches (glob or `/regex/flags`, tried on the whole URL, the path with query, and the path) and isn't for `lab://run/__lab/` is sent with `Fetch.fulfillRequest` (`buildAnswer`: base64 body, a content type guessed from the body if none, CORS opened if not set); everything else gets `Fetch.continueRequest`. The matching request in `trace.requests` gets `answered: true` and `answeredBy` (the response's index in the list). `networkId` links the paused request to the Network event, which can arrive on either side of it. Responses apply to package runs only, in every frame and popup. `bodyFile` isn't an option: only the CLI reads files (`--answer pattern=@file`, or a response's `bodyFile` in an `--options` file, relative to that file) and it puts the text in `body`; `normaliseOptions` refuses `bodyFile`, so the web handlers can't be made to read a path.
+An **answer** is `{ match, method?, status, headers, body }` in `options.responses`. With responses set, `Recorder.setup` calls `Fetch.enable` (all URLs, request stage) on every session. `Fetch.requestPaused` runs `answerFor(responses, url, method)`: the first response that matches (glob or `/regex/flags`, tried on the whole URL, the path with query, and the path) and isn't for `lab://run/__lab/` is sent with `Fetch.fulfillRequest` (`buildAnswer`: base64 body, a content type guessed from the body if none, CORS opened if not set; a body starting `@probe` is a [probing answer](#discovery-what-the-content-wants-from-its-server)); everything else gets `Fetch.continueRequest`. The matching request in `trace.requests` gets `answered: true` and `answeredBy` (the response's index in the list). `networkId` links the paused request to the Network event, which can arrive on either side of it. Responses apply to package runs only, in every frame and popup. `bodyFile` isn't an option: only the CLI reads files (`--answer pattern=@file`, or a response's `bodyFile` in an `--options` file, relative to that file) and it puts the text in `body`; `normaliseOptions` refuses `bodyFile`, so the web handlers can't be made to read a path.
 
 `pinFindings(trace, options)` (called from `runFindings` for package runs) gives the findings in [findings.md](findings.md); it works from `launch.options`, so saved runs get them again when reopened. `parsePinFlag` and `parseAnswerFlag` are the CLI's spellings. In the UI, pins and answers are in `st.pins` and `st.responses` and go with every `launchOptions()`.
+
+## Discovery: what the content wants from its server
+
+`src/shape.js` is pure, apart from the `run` callback `discover` is given.
+
+**The probe.** A response whose body is `@probe`, or `@probe` followed by JSON, is a probing answer. `servedBody` (in
+`pins.js`) serves the JSON after the marker, or `{}`; the network never sees the marker. `shapePrefix(responses)` puts
+`globalThis.__labShape = [{ source, flags }]` (the probing patterns as regexes, from `patternRe` in `pins.js`, so the
+page matches exactly as `matcher` does) ahead of `host/shape-probe.js`, which the recorder adds ahead of `probe.js` only
+when there is such a response. In each frame, `shape-probe.js` replaces `Response.prototype.json` and `.text`,
+`JSON.parse`, and the `response` and `responseText` getters of `XMLHttpRequest.prototype`. For a matching URL, the parsed
+data (from `json()`, an XHR with `responseType: 'json'`, or the next `JSON.parse` of text that came from `text()` or the
+XHR) is wrapped in a recording Proxy:
+- a read of a key the data has is reported (`read`) and returns the value; plain objects are wrapped in turn (one Proxy
+  per object, so identity holds), arrays and primitives are returned as they are;
+- a read of a missing key is reported (`read`) and returns a Proxy over `{}` for that path (cached), so deeper reads are
+  seen; `then` and `toJSON` are never reported (promises and `JSON.stringify` read them), nor are inherited names
+  (`toString`, `hasOwnProperty`…) or keys the content wrote itself;
+- on such a Proxy, `Symbol.toPrimitive` reports `number`, `string` or `text` (hint default) and gives `0` or `''`;
+  `Symbol.iterator` and `length` report `array` and act empty; `in` reports the key and says yes; `Object.keys` reports
+  `keys` and gives nothing;
+- a missing key named like an array or string method (`map`, `includes`, `trim`…) gets a Proxy with a function target:
+  calling it reports `array` or `string` on its owner and returns what the method gives on `[]` or `''`. Any other
+  missing key can't be called, as with a real answer.
+
+Limits (also in the user guide): the Proxy is always truthy and `typeof` says `object`, so the first round takes the
+true branch of every test on a missing field. Later rounds answer with placeholders, which are real values.
+
+**Reads to a shape.** `shapeReads(trace, match)` takes the `shape` reports for one pattern and adds `at` (`file:line`)
+and, for a `read`, a `hint` from `sourceHint(text, line, col, key)`: the probe's stack gives the column of the property
+name (V8 points there for a property get), and the script text in `trace.sources` around it says more than the Proxy can
+see: `=== 'x'`, `== 3`, `< n`, arithmetic, `typeof … === 'string'`, a default after `||` or `??`, or a truthiness test
+(`if (…)`, `!`, `&&`, `||`, `?`). `inferShape(reads)` builds the tree of paths and types each node, first match wins:
+children or `keys` → object; `array`; `string` (a method); `number`; a hint (non-boolean first); `text` → string;
+otherwise boolean. It returns `{ skeleton, fields: [{ path, type, how, at }] }`, where the skeleton holds placeholders
+(`""`, `0`, `false`, `[]`, `{}`).
+
+**The loop.** `discover({ base, request?, rounds = 5, run, onRound })`: `run(name, options)` must run one launch to its
+end and resolve to the saved run (the CLI calls `runPackage`; `main.js` calls `runToEnd`, which experiments use too).
+It runs `no answer` with the base options; takes `request`, or `serverRequests(trace)` (fetch and XHR outside the package
+and SCORM Lab's pages, one per `requestPattern`: the path for the host's root, origin and path for another site); then
+`round n` with a probing response per pattern ahead of the base responses: `@probe` in round 1, `@probe <skeleton so
+far>` after. It stops when a round adds no new path (`complete: true`) or after `rounds`. Each run becomes an experiment
+row (`runResult`, `summarise`; the first row's progress is `the baseline`), and `onRound(row, index)` is called after
+each. `checkDiscover` validates the settings first. The result is the `discover --json` object in [cli.md](cli.md#discover)
+without the CLI's `package`, `item`, `base`, `request` and `out`; `discoverFindings(result)` gives its findings.
+
+In the apps, `discoverStart` runs the loop in the experiment slot (one at a time; `experiment-stop` and `discover-stop`
+both stop it), emits `discover` events (`{ state: 'start', request }`, `{ state: 'round', index, row }`,
+`{ state: 'done', result }`, `{ state: 'error', message }`) and saves the result (below). The UI's Server needs tab
+keeps it in `st.disc`; **Save as response** puts `result.requests[i].response` into `st.responses`, replacing one with
+the same pattern.
+
+### Saved discovery (`scorm-lab-discovery`, version 1)
+
+`<userData>/discoveries/<time>-<package>.json` in the apps; `discovery.json` in the CLI's `--out` folder has the CLI's
+JSON instead.
+
+```js
+{ format: 'scorm-lab-discovery', version: 1, package, item (manifest index), base (options), request: pattern | null,
+  requests: [{ match, url, method, from, fields: [{ path, type, how, at: ['file:line'] }], skeleton, response }],
+  rows: [experiment row], rounds, complete, noAnswer: { furthest, label }, standIn: { name, furthest, label, better }, findings,
+  file }
+```
 
 ## Overrides
 
@@ -425,7 +494,7 @@ The page's CSP allows only its own scripts and styles, and `data:` images (for l
 | `GET /`, `GET /<ui file>` | The interface |
 | `POST /api/invoke/<handler>` | JSON body, then `{ value }` or `{ error }` (status 500). `open-package` and `open-run` are refused |
 | `POST /api/upload?name=` | Raw `.zip` body (up to 1 GB), then `{ value: package info }` |
-| `GET /api/events` | Server-sent events: `package`, `run`, `state`, `probe`, `experiment` |
+| `GET /api/events` | Server-sent events: `package`, `run`, `state`, `probe`, `experiment`, `discover` |
 | `GET /api/live` | Server-sent events: `frame` with `{ w, h, t, jpeg (base64) }`. Open connections count as watchers |
 
 Every request except the token exchange needs the `scormlab` cookie, compared in constant time. Responses carry
@@ -506,7 +575,7 @@ A frame is `{ fn, url, line, col }`. Older runs without `format` (from before ve
 npm test
 ```
 
-`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
+`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
 `test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
 
 | Fixture | Change | Tests |
@@ -519,6 +588,7 @@ npm test
 | `gated` | `lesson.js` calls `start()` only if `window.startOK` | No API calls; with `lesson.js` overridden (CLI, and over the web handlers) the API is used, the run got further and says so |
 | `pinned` | `boot.js` sets `previewMode`, a `config` object and a frozen object itself, and logs what it reads | Pins hold (`previewMode`, `config.mode`, `navigator.userAgent`), the writes are reported with `boot.js`, a frozen object can't be pinned, an unread pin is noted |
 | `lexical` | `boot.js` declares `let previewMode` | The can't-pin finding, and the content keeps its own value |
+| `needs` | `boot.js` fetches `/api/player/config` and starts the lesson only with it; reads `cfg.lms.enabled` (truthiness), `cfg.lms.version` (`=== '2004'`) and `cfg.assets.base` (joined to text) | Discovery: the three fields with the right types, the stand-in reaches past `looked`. Its `boot.js` also runs in the unit tests, in a `vm` context with `shape-probe.js` and stand-ins for `Response`, `XMLHttpRequest` and `fetch`, to test the Proxy and the loop without Electron |
 | `loader` | Loading screen; `data/config.json` with a trailing comma; `js/next.js` loaded only after the config parses | Invalid JSON; stuck on loading screen; code that loads next never ran |
 
 The end-to-end part covers:
@@ -526,6 +596,7 @@ The end-to-end part covers:
 - **Runs:** all fixtures, including a saved run, resume, and `--api both`. Milestones: `good` reaches at least
   `wrote` (also with the live click), `mismatch` reaches `looked`, `blank` reaches `launched` only.
 - **Pins and answers:** `hosted` with `/api/player/config` answered (no own API, calls reach the LMS, request marked answered, `--options-from` repeats it, `bodyFile` read at the CLI) and with `previewMode` pinned (the change is reported at `boot.js`); `pinned` and `lexical` as above; bad flags exit with status 2.
+- **Discovery:** `needs` (fields, types, the stand-in gets further, three runs); bad flags exit with status 2.
 - **Live:** a frame appears, a click on **Next** reaches the course (`lesson_location` 2), and stop ends it early.
 - **Web:** 401 without the token, the token exchange, upload, launch with auto-stop, live frames over SSE, the run in
   `state`, saved runs, and `load-run` refusing paths outside the runs folder, the `options` handler building the pin and answer flags and refusing `bodyFile`.

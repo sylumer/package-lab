@@ -2,17 +2,19 @@
 // starts (so cross-origin frames are recorded too). The trace is plain JSON: see DESIGN.md.
 import { readFileSync } from 'node:fs'
 import { pinPrefix, userAgentPin, answerFor, buildAnswer } from './pins.js'
+import { shapePrefix } from './shape.js'
 
-const PROBE = readFileSync(new URL('./host/probe.js', import.meta.url), 'utf8')
+const PROBE = readFileSync(new URL('./host/probe.js', import.meta.url), 'utf8'), SHAPE = readFileSync(new URL('./host/shape-probe.js', import.meta.url), 'utf8')
 const CAP = { scripts: 5000, requests: 10000, console: 5000, caught: 2000, log: 2000, probe: 5000 }
 const frames = st => (st?.callFrames ?? []).slice(0, 8).map(f => ({ fn: f.functionName, url: f.url, line: f.lineNumber + 1, col: f.columnNumber + 1 }))
 const argText = a => a.type === 'string' ? a.value : a.unserializableValue ?? (a.value !== undefined ? JSON.stringify(a.value) : a.description ?? a.type)
 
 export class Recorder {
   // pins and responses are the run's launch options (pins.js): pins go into the probe, responses are served through the Fetch domain.
+  // Responses answered with @probe (shape.js) also put shape-probe.js, with their patterns, ahead of the probe.
   constructor(wc, { label, caught = true, pins = [], responses = [] } = {}) {
     this.wc = wc; this.dbg = wc.debugger; this.caught = caught; this.t0 = Date.now(); this.sessions = new Set([''])
-    this.probe = pinPrefix(pins) + PROBE; this.userAgent = userAgentPin(pins); this.responses = responses; this.answered = new Map()
+    this.probe = pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + PROBE; this.userAgent = userAgentPin(pins); this.responses = responses; this.answered = new Map()
     this.trace = { label, started: new Date().toISOString(), targets: [], scripts: [], requests: [], navigations: [], console: [], exceptions: [],
       caught: [], log: [], probe: [], coverage: [], sources: {}, truncated: {} }
     this.req = new Map()
