@@ -19,8 +19,8 @@ In progress on branch `next`.
 | P0.3 | Experiment runner | sonnet | done | 6c83d13 | One review round (resume now applies to every variant) |
 | P1.1 | Change files and rerun (overlays) | sonnet | done | aa4935f | One review round. Editor focus and CRLF handling untested in a browser; cliCommand's --override output not yet in cli.md (P5.3) |
 | P1.2 | Pin variables, answer requests | sonnet | done | ec3e7f1 | One review round. Pins are configurable (logged). Some e2e checks moved behind `--slow` |
-| P1.3 | What the content wanted from its server | opus | done | | Reviewed by the orchestrator, no changes. Saved discoveries can't be reopened in the UI yet; array elements not explored |
-| P1.4 | Code instrumentation: execution trace | opus | todo | | |
+| P1.3 | What the content wanted from its server | opus | done | d2b0977 | Reviewed by the orchestrator, no changes. Saved discoveries can't be reopened in the UI yet; array elements not explored |
+| P1.4 | Code instrumentation: execution trace | opus | done | | Reviewed by the orchestrator. One commit (steps checked in order). `hosted`: window.scorm is true at startCourse, not false as the plan assumed (logged). Overhead fine on `good`, ~17x on compute-heavy code. Known: milestone `t` from API calls is absolute in saved runs |
 | P1.5 | Drill-down | opus | todo | | |
 | P1.6 | Why it stalled | sonnet | todo | | |
 | P2.1 | LMS profiles and other-origin content | sonnet / opus | todo | | |

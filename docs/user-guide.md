@@ -10,6 +10,7 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 - [Reading a run](#reading-a-run)
 - [Testing a theory: launch settings](#testing-a-theory-launch-settings)
 - [What the content wants from its server](#what-the-content-wants-from-its-server)
+- [Tracing the code](#tracing-the-code)
 - [Testing resume and progress saving](#testing-resume-and-progress-saving)
 - [Comparing with a working copy (optional)](#comparing-with-a-working-copy-optional)
 - [Saved runs](#saved-runs)
@@ -169,6 +170,7 @@ Then the other tabs:
 | **Lookups** | Each time the content read `window.API` or `window.API_1484_11` in any frame, with whether it found one and the code that looked. Also frame depth and opener for each frame, and any assignment to those names |
 | **Network** | Every request: status, type and the code that made it |
 | **Scripts** | Every script the browser parsed, in order, with what loaded it |
+| **Execution** | For a run with **Trace the code** on: the last functions and decisions before it went quiet. See [Tracing the code](#tracing-the-code) |
 | **Errors** | Uncaught errors, caught errors (if **Record caught errors** is on), and browser warnings, in time order with where they happened |
 | **Console** | The content's console output |
 | **Frames** | Frame navigations and targets (cross-origin frames, workers, popups) |
@@ -304,6 +306,35 @@ What it can't see:
 
 From the command line: [`discover`](cli.md#discover).
 
+## Tracing the code
+
+Findings say what the content did. To see why, turn on **Trace the code** under **More options** and launch again.
+SCORM Lab then records, in order, every function of the package's scripts that ran and which way each decision went,
+with the values it tested. The content doesn't pause, and behaves as it does without tracing.
+
+The **Execution** tab shows the last 500 events before the run went quiet, newest last:
+- `startCourse() called` and `startCourse() returned`: a function started and ended. A start without an end means it
+  threw, or was still waiting (an `await`) when the run stopped.
+- `if (cfg.lms) → false, cfg.lms = undefined`: a decision, which way it went, and the values it compared. The same goes
+  for `? :`, `&&`, `||`, `??`, `switch` and loop tests. Text is cut to 80 characters; an object shows its kind and up
+  to five of its names (`Object {start, get, set, save, finish, …}`).
+- `(the same 4000 more times)`: a loop that made the same decision over and over is counted, not listed.
+
+The filter box narrows the list, for example to one file or function. **Code** shows the file around that line, with
+the line highlighted. Start from the bottom: the last decisions are usually where the content gave up.
+
+What tracing covers, and what it doesn't:
+- Scripts and inline scripts in the package's pages, up to 2 MB each. Larger files, files that aren't UTF-8 text, and
+  scripts SCORM Lab can't read run as they are; a finding lists them.
+- Not code from other sites, code built at run time (`eval`, `new Function`), event handlers written in HTML attributes,
+  or code inside a `with` block. Code in workers runs but isn't recorded.
+- At most 200,000 events are kept, the newest. A finding says when older ones were dropped.
+- The content runs a little slower. A script that reads its own source (`fn.toString()`) sees the traced version.
+- Looking at an object's names runs the content's code only for a `Proxy` object (its traps).
+
+The saved run keeps the trace: `trace.exec`, `trace.sites` and the original files in `trace.sources` (see the
+[developer guide](developer-guide.md#saved-run-scorm-lab-run-version-1)). From the command line: `scorm-lab run --trace`.
+
 ## Testing resume and progress saving
 
 1. Launch with **Stop after: I stop it**. Go part-way through, then leave the course the normal way. The API tab
@@ -347,7 +378,9 @@ Runs made by the CLI (`scorm-lab run --out`) and the Concierge module (**Downloa
    mode-switch findings. Looked and found nothing means a version or frame problem: try API **Both**, then frame
    depth, then **In a new window**.
 5. **Calls the API but doesn't save:** look at the progress findings and the **API** tab. Then test resuming as above.
-6. **Its own API object:** the content decided it isn't in an LMS. **Lookups** shows the assignment and the code
+6. **Not sure why it went that way:** launch again with **Trace the code** on and read the **Execution** tab from the
+   bottom up: the last decisions and their values say which test sent it down the wrong path.
+7. **Its own API object:** the content decided it isn't in an LMS. **Lookups** shows the assignment and the code
    that made it; **Package** lists the mode switches. Find the export setting for an LMS or standalone package.
 
 ## Privacy

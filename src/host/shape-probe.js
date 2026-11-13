@@ -33,6 +33,9 @@
   const STRING = new Set(['trim', 'trimStart', 'trimEnd', 'toLowerCase', 'toUpperCase', 'split', 'replace', 'replaceAll', 'startsWith', 'endsWith', 'charAt', 'charCodeAt', 'substring', 'substr', 'match', 'padStart', 'padEnd', 'localeCompare', 'normalize', 'search', 'repeat'])
   const plain = v => v !== null && typeof v === 'object' && !Array.isArray(v)
   const wrapped = new WeakMap()   // data object → its Proxy, so cfg.lms === cfg.lms
+  // Every Proxy made here, so the execution trace (trace-probe.js) can preview one without running its traps.
+  const proxies = new WeakSet()
+  Object.defineProperty(globalThis, '__labIsShape', { value: v => proxies.has(v) })
   // A Proxy for the value at path. target is the data object there, or {} for a value the response doesn't have; a
   // missing key named like a method gets a function target, so that calling it works.
   function make(url, path, target) {
@@ -66,6 +69,7 @@
       set(t, k, v) { written.add(k); return Reflect.set(t, k, v) },
     })
     if (plain(target)) wrapped.set(target, p)
+    proxies.add(p)
     return p
   }
   const root = (url, data) => plain(data) ? make(url, '', data) : data

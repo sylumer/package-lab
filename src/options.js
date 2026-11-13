@@ -118,13 +118,14 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (wait !== DEFAULTS.wait) a.push('--wait', String(wait))
   // Pins and responses with a flag's worth of settings get one; anything else (frames, headers, a method) goes in the options file.
   const pinFlag = o.pins.every(p => p.frames === 'content' && p.mode === 'force'), answerFlag = o.responses.every(r => !r.method && !Object.keys(r.headers).length)
-  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
+  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
   const rest = Object.keys(DEFAULTS).filter(k => !flagged.includes(k) && JSON.stringify(o[k]) !== JSON.stringify(DEFAULTS[k]))
   // Changed files: --override path=path, which assumes a local copy saved at the same relative path.
   for (const p of Object.keys(o.files)) a.push('--override', quote(`${p}=${p}`))
   if (pinFlag) for (const p of o.pins) a.push('--pin', quote(`${p.path}=${JSON.stringify(p.value)}`))
   if (answerFlag) for (const r of o.responses) a.push('--answer', quote(`${r.match}=${r.status}:${r.body}`))
   if (o.launchParams) a.push('--launch-params', quote(o.launchParams))
+  if (o.trace) a.push('--trace')
   if (rest.length) a.push('--options', 'options.json')
   return a.join(' ')
 }

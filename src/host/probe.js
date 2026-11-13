@@ -6,7 +6,7 @@
   if (window.__labProbed) return
   window.__labProbed = true
   const report = data => { try { __labReport(JSON.stringify({ frame: location.href, ...data })) } catch (e) { /* binding missing */ } }
-  const stack = (skip = 0) => (new Error().stack || '').split('\n').slice(3 + skip, 9 + skip).map(s => s.trim().replace(/^at /, '')).filter(s => !s.includes('probe.js'))
+  const stack = (skip = 0) => (new Error().stack || '').split('\n').slice(3 + skip, 9 + skip).map(s => s.trim().replace(/^at /, '')).filter(s => !s.includes('probe.js') && !/^__lab[A-Z]/.test(s))
   let depth = 0, w = window
   try { while (w !== w.parent && depth < 20) { w = w.parent; depth++ } } catch (e) { depth = -1 }
   let topReachable = true

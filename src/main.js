@@ -12,6 +12,7 @@ import { app, BrowserWindow, ipcMain, dialog, protocol, session } from 'electron
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { createHash } from 'node:crypto'
 import { unzip } from './zip.js'
 import { analyze } from './analyze.js'
 import { Recorder } from './recorder.js'
@@ -25,6 +26,7 @@ import { overlayFiles, overrideList, overrideFinding, overrideProgressFinding, e
 import { unified } from './textdiff.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
 import { discover, checkDiscover } from './shape.js'
+import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
@@ -52,6 +54,7 @@ const mime = name => (MIME[extname(name).slice(1).toLowerCase()] ?? 'application
 
 let ui = null, web = null, pkg = null, config = {}, active = null, nextId = 1
 let served = null   // the files the running content is served from: the package's, with any overrides on top
+let tracing = null  // a traced run (options.trace): { files: path → instrumented entry served in this run, untraced: path → why, sites }
 const runs = new Map()
 const runsDir = () => { const d = join(app.getPath('userData'), 'runs'); mkdirSync(d, { recursive: true }); return d }
 
@@ -73,7 +76,8 @@ function serve(req) {
     if (HOST_FILES.has(name)) return new Response(readFileSync(new URL('./host/' + name, import.meta.url)), { headers: { ...headers, 'Content-Type': mime(name) } })
   }
   if (path.startsWith('/pkg/') && pkg) {
-    const p = path.slice(5), files = served ?? pkg.files, buf = files.get(p) ?? (p === '' || p.endsWith('/') ? files.get(p + 'index.html') : undefined)
+    const p = path.slice(5), files = served ?? pkg.files, file = files.get(p) ?? (p === '' || p.endsWith('/') ? files.get(p + 'index.html') : undefined)
+    const buf = file && tracing ? traceFile(files.has(p) ? p : p + 'index.html', file) : file
     if (buf) {
       headers['Content-Type'] = mime(p); headers['Accept-Ranges'] = 'bytes'
       const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('Range') || '')
@@ -88,13 +92,38 @@ function serve(req) {
   return new Response(`${path} isn’t in the package.`, { status: 404, headers: { ...headers, 'Content-Type': 'text/plain; charset=utf-8' } })
 }
 
+// A traced run gets scripts and pages instrumented (src/instrument.js), worked out once per package and file content.
+// Site ids run on across the package's files (pkg.sites), so one table serves every run of it.
+function traceFile(path, buf) {
+  const ext = extname(path).slice(1).toLowerCase(), html = ext === 'html' || ext === 'htm'
+  if (!html && ext !== 'js' && ext !== 'mjs') return buf
+  const text = buf.length > MAX_TRACED ? null : buf.toString('utf8')
+  const why = text === null ? `over ${MAX_TRACED / 1024 ** 2} MB` : !Buffer.from(text, 'utf8').equals(buf) ? 'not UTF-8 text' : null
+  if (why) { tracing.untraced.set(path, why); return buf }
+  const key = path + '\0' + createHash('sha1').update(buf).digest('hex')
+  let e = pkg.traced.get(key)
+  if (!e) {
+    const opts = { file: path, base: pkg.sites.length }, r = html ? instrumentHtml(text, opts) : instrument(text, { ...opts, module: ext === 'mjs' })
+    for (const s of r.sites) pkg.sites.push(s)
+    const error = r.error ?? r.errors?.join('; ')
+    e = { original: text, code: r.code, map: r.map, scripts: html ? r.scripts : undefined, buf: r.code === text ? buf : Buffer.from(r.code, 'utf8'),
+      why: error && (html ? `${r.errors.length > 1 ? 'some inline scripts' : 'an inline script'} couldn’t be read as JavaScript (${error})` : `couldn’t be read as JavaScript (${error})`) }
+    pkg.traced.set(key, e)
+  }
+  if (e.why) tracing.untraced.set(path, e.why)
+  if (e.map.length) tracing.files.set(path, e)
+  return e.buf
+}
+
 // ---- Runs ----
 // What the interfaces get for a run: everything but the script sources and raw coverage, which can be large.
 // Changed files go to the interfaces as paths and sizes only.
 const slim = l => l?.options?.files && { ...l, options: { ...l.options, files: Object.fromEntries(Object.entries(l.options.files).map(([p, e]) => [p, { size: entryBuffer(e).length }])) } }
+// A traced run's events are replaced by the last 500, described (the Execution tab).
 const summary = r => ({ id: r.id, label: r.label, kind: r.kind, launch: slim(r.launch) ?? r.launch, findings: r.findings, milestones: r.milestones, file: r.file,
   boot: r.boot && { ...r.boot, nodes: bootRun(r.boot, r.trace) },
-  trace: { ...r.trace, sources: undefined, coverage: undefined, coveredScripts: r.trace.coverage?.length ?? 0 } })
+  trace: { ...r.trace, sources: undefined, coverage: undefined, exec: undefined, sites: undefined, coveredScripts: r.trace.coverage?.length ?? 0,
+    ...(r.trace.sites ? { execEvents: eventCount(r.trace), execTail: r.execTail ??= lastEvents(r.trace, 500) } : {}) } })
 
 // Milestones (package runs only) and the findings with the "Got as far as" note first.
 // A run that used overrides also gets a note saying so, and, if there is an earlier run of the item without them, whether the change helped.
@@ -139,16 +168,17 @@ function watchPopups(wc, extra, ropts, wins) {
   })
 }
 
-async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses }) {
+async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace }) {
   await finish()
   served = files ?? null   // only now: the previous run may have been using the old set
+  tracing = trace ? { files: new Map(), untraced: new Map(), sites: pkg.sites } : null
   const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
-  const ropts = { caught, pins, responses }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
+  const ropts = { caught, pins, responses, trace: !!trace }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
   rec.onProbe = p => emit('probe', p)
   win.webContents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { show: SHOW_RUNS, webPreferences: { partition, sandbox: true, backgroundThrottling: false } } }))
   watchPopups(win.webContents, extra, ropts, wins)
-  active = { win, wins, rec, extra, kind, label, launch, boot, started: Date.now() }
+  active = { win, wins, rec, extra, kind, label, launch, boot, tracing, started: Date.now() }
   win.on('close', e => { if (active?.win === win) { e.preventDefault(); finish() } })
   if (auto > 0) { const a = active; a.timer = setTimeout(() => { if (active === a) finish() }, auto * 1000) }
   // The debugger needs a renderer: start one on a blank page, attach, then go to the content.
@@ -174,8 +204,14 @@ async function finishActive(a) {
   const trace = await a.rec.stop()
   for (const r of a.extra) {
     const t = await r.stop()
-    for (const k of ['targets', 'scripts', 'requests', 'navigations', 'console', 'exceptions', 'caught', 'log', 'probe', 'coverage']) trace[k].push(...t[k].map(x => ({ ...x, sid: 'popup:' + (x.sid ?? '') })))
-    Object.assign(trace.sources, t.sources)
+    for (const k of ['targets', 'scripts', 'requests', 'navigations', 'console', 'exceptions', 'caught', 'log', 'probe', 'exec', 'coverage']) trace[k].push(...t[k].map(x => ({ ...x, sid: 'popup:' + (x.sid ?? '') })))
+    Object.assign(trace.sources, t.sources); Object.assign(trace.truncated, t.truncated)
+  }
+  // A traced run: the site table, the files left as they were, and everything pointed back at the original files.
+  if (a.tracing) {
+    trace.sites = a.tracing.sites.slice()
+    trace.untraced = [...a.tracing.untraced].map(([file, why]) => ({ file, why }))
+    restoreTrace(trace, a.tracing.files)
   }
   trace.cmi = cmi
   if (a.kind === 'package' && cmi && pkg) pkg.lastCmi = cmi
@@ -241,7 +277,7 @@ function loadPackage(path) { return loadPackageData(basename(path), readFileSync
 function loadPackageData(name, buf, path = '') {
   const files = unzip(buf), analysis = analyze(files)
   served = null
-  pkg = { name, path, files, analysis, lastCmi: null, boots: new Map(), overrides: Object.create(null), loaded: Date.now() }
+  pkg = { name, path, files, analysis, lastCmi: null, boots: new Map(), overrides: Object.create(null), loaded: Date.now(), traced: new Map(), sites: [] }
   const info = pkgInfo()
   emit('package', info)
   return info
@@ -264,6 +300,7 @@ function bootFor(path, files = pkg.files) {
 async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
   if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
   const o = normaliseOptions({ ...rest, files: rest.files ?? pkg?.overrides })   // no files given: the session's overrides
+  if (process.env.SCORM_LAB_FORCE_TRACE === '1') o.trace = true   // tests: every run traced
   const m = pkg.analysis.manifest, item = m.items[itemIndex]
   if (!item?.res) throw new Error('That item has nothing to launch.')
   const res = item.res
@@ -279,7 +316,7 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
       launchData: item.launchData, mastery: item.mastery, maxTime: item.maxTime, timeLimitAction: item.timeLimitAction, completionThreshold: item.completionThreshold } }
   const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o }
   await begin({ kind: 'package', label: `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}`,
-    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses })
+    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace })
   return true
 }
 
@@ -447,7 +484,18 @@ const handlers = {
     if (!name.endsWith('.json') || !existsSync(join(runsDir(), name))) throw new Error('No such saved run.')
     return [readRun(join(runsDir(), name))]
   },
-  source: ({ run, url }) => runs.get(run)?.trace.sources?.[url] ?? '',
+  // A script's source from a run, by address; or by package path (the Execution tab): the script as the run recorded it,
+  // or for a page, the file the run was served (a changed file from its options, else the open package's, if it is that package).
+  source: ({ run, url, path }) => {
+    const r = runs.get(run), src = r?.trace.sources ?? {}
+    if (url !== undefined) return src[url] ?? ''
+    const pathOf = u => { try { const x = new URL(u); return x.protocol === 'lab:' && x.pathname.startsWith('/pkg/') ? decodeURIComponent(x.pathname.slice(5)) : null } catch { return null } }
+    const hit = !/\.html?$/i.test(path) && Object.keys(src).find(u => pathOf(u) === path)
+    if (hit) return src[hit]
+    const files = r?.launch?.options?.files
+    if (files && Object.hasOwn(files, path)) return entryBuffer(files[path]).toString('utf8')
+    return (r?.package && r.package === pkg?.name && pkg.files.get(path)?.toString('utf8')) || ''
+  },
   'live-input': e => live.input(e),
 }
 for (const [name, fn] of Object.entries(handlers)) ipcMain.handle(name, (_e, arg) => fn(arg ?? {}))

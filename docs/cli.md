@@ -97,7 +97,7 @@ scorm-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth
                          [--resume-from run.json] [--wait seconds] [--out run.json] [--live folder]
                          [--no-caught] [--show] [--json] [--strict] [--options options.json]
                          [--options-from run.json] [--override path=file …] [--pin name=json …]
-                         [--answer pattern=reply …] [--launch-params a=1&b=2]
+                         [--answer pattern=reply …] [--launch-params a=1&b=2] [--trace]
 ```
 
 Launches the item in a hidden browser, with SCORM Lab's test LMS. It lets the item run for `--wait` seconds (default
@@ -118,6 +118,7 @@ app.
 | `--pin` | none | `<name>=<json>`: forces a value the content reads, before its own code runs (see [Pins and answers](#pins-and-answers)). Repeat it for more |
 | `--answer` | none | `<pattern>=@<file>` or `<pattern>=<status>:<body>`: answers matching requests with a response of your own (see [Pins and answers](#pins-and-answers)). Repeat it for more |
 | `--launch-params` | none | Extra query parameters added to the launch address, like `a=1&b=2` |
+| `--trace` | off | Records which functions of the package ran and which way each decision went, with the values (see [Tracing](#tracing)). Keep the run with `--out` to read it |
 | `--out` | none | Keeps the full run (scripts, requests, coverage, sources). Open it in the desktop app with **Open saved…**, or pass it to `report` or `--resume-from` |
 | `--live` | none | See [Live runs](#live-runs) |
 | `--no-caught` | off | Don't record errors the content catches |
@@ -189,6 +190,20 @@ Anything beyond a pattern, status and body (a method, headers) goes in the optio
 A response with no content type gets `application/json` if its body starts with `{` or `[`, otherwise `text/plain`, and
 `Access-Control-Allow-Origin: *` unless you set it. SCORM Lab's own pages are never answered. Flags add to the pins and
 responses of an options file or `--options-from` run.
+
+#### Tracing
+
+`--trace` serves the package's scripts with calls added that record, in order, every function that starts and ends and
+every decision (`if`, `? :`, `&&`, `||`, `??`, `switch`, loop tests) with its result and the values it tested. The
+content behaves as it does without it. The saved run (`--out`) holds the events in `trace.exec`, the table of places
+they refer to in `trace.sites`, and the original files in `trace.sources`; the desktop and web interfaces show them in
+the **Execution** tab. See [Tracing the code](user-guide.md#tracing-the-code) for what it covers, and the
+[developer guide](developer-guide.md#the-execution-trace) for the format. To read the last events from a script:
+
+```bash
+scorm-lab run course.zip --trace --out run.json
+node -e "import('./src/instrument.js').then(m => { const t = JSON.parse(require('fs').readFileSync('run.json')).trace; for (const e of m.lastEvents(t, 50)) console.log(e.file + ':' + e.line, e.say) })"
+```
 
 `milestones` lists the ten steps of the SCORM path, each reached or not (see [Milestones](user-guide.md#milestones));
 `furthest` is the id of the last one reached, or `null`. The text output adds a **Milestones** line with a tick or a
@@ -432,6 +447,7 @@ Input goes to the newest open window of the run: a popup the content opened, or 
 | `SCORM_LAB_ELECTRON` | The Electron or SCORM Lab binary to use. A path ending in `electron` is given the repo as its app; anything else (such as `/Applications/SCORM Lab.app/Contents/MacOS/SCORM Lab`) runs on its own |
 | `SCORM_LAB_DATA` | Moves SCORM Lab's data folder (saved runs, web token, reference sign-ins) for `serve` and `open`. Default `~/Library/Application Support/SCORM Lab` |
 | `NO_COLOR` | Plain text output |
+| `SCORM_LAB_FORCE_TRACE` | `1` traces every package run, as `--trace` does. For SCORM Lab's own tests |
 
 ## Examples
 

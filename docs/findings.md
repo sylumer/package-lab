@@ -18,6 +18,7 @@ if there are no errors.
 - [From a run: requests and errors](#from-a-run-requests-and-errors)
 - [From a run: milestones](#from-a-run-milestones)
 - [From a run: progress](#from-a-run-progress)
+- [From a run: tracing](#from-a-run-tracing)
 - [From an experiment](#from-an-experiment)
 - [From a discovery](#from-a-discovery)
 - [From a comparison](#from-a-comparison)
@@ -151,6 +152,15 @@ Added to a package run that used pins or responses. See
 | Pinned value never read | info | The content never looked at the pinned value (the name may be wrong, the code that reads it never ran, or the name is declared with `let` or `const` somewhere other than the start of a line, which SCORM Lab can’t see). `navigator.userAgent` pins aren't checked | Check the spelling, and whether the content got as far as the code that reads it |
 | Answered *N* requests with your responses | info | These requests never reached a server: the content got your response. The evidence lists them | Compare with a run without the answer to see what changed |
 | *A response* matched no request | info | The content never made a request that matches one of your responses | Check the pattern against the Network tab, and whether the content got as far as making the request |
+
+## From a run: tracing
+
+Added to a package run with **Trace the code** on (`--trace`). See [Tracing](user-guide.md#tracing-the-code).
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| *N* script files were not traced | info | These files ran as they are, so the Execution tab has nothing from them. The evidence gives each file and why: over 2 MB, not UTF-8 text, or SCORM Lab couldn't read it as JavaScript (it may use syntax SCORM Lab doesn't know yet). For a page, the reason names its inline scripts | Nothing, if the code you care about is elsewhere. The rest of the trace still applies |
+| The execution trace is incomplete | info | The content ran more than 200,000 functions and decisions, so the oldest were dropped. The last ones, which show where it stopped, are kept | Stop the run sooner after the point you care about |
 
 ## From an experiment
 

@@ -21,6 +21,7 @@ import { pinPathProblem, matcher, answerFor, buildAnswer, pinPrefix, userAgentPi
 import { STEPS, milestones, furthest, firstMissing, milestoneFinding, progress, runCounts } from '../src/milestones.js'
 import { probeBody, shapePrefix, requestPattern, serverRequests, sourceHint, shapeReads, inferShape, discover, discoverFindings, checkDiscover } from '../src/shape.js'
 import { servedBody } from '../src/pins.js'
+import { instrument, instrumentHtml, restoreTrace, lastEvents, show, traceFindings } from '../src/instrument.js'
 import vm from 'node:vm'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
@@ -258,7 +259,8 @@ assert.deepEqual(normaliseOptions({ files: { 'js/a.js': 'x', 'b.png': { base64: 
 for (const f of [{ 'a.js': {} }, { 'a.js': { content: 'x', base64: 'AA==' } }, { 'a.js': { base64: '!!' } }, { 'a.js': { base64: 'AAE' } }, { 'a.js': { content: 1 } }, { 'a//b.js': 'x' }, { 'a/': 'x' }])
   assert.throws(() => normaliseOptions({ files: f }), /files/, 'options: files value ' + JSON.stringify(f))
 assert.equal(cliCommand(dflt, { zip: 'a b.zip', item: 2 }), "scorm-lab run 'a b.zip' --item 2")
-assert.equal(cliCommand({ expose: 'both', depth: 2, opener: true, caught: false, auto: 20, trace: true }), 'scorm-lab run package.zip --api both --depth 2 --window --no-caught --wait 20 --options options.json')
+assert.equal(cliCommand({ expose: 'both', depth: 2, opener: true, caught: false, auto: 20, trace: true }), 'scorm-lab run package.zip --api both --depth 2 --window --no-caught --wait 20 --trace')
+assert.equal(cliCommand({ storage: 'blocked' }), 'scorm-lab run package.zip --options options.json', 'cliCommand: a field without a flag goes to the options file')
 // Experiments: planning, summary, findings.
 const planned = planVariants({ base: {}, variants: PRESETS.standard })
 assert.deepEqual(planned.map(p => p.name), ['default', 'api both', 'api 1.2', 'api 2004', 'api none', 'depth 1', 'depth 2', 'depth 3', 'new window'], 'experiments: standard drops variants equal to the default')
@@ -469,6 +471,161 @@ for (const bad of [{ rounds: 0 }, { rounds: 11 }, { rounds: 1.5 }, { request: ''
   assert.deepEqual(none.findings.map(f => f.title), ['The content made no requests to a server'])
   assert.match(discoverFindings({ ...d, requests: [{ ...d.requests[0], fields: [] }] }).map(f => f.title).join(), /didn’t read what \/api\/player\/config sent/)
 }
+// Instrumentation (P1.4). Each snippet runs three times under node:vm: as it is, instrumented with trace-probe.js
+// (the page side), and instrumented with only the prelude (as in a worker). Results and side-effect logs must match.
+const TRACE = readFileSync(new URL('../src/host/trace-probe.js', import.meta.url), 'utf8')
+async function runSnippet(code, probe) {
+  const log = [], reports = []
+  const ctx = vm.createContext({ log: (...a) => { log.push(a.map(String).join(' ')) }, setTimeout, location: { href: 'lab://run/pkg/a.js' }, out: undefined, __labReport: s => reports.push(JSON.parse(s)) })
+  if (probe) vm.runInContext(TRACE, ctx)
+  vm.runInContext(code, ctx, { filename: 'lab://run/pkg/a.js' })
+  let out
+  try { out = JSON.stringify(await ctx.out) } catch (e) { out = 'threw ' + e.constructor.name }
+  ctx.__labFlush?.()
+  return { out, log: JSON.stringify(log), events: reports.flatMap(r => r.events), reports }
+}
+const CORPUS = {
+  'short-circuit side effects': `let n = 0; const f = () => (log('f'), n++); out = [f() && f(), 0 && f(), f() || f(), null ?? f(), 0 ?? f(), f() ?? 1, n]`,
+  getters: `const o = { get x() { log('get x'); return 1 } }; out = [o.x === 1 ? 'a' : 'b', o.x == o.x, !o.x, o.x || 2]; if (o.x > 0) log('pos'); while (!o.x) break`,
+  'optional chaining': `const a = { b: null, c: { d: 0 } }; out = [a?.b?.c ? 1 : 2, a.b?.c === undefined, a?.["b"] ?? 'd', a.c?.d || 'z', a.q?.() ? 1 : 0]`,
+  'await in conditions': `async function g() { if (await Promise.resolve(log('aw') || 0)) return 1; return (await 2) > 1 ? 'y' : 'n' } out = g()`,
+  generators: `function* gen() { let i = 0; while (i < 3) { if (yield i) log('sent'); i++ } return 'done' } const it = gen(); out = [it.next(), it.next(true), it.next(), it.next(), it.next()]`,
+  'classes and super': `class A { constructor(x) { this.x = x || 1 } m() { return this.x > 1 ? 'big' : 'small' } static s() { return this.name } get g() { return this.x } }
+class B extends A { constructor() { super(2); if (super.m() === 'big') log('big') } m() { return super.m() + (this.g ? '!' : '?') } }
+out = [new B().m(), B.s(), new A().m(), new B() instanceof A]`,
+  'class fields, private names, static blocks': `class K { #p = 1; q = this.#p > 0 ? 'pos' : 'neg'; has(o) { return #p in o ? 'has' : 'not' } static { log(this.name ? 'named' : 'anon') } } out = [new K().q, new K().has(new K()), new K().has({})]`,
+  'labelled loops': `outer: for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) { if (j === 1) continue outer; if (i === 2) break outer; log(i + ',' + j) } } out = 1`,
+  'switch fall-through': `function sw(v) { const r = []; switch (v) { case 1: r.push(1); case 2: r.push(2); break; default: r.push('d') } return r } let k = 0; switch (k++) { case 0: log('zero') } out = [sw(1), sw(2), sw(3), k]`,
+  'comma expressions': `let c = 0; if ((c++, c > 0)) log('c'); for (let i = 0, j = 3; i < j, j > 1; i++, j--) log(i, j); out = (c++, c) ? c : -1`,
+  'arrow concise bodies': `const f = x => x ? { a: x } : null, g = x => ({ b: x }), h = async x => x && await x, k = x => y => x || y; out = Promise.all([f(1), f(0), g(2), h(3), k(0)(4), [1, 2].map(x => x > 1)])`,
+  'default parameters': `function d(a = log('def') || 5, b = a > 3 ? 'hi' : 'lo') { return [a, b] } const e = (x = 1, { y = x ? 2 : 3 } = {}) => x + y; out = [d(), d(1), d(undefined, 'x'), e(), e(0)]`,
+  directives: `function s() { "use strict"; return this === undefined } function t() { 'use strict'
+  return typeof this } function u() { 'a'; "use strict"; if (this) return 'sloppy'; return 'strict' } out = [s(), t(), u(), (function () { return !this })(), (() => { 'use strict'; return 1 })()]`,
+  'top-level "use strict"': `"use strict"
+var top = function () { return this === undefined }; out = [top(), (function () { try { undeclared1 = 1; return 'sloppy' } catch (e) { return e.constructor.name } })()]`,
+  'this and arguments': `function a() { return arguments.length > 1 ? arguments[1] : this && this.v } function b() { arguments[0] = 9; return arguments[0] === 9 && arguments.length } out = [a(1, 2), a.call({ v: 3 }), a.call(null), b(1)]`,
+  'ASI after return': `function r() { return
+  1 } function q(a) { if (a)
+  return
+  log('after') } let x = 1
+;[1, 2].forEach(v => log(v))
+function z() { return!0||1 } function y() { return(1)?2:3 } out = [r(), q(1), q(0), z(), y()]`,
+  'statement starting with ( or [': `var a1 = 1, g = function () { return 5 }
+var b1 = g
+(a1 || 2) && log('called')
+var c1 = [1]
+[0] || log('index')
+out = [b1, c1]`,
+  'typeof, in, instanceof, undeclared names': `out = [typeof nope === 'undefined', 'a' in { a: 1 }, [] instanceof Array, typeof nope2 == 'string' ? 1 : 2]; try { if (!nope3) log(1) } catch (e) { log(e.constructor.name) } try { if (null.x) log('no') } catch (e) { log(e instanceof TypeError) }`,
+  'with blocks are left alone': `var w = { k: 1, __labC: 1 }; with (w) { if (k) log('k'); out = k ? 'yes' : 'no' }`,
+  loops: `let i = 0; do { i++ } while (i < 5 && i !== 3); for (let j = 0; j < 2; j++) log(j); while (!(i > 10)) i += 3; for (;;) { if (i > 0) break } out = i`,
+  'valueOf order and single evaluation': `const L = { valueOf() { log('L'); return 1 } }, R = { valueOf() { log('R'); return 2 } }; out = [L < R, L == 1, R >= L, L != R, L > R ? 'g' : 'l']`,
+  'Proxy traps not run by previews': `const P = new Proxy({ a: 1 }, { get(t, k) { log('get ' + String(k)); return t[k] }, has(t, k) { log('has ' + k); return k in t } }); out = ['a' in P, P.a === 1, P ? 1 : 0, !P]`,
+  'nested decisions in callbacks': `out = [1, 2, 3, 4].filter(x => x > 1 && x < 3 || x === 4).map(x => x % 2 ? 'odd' : x ?? 'none')`,
+  'template literals': `const tag = (s, ...v) => s.raw.join('|') + v.join(); out = [tag\`a\${1 > 0 ? 'y' : 'n'}b\`, \`\${0 || 'z'}\`]`,
+  'getters with ?? and ||': `let gets = 0; const o2 = { get v() { gets++; return 0 } }; const r = o2.v ?? 7; out = [r, gets, o2.v || 9, gets, o2.v && 1, gets]`,
+  'direct eval': `function ev() { var loc = 5; return eval('loc') > 4 ? 'direct' : 'no' } function ev2() { var loc = 1; return (0, eval)('typeof loc') === 'undefined' } out = [ev(), ev2()]`,
+  'new.target': `function N() { if (!new.target) return 'call'; this.k = new.target === N } out = [new N().k, N()]`,
+  'async generators': `async function* ag() { for (let i = 0; i < 3; i++) if (i !== 1) yield i } async function run() { const r = []; for await (const v of ag()) if (v >= 0) r.push(v); return r } out = run()`,
+  'regex and division': `var xx = 4, g = 2; out = [/a/.test('a') ? 1 : 0, xx / 2 > 1 /* c */ === true, xx
+/ g
+/ 1 > 0 ? 'div' : 'no']`,
+  'HTML-like comments': `var hc = 1 <!-- a comment
+--> also a comment
+out = hc ? 'one' : 'other'`,
+  hashbang: `#!/usr/bin/env node
+out = 1 ? 2 : 3`,
+  'function names and length': `const named = function () {}, arrow = () => {}, obj = { m() { return 1 }, ['c' + 1]: () => 2 }; out = [named.name, arrow.name, obj.m.name, obj.c1.name, ((a, b) => a || b).length, obj.m()]`,
+  'try/finally returns': `function tf() { try { return 'try' } finally { log('finally') } } function tg() { try { throw 1 } catch (e) { return e ? 'caught' : 'no' } } out = [tf(), tg()]`,
+  getters_and_setters: `const s = { _v: 0, get v() { return this._v ? this._v : -1 }, set v(x) { if (x > 0) this._v = x } }; s.v = 5; s.v = -1; out = s.v`,
+  recursion: `function fib(n) { return n < 2 ? n : fib(n - 1) + fib(n - 2) } out = fib(12)`,
+  'yield and super in tests': `function* g() { const r = (yield 1) ? 'a' : 'b'; while (yield r) log('again'); return r } const it = g(); it.next(); const st = [it.next(true), it.next(1), it.next(0)]
+class P { m() { return 1 } } class Q extends P { m() { return (() => super.m() ? 'arrow' : 'no')() } } out = [st, new Q().m()]`,
+  'return then regex or brace-less branches': `function t(s) { if (!s) return; else if (s === 'x') return 0; return /a/.test(s) ? 1 : 2 } out = [t(''), t('x'), t('a'), t('b')]`,
+}
+for (const [name, code] of Object.entries(CORPUS)) {
+  const ins = instrument(code, { file: 'a.js' })
+  assert.ok(!ins.error, `instrument: ${name} parses: ${ins.error}`)
+  const plain = await runSnippet(code), traced = await runSnippet(ins.code, true), worker = await runSnippet(ins.code, false)
+  assert.equal(traced.out, plain.out, `instrument: ${name}: same result\n${ins.code}`)
+  assert.equal(traced.log, plain.log, `instrument: ${name}: same side effects\n${ins.code}`)
+  assert.equal(worker.out + worker.log, plain.out + plain.log, `instrument: ${name}: same without the probe (a worker)`)
+  assert.equal(ins.code.split(/\r\n?|\n/).length, code.split(/\r\n?|\n/).length, `instrument: ${name}: no line moves`)
+  if (name !== 'with blocks are left alone' && name !== 'hashbang') assert.ok(traced.events.length > 0, `instrument: ${name}: events recorded`)
+}
+{
+  // What's recorded: the hosted fixture's boot code, with a failed response.
+  const BOOT = `function startCourse() { if (window.scorm) scorm.start() }
+function onConfig(r) { if (!r.ok) throw new Error('no config'); return r.json() }
+try { onConfig({ ok: false, status: 404 }) } catch (e) { startCourse() }
+out = 1`
+  const ins = instrument(BOOT, { file: 'boot.js', base: 10 }), byKind = k => ins.sites.findIndex(s => s.kind === k) + 10
+  assert.deepEqual(ins.sites.map(s => [s.kind, s.text, s.line]), [['function', 'startCourse', 1], ['if', 'window.scorm', 1], ['function', 'onConfig', 2], ['if', '!r.ok', 2]], 'instrument: sites')
+  assert.deepEqual(ins.sites[3].args, ['r.ok'], 'instrument: the operand of !')
+  const r = await runSnippet(ins.code.replace(/^/, 'var window = globalThis; '), true)
+  const evs = r.events.map(e => e.slice(1))
+  assert.deepEqual(evs, [[1, 12], [3, 13, 1, ['boolean', false]], [1, 10], [3, 11, 0, ['undefined']], [2, 10]], 'instrument: the events in order: ' + JSON.stringify(evs))
+  const trace = { exec: r.reports.map(x => ({ t: 0, sid: '', frame: x.frame, events: x.events })), sites: Object.assign([], Object.fromEntries(ins.sites.map((s, i) => [i + 10, s]))) }
+  assert.deepEqual(lastEvents(trace).map(e => e.say), ['onConfig() called', 'if (!r.ok) → true, r.ok = false', 'startCourse() called', 'if (window.scorm) → false, window.scorm = undefined', 'startCourse() returned'], 'instrument: events described')
+  assert.equal(lastEvents(trace, 2).length, 2)
+  // Repeats: a tight loop's test is stored 1,000 times, then counted.
+  const loop = await runSnippet(instrument('var i = 0; while (i < 5000) i++; out = i').code, true)
+  assert.equal(loop.events.filter(e => e[1] === 3).length, 1001, 'trace: 1,000 repeats stored, then the different result')
+  assert.deepEqual(loop.events.find(e => e[1] === 4).slice(1), [4, 0, 1, 4000], 'trace: the rest counted')
+  // Previews: no content code runs; strings cut to 80 characters; objects give a name and up to five keys.
+  const pv = await runSnippet(instrument(`class Thing {} var s = 'x'.repeat(100), o = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }, t = new Thing(), arr = [1], nul = Object.create(null)
+if (s) 1; if (o) 1; if (t) 1; if (arr) 1; if (nul) 1; if (NaN) 1; if (1n) 1; if (Symbol('q')) 1; if (function named() {}) 1; out = 1`).code, true)
+  assert.deepEqual(pv.events.map(e => e[4]), [['string', 'x'.repeat(80), 100], ['object', 'Object', ['a', 'b', 'c', 'd', 'e'], 6], ['object', 'Thing', [], 0], ['object', 'Array'], ['object', 'Object', [], 0],
+    ['number', 'NaN'], ['bigint', '1'], ['symbol', 'Symbol(q)'], ['function', 'named']], 'trace: previews')
+  assert.deepEqual([['string', 'x', 100], ['object', 'Thing', ['a'], 3], ['symbol', 'Symbol(q)'], ['number', 2]].map(show), ['"x"… (100 characters)', 'Thing {a, …}', 'Symbol(q)', '2'])
+}
+{
+  // A large real program: acorn itself, instrumented, parses main.js to the same tree as the original (with the probe, and without).
+  const acornSrc = readFileSync(new URL('../src/vendor/acorn.js', import.meta.url), 'utf8').replace(/^export .*$/m, 'globalThis.acornParse = parse'), ins = instrument(acornSrc)
+  const input = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  const tree = (code, probe) => { const ctx = vm.createContext({ setTimeout: () => 0, location: { href: 'x' }, __labReport() {} }); if (probe) vm.runInContext(TRACE, ctx); vm.runInContext(code, ctx); return JSON.stringify(ctx.acornParse(input, { ecmaVersion: 'latest', sourceType: 'module', locations: true })) }
+  const want = tree(acornSrc)
+  assert.ok(!ins.error && ins.sites.length > 1000 && tree(ins.code, true) === want && tree(ins.code, false) === want, 'instrument: acorn, instrumented, still parses the same')
+}
+// Edge cases of the instrumenter itself.
+assert.match(instrument('function f(){"use strict"\nreturn 1}').code, /\(globalThis\);function f\(\)\{"use strict";__labT\(1,0\);\nreturn __labR\(0,\(1\)\);__labT\(2,0\);\}$/, 'instrument: the directive stays first')
+assert.match(instrument('"use strict";if(a)b').code, /^"use strict";;typeof __labT/, 'instrument: the prelude goes after the program’s directives')
+assert.equal(instrument('import x from "y"; export const z = x ? 1 : 2').error, undefined, 'instrument: falls back to module')
+assert.equal(instrument('await f(); if (a) b()', { module: true }).error, undefined, 'instrument: top-level await as a module')
+assert.match(instrument('if (a b').error, /Unexpected token/, 'instrument: a file that doesn’t parse is reported')
+assert.equal(instrument('if (a b').code, 'if (a b', 'instrument: and served unchanged')
+assert.deepEqual(instrument('var x = 1').sites, [], 'instrument: nothing to record, nothing changed'); assert.equal(instrument('var x = 1').code, 'var x = 1')
+assert.match(instrument('if ((a) === b) 1').code, /__labC\(0,\(\(a\) === b\)\)/, 'instrument: parenthesised operands keep the plain form')
+// Pages: inline scripts only (not src, JSON or comments), positions in the page.
+const PAGE = '<html><head><!-- <script>if (c) 1</script> --><script src="x.js"></script><script type="application/json">{"a": 1}</script>\n<script>\nif (a) b()\n</script><script type="module">if (m) 1</script></head></html>'
+const hp = instrumentHtml(PAGE, { file: 'p.html', base: 5 })
+assert.deepEqual(hp.sites.map(s => [s.kind, s.text, s.line, s.col]), [['if', 'a', 3, 5], ['if', 'm', 4, 36]], 'instrument: page sites')
+assert.match(hp.code, /<!-- <script>if \(c\) 1<\/script> -->.*\{"a": 1\}<\/script>\n<script>\nif \(__labC\(5,\(a\)\)\) b\(\)\n<\/script><script type="module">if \(__labC\(6,\(m\)\)\) 1/s)
+assert.ok(!hp.code.includes('typeof __labT'), 'instrument: no prelude in pages (the probe is always there)')
+assert.match(instrumentHtml('<script>if (</script><script>if (b) 1</script>').errors[0], /^inline script at line 1: /, 'instrument: a broken inline script is reported, the others still instrumented')
+// Positions back to the original: columns in frames and stacks, coverage offsets, sources.
+{
+  const src = 'function f(a) { if (a.b === 1) return g(a) }\nvar q = 1', ins = instrument(src, { file: 'f.js' })
+  const genCol = ins.code.split('\n')[0].indexOf('g(a)') + 1, origCol = src.indexOf('g(a)') + 1, url = 'lab://run/pkg/f.js?v=1'
+  const genOff = ins.code.indexOf('g(a)'), q = ins.code.indexOf('var q')
+  const tr = { scripts: [{ sid: '', id: '1', url, from: [] }], requests: [{ from: [{ url, line: 1, col: genCol }] }], console: [{ at: [{ url, line: 1, col: genCol }, { url: 'lab://run/pkg/other.js', line: 1, col: genCol }] }],
+    probe: [{ stack: [`f (${url}:1:${genCol})`, `${url}:2:5`] }], coverage: [{ sid: '', id: '1', url, fns: [['f', [genOff, q, 1]]] }], sources: { [url]: ins.code } }
+  restoreTrace(tr, new Map([['f.js', { original: src, ...ins }]]))
+  assert.equal(tr.requests[0].from[0].col, origCol, 'restore: frame columns'); assert.equal(tr.console[0].at[1].col, genCol, 'restore: other files untouched')
+  assert.deepEqual(tr.probe[0].stack, [`f (${url}:1:${origCol})`, `${url}:2:5`], 'restore: probe stacks')
+  assert.deepEqual(tr.coverage[0].fns[0][1], [src.indexOf('g(a)'), src.indexOf('var q'), 1], 'restore: coverage offsets')
+  assert.equal(tr.sources[url], src, 'restore: the original source')
+  const html = '<p>\n<script>if (a) b()</script><script>\n  if (c) d()</script>', hi = instrumentHtml(html, { file: 'p.html' }), purl = 'lab://run/pkg/p.html'
+  const second = hi.code.indexOf('<script>\n') + 8, line3 = hi.code.split('\n')[2], genD = line3.indexOf('d()') + 1
+  const pt = { scripts: [{ sid: 's', id: '2', url: purl, start: [1, 8] }, { sid: 's', id: '3', url: purl, start: [1, second - hi.code.indexOf('\n') - 1] }],
+    coverage: [{ sid: 's', id: '3', url: purl, fns: [['', [0, hi.code.lastIndexOf('</script>') - second, 1]]] }], probe: [{ stack: [`${purl}:3:${genD}`] }], sources: { [purl]: 'instrumented' } }
+  restoreTrace(pt, new Map([['p.html', { original: html, ...hi }]]))
+  assert.deepEqual(pt.probe[0].stack, [`${purl}:3:${html.split('\n')[2].indexOf('d()') + 1}`], 'restore: page columns')
+  assert.equal(pt.sources[purl], '\n  if (c) d()', 'restore: an inline script’s original text')
+  assert.deepEqual(pt.coverage[0].fns[0][1], [0, '\n  if (c) d()'.length, 1], 'restore: inline coverage offsets')
+}
+assert.deepEqual(traceFindings({ sites: [], untraced: [{ file: 'big.js', why: 'over 2 MB' }], truncated: { exec: true }, exec: [{ events: [[0, 1, 0]] }] }).map(f => f.title), ['1 script file was not traced', 'The execution trace is incomplete'], 'trace findings')
+assert.deepEqual(traceFindings({ probe: [] }), [], 'trace findings: only for traced runs')
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -521,7 +678,7 @@ if (!process.argv.includes('--unit')) {
   assert.equal(mm.furthest, 'looked', 'mismatch: reaches looked')
   assert.ok(titles(mm).some(t => /looked for API and found nothing/.test(t)), 'mismatch: lookup finding: ' + titles(mm))
   assert.ok(calls(run(mismatch, '--api', 'both')).includes('LMSInitialize '), 'mismatch with both APIs: calls appear')
-  const hh = titles(run(hosted))
+  const hRun = run(hosted), hh = titles(hRun)
   assert.ok(hh.some(t => /asked the host for files outside the package/.test(t)), 'hosted: server request: ' + hh)
   assert.ok(hh.some(t => /set its own window.API/.test(t)), 'hosted: own API: ' + hh)
   const rb = titles(run(blank))
@@ -531,6 +688,23 @@ if (!process.argv.includes('--unit')) {
   const rl = titles(run(loader))
   assert.ok(rl.some(t => /stuck on a loading screen/.test(t) && /JSON/.test(t)), 'loader run: ' + rl)
   console.log('runs: ok')
+
+  // Tracing (P1.4): hosted, traced, records its failed configuration check and startCourse, keeps the original source,
+  // and finds what the untraced run found.
+  const forced = process.env.SCORM_LAB_FORCE_TRACE === '1'
+  if (!forced) assert.ok(!saved.trace.sites && !saved.launch.options.trace, 'trace: off by default')
+  const trOut = join(work, 'hosted-traced.json'), trRun = run(hosted, '--trace', '--out', trOut), trSaved = JSON.parse(readFileSync(trOut, 'utf8'))
+  const says = lastEvents(trSaved.trace, 1e6).map(e => `${e.file}:${e.line} ${e.say}`), sc = says.indexOf('boot.js:3 startCourse() called')
+  assert.ok(says.includes('boot.js:4 if (!r.ok) → true, r.ok = false'), 'trace: the failed configuration check: ' + says.join('\n'))
+  // scorm.js has loaded by the time the request fails, so window.scorm is there.
+  assert.ok(sc >= 0 && /^boot\.js:3 if \(window\.scorm\) → true, window\.scorm = Object \{start, /.test(says[sc + 1]) && says.slice(sc).includes('boot.js:3 startCourse() returned'), 'trace: startCourse and its test: ' + says.slice(sc, sc + 3))
+  assert.equal(trSaved.trace.sources['lab://run/pkg/boot.js'], readFileSync(join(work, 'hosted', 'boot.js'), 'utf8'), 'trace: the original source is kept')
+  assert.ok(trSaved.trace.sites.some(x => x.file === 'lesson.js') && !trSaved.trace.untraced.length && trSaved.launch.options.trace === true, 'trace: sites, nothing left out, the option saved')
+  // Titles only: whether lesson.js starts before hosted's own API is set is a race, traced or not, which changes the milestones and the calls listed.
+  const findingTitles = r => r.findings.map(f => f.title).filter(t => !/^Got as far as/.test(t)).sort()
+  assert.deepEqual(findingTitles(trRun), findingTitles(hRun), 'trace: the same findings as without it')
+  assert.match(node(['report', trOut]).stdout, /<!doctype html>/, 'trace: a traced run makes a report')
+  console.log('trace: ok')
 
   // Overrides: the gated lesson only starts if window.startOK is set. Overriding lesson.js gets it going (CLI), and the
   // override survives a saved run and --options-from.
@@ -734,6 +908,15 @@ if (!process.argv.includes('--unit')) {
     assert.ok(last.findings.some(f => /This run used 1 changed file/.test(f.title)), 'web: override note')
     assert.ok(last.findings.some(f => /^Compared with the run before the changes: got further/.test(f.title)), 'web: progress finding: ' + last.findings.map(f => f.title))
     assert.deepEqual(await invoke('override-revert', {}), [], 'web: revert all')
+    // A traced run through the handlers: the Execution tab gets the last events, and the code of one of them.
+    await invoke('launch', { item: 0, auto: 3, trace: true })
+    let traced
+    for (let end = Date.now() + 30000; Date.now() < end; await new Promise(r => setTimeout(r, 500))) { const s3 = await invoke('state'); if (!s3.running && s3.runs.length === 7) { traced = s3.runs[6]; break } }
+    assert.ok(traced?.trace.execTail.length > 0 && traced.trace.execEvents >= traced.trace.execTail.length && traced.trace.exec === undefined && traced.trace.sites === undefined, 'web: a traced run sends its last events, not the whole trace')
+    const gate = traced.trace.execTail.find(e => e.say === 'if (window.startOK) → false, window.startOK = undefined')
+    assert.equal(gate?.file, 'lesson.js', 'web: the gated decision: ' + traced.trace.execTail.map(e => e.say).slice(-5))
+    assert.match((await invoke('source', { run: traced.id, path: 'lesson.js' })).split(/\n/)[gate.line - 1], /if \(window\.startOK\) start\(\)/, 'web: the code at the event')
+    assert.match(await invoke('source', { run: traced.id, path: 'lesson.html' }), /<html/i, 'web: a page’s code comes from the package')
     // Discovery over the handlers (slow): events for each round, then the result, which is also saved.
     await assert.rejects(invoke('discover-start', { item: 0, rounds: 0 }), /Rounds/, 'web: bad rounds refused')
     if (slow) {
@@ -774,5 +957,17 @@ if (!process.argv.includes('--unit')) {
     assert.match(cgi('GET', '/download', 'id=1&run=1&what=run'), /^Concierge-File: \/.*\.json/, 'module: download')
     console.log('concierge module: ok')
   } else console.log('concierge module: skipped (no ../concierge)')
+
+  // Tracing (slow): the overhead on good (when its page has loaded, the median of three runs), and every end-to-end
+  // check again with every run traced (SCORM_LAB_FORCE_TRACE=1).
+  if (slow && !forced) {
+    const loaded = (...a) => { const o = join(work, 'overhead.json'); run(good, '--out', o, ...a); return JSON.parse(readFileSync(o, 'utf8')).trace.probe.find(p => p.type === 'dom' && p.readyState === 'complete' && /lesson\.html/.test(p.frame))?.t }
+    const median = f => [f(), f(), f()].sort((a, b) => a - b)[1], plainMs = median(() => loaded()), tracedMs = median(() => loaded('--trace'))
+    console.log(`trace overhead: good loaded in ${plainMs} ms, ${tracedMs} ms traced`)
+    assert.ok(tracedMs < 2 * plainMs + 50, `trace: under twice the time (${plainMs} → ${tracedMs} ms)`)
+    const t0 = Date.now(), all = spawnSync(process.execPath, [new URL(import.meta.url).pathname, '--slow'], { env: { ...process.env, SCORM_LAB_FORCE_TRACE: '1' }, encoding: 'utf8', maxBuffer: 64 * 1024 ** 2 })
+    assert.equal(all.status, 0, 'forced trace pass:\n' + all.stdout.slice(-2000) + all.stderr.slice(-4000))
+    console.log(`forced trace pass: ok (${Math.round((Date.now() - t0) / 1000)} s)`)
+  }
   console.log('end to end: ok')
 }

@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', 'Server needs', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
@@ -315,6 +315,25 @@ VIEWS['Server needs'] = () => {
   return out
 }
 
+// ---- Execution: the last events of a traced run, and the code of the one clicked ----
+st.exec = null   // { run, path, line, say, text }
+const showCode = (r, e) => act(async () => { st.exec = { run: r.id, path: e.file, line: e.line, say: e.say, text: await lab.invoke('source', { run: r.id, path: e.file }) }; render() })
+function codeView(x) {
+  const lines = x.text.split(/\r\n?|\n/), from = Math.max(0, x.line - 31), to = Math.min(lines.length, x.line + 30)
+  return h('div', { class: 'code-view' }, h('div', { class: 'row' }, h('b', {}, `${x.path}:${x.line}`), h('span', { class: 'muted small' }, x.say),
+    h('button', { type: 'button', class: 'secondary', onclick: () => { st.exec = null; render() } }, 'Close')),
+    x.text ? h('pre', { class: 'source' }, lines.slice(from, to).map((l, i) => h('div', { class: from + i + 1 === x.line ? 'hl' : null }, `${String(from + i + 1).padStart(6)}  ${l.length > 400 ? l.slice(0, 400) + ' …' : l}`)))
+      : h('p', { class: 'muted' }, 'The code isn’t available: open the run’s package to see a page’s code.'))
+}
+VIEWS.Execution = () => {
+  const r = run(); if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
+  const tail = r.trace.execTail
+  if (!tail) return h('p', { class: 'muted' }, 'This run wasn’t traced. Tick “Trace the code” under More options and launch again to record which functions ran and which way each decision went.')
+  return [st.exec?.run === r.id ? codeView(st.exec) : null,
+    h('p', { class: 'muted small' }, `The last ${tail.length} of ${r.trace.execEvents} events before the run went quiet, newest last. Code opens the line.`),
+    ...table(['s', 'Where', 'What happened', ''], tail.map(e => [secs(e.t), e.file ? `${e.file}:${e.line}` : '', e.say, e.file ? h('button', { type: 'button', class: 'secondary', onclick: () => showCode(r, e) }, 'Code') : '']))]
+}
+
 // ---- Live view (web interface only): the running content, with clicks and keys sent back to it ----
 const KEYS = { Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', PageUp: 'PageUp', PageDown: 'PageDown', Home: 'Home', End: 'End' }
 const liveInput = e => lab.invoke('live-input', e).catch(() => {})
@@ -374,7 +393,7 @@ $('file').onchange = () => act(async () => {
   $('file').value = ''
 }, 'Uploading…')
 const launchOptions = () => ({ expose: $('expose').value, depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
-  pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim() })
+  pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim(), trace: $('trace').checked })
 async function showOptions() {
   try {
     const n = st.pkg?.items.findIndex(i => i.index === +$('item').value) + 1
@@ -382,7 +401,7 @@ async function showOptions() {
     $('options-json').textContent = JSON.stringify(r.options, null, 2); $('cli-line').textContent = r.command
   } catch (e) { $('options-json').textContent = e.message; $('cli-line').textContent = '' }
 }
-for (const id of ['item', 'expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params']) $(id).addEventListener('change', showOptions)
+for (const id of ['item', 'expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params', 'trace']) $(id).addEventListener('change', showOptions)
 $('more').addEventListener('toggle', showOptions)
 $('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeText($('cli-line').textContent); say('Copied.') })
 $('launch').onclick = () => act(async () => {

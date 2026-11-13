@@ -12,6 +12,7 @@ How SCORM Lab is built, the formats it reads and writes, and how to change it.
 - [The recorder](#the-recorder)
 - [Static analysis](#static-analysis)
 - [The boot graph](#the-boot-graph)
+- [The execution trace](#the-execution-trace)
 - [Findings](#findings)
 - [Adding a finding](#adding-a-finding)
 - [Comparison](#comparison)
@@ -32,7 +33,8 @@ How SCORM Lab is built, the formats it reads and writes, and how to change it.
   those facts, so they can be recomputed from a saved run and tested without Electron.
 - **One run explains itself.** Diagnosis must not need a working copy. Comparison is an extra.
 - **No runtime dependencies.** The app uses Electron, Node's standard library and the browser; only packaging needs
-  `@electron/packager`. The ZIP and XML readers are small and written here.
+  `@electron/packager`. The ZIP and XML readers are small and written here. Vendored code lives in `src/vendor/`, each
+  file with its licence (see [Layout](#layout)).
 - **ES modules** throughout, except `src/preload.cjs` (Electron preloads in a sandbox must be CommonJS) and
   `scripts/icon.cjs`.
 
@@ -51,9 +53,13 @@ src/
     scorm-runtime.js    SCORM 1.2 and 2004 run-time (from toolbox)
     probe.js            Injected into every frame: API lookups, assignments, wrapped calls, DOM snapshots
     shape-probe.js      Injected ahead of probe.js when a run answers with @probe: the recording Proxy (P1.3)
+    trace-probe.js      Injected ahead of probe.js in a traced run: __labT, __labR, __labC and the event ring (P1.4)
+  vendor/
+    acorn.js            acorn 8.19.0: dist/acorn.mjs from npm pack acorn, unchanged (MIT; acorn.LICENSE). instrument.js's parser
   zip.js, xml.js        Readers
   pins.js               Pins and answers: matching, the probe's prefix, the findings, the CLI's spellings
   shape.js              What the content wants from its server: reads → shape, the discovery loop, its findings
+  instrument.js         The execution trace: instrumenting scripts and pages, positions back to the originals, reading events
   overlay.js            Overrides: the file set a run is served from, and the findings about changed files
   textdiff.js           A small LCS line diff (diffLines, unified)
   milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
@@ -169,7 +175,7 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `open-run` | — | Run summaries (desktop only: opens a dialog) |
 | `saved-runs` | — | `[{ file, size, mtime }]` from the runs folder |
 | `load-run` | `{ file }` | `[run summary]`. The name is reduced to a base name in the runs folder |
-| `source` | `{ run, url }` | A script's source from a run |
+| `source` | `{ run, url }` or `{ run, path }` | A script's source from a run, by address; or by package path (the Execution tab): the script as recorded, or for a page, the file the run was served (its changed file, or the open package's if it is that package), else `''` |
 | `live-input` | an input event | `true` if delivered |
 
 Package info is `{ name, loaded, analysis, overrides: [{ path, size, binary, added }], findings, items: [{ index, title, type, depth, href }] }`. A run summary is
@@ -183,6 +189,8 @@ partition only.
 - `lab://run/pkg/<path>`: a file from the ZIP in memory, with its MIME type and `Range` support (for media). A
   missing file is a plain-text 404, so failed requests are visible.
 - `lab://run/__lab/<file>`: the host files, and `config.json` (the launch settings).
+- In a traced run (`options.trace`), `.js`, `.mjs`, `.html` and `.htm` files under `pkg/` are served instrumented: see
+  [The execution trace](#the-execution-trace).
 - Any other path, such as `lab://run/api/…`, is a 404. This is how content asking for server-root paths shows up:
   `rules.js` reports requests to `lab://run/` outside `pkg/` and `__lab/`.
 
@@ -217,6 +225,7 @@ auto-attached target too). It reports through the `__labReport` binding:
 | `{ type: 'pin-write', path, value, n, stack }` | Each assignment to a pinned name; the pin ignores it. `value` is a short text preview |
 | `{ type: 'pin-failed', path, error }` | The pin couldn't be defined: a frozen object, a name the browser won't redefine |
 | `{ type: 'shape', url, path, use, n, stack }` | From `shape-probe.js`, only in runs that answer with `@probe`: a read of `path` (dotted, from the top of the response) in the response from `url` (`use: 'read'`), or how a missing value was used: `in`, `keys`, `array` (iterated, `length`, an array method called), `string` (a string method called, or turned into a string), `number` (turned into a number), `text` (`+` or `==`). Throttled like lookups per path, use and call site; at most 3,000 per frame |
+| `{ type: 'exec', events, wrapped }` | From `trace-probe.js`, in traced runs only: a batch of execution trace events. The recorder puts these in `trace.exec`, not `trace.probe` |
 | `{ type: 'dom', readyState, text, sample, visible, media, frames, loader, hidden, elements, w, h }` | What the frame shows. Sent at DOMContentLoaded, load, page hide, and 1–60 s after start, only when it changes. Not sent from SCORM Lab's host pages |
 
 The recorder adds `t` (ms since start), `sid` and `frame` (the frame's URL).
@@ -234,11 +243,13 @@ session it enables:
 | Network | Requests with their initiator and outcome |
 | Log | Browser messages (CSP, mixed content, MIME type) |
 | Profiler | Precise block coverage with call counts |
-| Page | Navigations, and adds the probe (ahead of it, the run's pins, and `shape-probe.js` with its patterns if a response is `@probe`) |
+| Page | Navigations, and adds the probe (ahead of it, the run's pins, `shape-probe.js` with its patterns if a response is `@probe`, and `trace-probe.js` in a traced run) |
 | Fetch | Only when the run has `responses`: every request is paused; those a response matches are fulfilled, the rest continue |
 | Emulation | Only with a `navigator.userAgent` pin: `setUserAgentOverride` |
 
-`stop()` takes coverage and script sources from every session still open. The lists are capped (5,000 scripts,
+`stop()` takes coverage and script sources from every session still open (in a traced run, it first asks every frame
+of every session to send its pending trace events: `Runtime.evaluate` with `silent`, so a cross-origin frame's refusal
+isn't recorded as a caught error). The lists are capped (5,000 scripts,
 10,000 requests…); `truncated` says which overflowed.
 
 ## Static analysis
@@ -290,6 +301,58 @@ session it enables:
 
 `bootRun(boot, trace)` adds `run: { status, failed, pending, t }` to each node, from the run's requests. It matches
 `lab://run/pkg/<path>`, and `lab://run/<path>` for server paths.
+
+## The execution trace
+
+A run with `options.trace` (P1.4) records, in order, every function of the package's scripts that starts and ends, and
+every decision with its result and the values it tested. Three parts:
+
+**Instrumenting** (`src/instrument.js`, pure). `instrument(source, { file, base, module })` parses with acorn
+(`ecmaVersion: 'latest'`, `allowHashBang`; script then module, or module first for `.mjs` and `type="module"`) and
+inserts calls by text position; nothing is regenerated, and no line moves:
+- each function body starts `__labT(1, site);` (after its directive prologue, so `"use strict"` stays first) and ends
+  `;__labT(2, site);`; `return x` becomes `return __labR(site, (x))` and a bare `return` becomes `return __labT(2, site)`
+  (both return what they did); an arrow's expression body becomes `(__labT(1, site), __labR(site, (body)))`;
+- each decision (the test of `if`, `? :`, `while`, `do … while` and `for`, the left of `&&`, `||` and `??`, and a
+  `switch` discriminant) becomes `__labC(site, (test))`, which records it and returns the value. When both operands of a
+  comparison (`===`, `!==`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `instanceof`) are simple (a name, a property, a
+  literal, `typeof x`, `-1`) and nothing but the operator lies between them, it becomes `__labC(site, (a), (b), "===")`:
+  the operands are evaluated once, in order, as arguments, and the comparison happens inside the call. `!x` becomes
+  `__labC(site, (x), 0, "!")`, and the left of `??` is `__labC(site, (a), 0, "??")`;
+- code inside `with` is left alone (the inserted names would be looked up on the with object);
+- an insertion that starts with a name character after one gets a space (`return!a` must not become `return__labR`).
+  Inserted text starts with a name or follows `=>`, so it never turns a line into a call on the line before;
+- a `.js` file gets `PRELUDE` after its directives: do-nothing versions of the three functions where the probe isn't
+  (a worker). Pages don't need it.
+
+It returns `{ code, sites, map }`, or `{ code: source, sites: [], map: [], error }` if the file doesn't parse.
+`instrumentHtml(html, { file, base })` does the same for each inline script (`inlineScripts`: not in comments, no `src`,
+a JavaScript type or `module`) and adds `scripts` (each one's range) and `errors`. `map` is `[origStart, origEnd,
+genStart, genEnd]` per edit; `toOrig(map, offset)` gives the original position.
+
+**Serving** (`traceFile` in `main.js`). Files of 2 MB or less (`MAX_TRACED`) that are UTF-8 text are instrumented once
+per package, path and content hash (`pkg.traced`). Site ids run on across the package's files (`pkg.sites`), so one
+table serves every run of the package. Files left as they are, and why, go in `trace.untraced`.
+
+**Page side** (`src/host/trace-probe.js`). Defines `__labT`, `__labR`, `__labC` and `__labFlush` on each frame's global
+(non-enumerable, non-writable), taking the built-ins it uses before the content can replace them. Events go into a ring
+of 200,000 per frame, sent through `__labReport` 250 ms after the first one, at page hide, and when the recorder stops.
+The same site with the same result more than 1,000 times in a row is counted. Previews never run the content's code
+(no getters, `toString` or `valueOf`); a `Proxy`'s traps do run (`getPrototypeOf`, `ownKeys`), except for
+`shape-probe.js`'s, which it recognises through `__labIsShape`. `probe.js` leaves `__lab…` frames out of its stacks.
+
+**After the run.** `finish()` adds `trace.sites` and `trace.untraced`, then `restoreTrace(trace, files)` points
+everything back at the original files: frame columns (in `scripts`, `requests`, `console`, `exceptions`, `caught`) and
+`probe` stacks, coverage offsets (for an inline script, from its start in the page, `scripts[].start`), and
+`trace.sources`, which gets the original text (for a page, the original inline script, as untraced runs record it). So
+every reader of a traced run (findings, discovery's source hints, comparisons) sees the package's own files.
+`lastEvents(trace, n)` merges the batches in time order and describes each event (`describe`, `show`);
+`traceFindings(trace)` gives the [tracing findings](findings.md#from-a-run-tracing) (called by `runFindings`).
+
+The run summary the interfaces get has no `exec` or `sites`; it has `execEvents` (the count) and `execTail` (the last
+500 from `lastEvents`, worked out once per run). The `source` handler takes `{ run, path }` too, for the Execution tab.
+
+`SCORM_LAB_FORCE_TRACE=1` makes `launchItem` trace every run: the tests use it.
 
 ## Pins and answers
 
@@ -534,7 +597,7 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
   trace: {
     label, started, ended, duration,                       // ISO times, ms
     targets:    [{ t, sid, parent, type, url }],
-    scripts:    [{ t, sid, id, url, hash, length, module, sourceMap, from: [frame] }],
+    scripts:    [{ t, sid, id, url, hash, length, module, sourceMap, from: [frame], start? }],   // start: [line, column] (0-based) of an inline script in its page, added in P1.4
     requests:   [{ t, sid, id, url, method, type, initiator, from: [frame], status?, mime?, failed?, canceled?, redirect?, answered?, answeredBy? }],   // answered, answeredBy (index into launch.options.responses): added in P1.2
     navigations:[{ t, sid, frame, parent, url }],
     console:    [{ t, sid, level, text, at: [frame] }],
@@ -542,15 +605,33 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
     caught:     [{ t, sid, text, uncaught, at: [frame] }],
     log:        [{ t, sid, level, source, text, url }],
     probe:      [probe report],                            // see The probe
+    exec:       [{ t, sid, frame, events: [event] }],      // added in P1.4: the execution trace, empty unless traced (below)
+    sites:      [site] | undefined,                        // P1.4, traced runs: the site table events refer to
+    untraced:   [{ file, why }] | undefined,               // P1.4, traced runs: files served as they were
     coverage:   [{ sid, id, url, hash, fns: [[name, [start, end, count, …]]] }],
     sources:    { url: source },
-    truncated:  { list: true },
+    truncated:  { list: true },                            // exec: true when trace events were dropped
     cmi:        { '1.2'?: { element: value }, '2004'?: { … } } | null
   }
 }
 ```
 
 `launch.options.files` holds the content of every changed file, so a run can be repeated from the saved run alone (`--options-from`).
+
+The execution trace (traced runs, P1.4):
+
+```js
+event = [t, 1 | 2, site]                         // a function started (1) or ended (2); t is ms from the start of the run
+      | [t, 3, site, result, ...previews]        // a decision: result 1 or 0 (for ??: 1 = had a value); previews of the operands
+      | [t, 4, site, result, n]                  // the event before repeated n more times
+site = { file, line, col, kind, text, args? }    // file: package path; line and col 1-based in the original file (pages: in the page)
+                                                 // kind: function, if, ternary, &&, ||, ??, switch, while, do-while, for
+                                                 // text: the function's name or the test's code (120 characters); args: operand code
+preview = ['undefined'] | ['null'] | ['boolean', b] | ['number', n | 'NaN'] | ['string', s (80 characters), fullLength?]
+        | ['bigint' | 'symbol', text] | ['function', name] | ['object', constructorName, firstFiveKeys?, keyCount?]
+```
+
+`events[i][2]` indexes `trace.sites`. Events are in order within a batch; `lastEvents` merges batches by time.
 
 A frame is `{ fn, url, line, col }`. Older runs without `format` (from before version 1) still open.
 
@@ -575,7 +656,7 @@ A frame is `{ fn, url, line, col }`. Older runs without `format` (from before ve
 npm test
 ```
 
-`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
+`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `SCORM_LAB_FORCE_TRACE=1` so every run is traced). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
 `test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
 
 | Fixture | Change | Tests |
@@ -597,6 +678,12 @@ The end-to-end part covers:
   `wrote` (also with the live click), `mismatch` reaches `looked`, `blank` reaches `launched` only.
 - **Pins and answers:** `hosted` with `/api/player/config` answered (no own API, calls reach the LMS, request marked answered, `--options-from` repeats it, `bodyFile` read at the CLI) and with `previewMode` pinned (the change is reported at `boot.js`); `pinned` and `lexical` as above; bad flags exit with status 2.
 - **Discovery:** `needs` (fields, types, the stand-in gets further, three runs); bad flags exit with status 2.
+- **Tracing:** `hosted` with `--trace` records `if (!r.ok)` (true, `r.ok = false`), the `startCourse` entry and its
+  `window.scorm` test, keeps the original `boot.js` in `trace.sources`, and has the same findings as untraced; over the
+  web handlers, a traced `gated` run's Execution events and the code of one. The unit checks run a corpus of tricky
+  snippets (short-circuits, getters, optional chaining, `await`, generators, classes and `super`, labelled loops,
+  `switch`, comma expressions, arrow bodies, default parameters, directives, ASI, `with`, Proxies…) under `node:vm` as
+  they are, instrumented with `trace-probe.js`, and instrumented with only the prelude, and compare results and logs.
 - **Live:** a frame appears, a click on **Next** reaches the course (`lesson_location` 2), and stop ends it early.
 - **Web:** 401 without the token, the token exchange, upload, launch with auto-stop, live frames over SSE, the run in
   `state`, saved runs, and `load-run` refusing paths outside the runs folder, the `options` handler building the pin and answer flags and refusing `bodyFile`.

@@ -5,6 +5,10 @@ import { pinPrefix, userAgentPin, answerFor, buildAnswer } from './pins.js'
 import { shapePrefix } from './shape.js'
 
 const PROBE = readFileSync(new URL('./host/probe.js', import.meta.url), 'utf8'), SHAPE = readFileSync(new URL('./host/shape-probe.js', import.meta.url), 'utf8')
+const TRACE = readFileSync(new URL('./host/trace-probe.js', import.meta.url), 'utf8')
+const EXEC_CAP = 200000   // execution trace events kept (the newest); see trace-probe.js
+// Sends every frame's pending trace events now. silent: a cross-origin frame's refusal mustn't pause or be recorded.
+const FLUSH = '(function f(w){try{w.__labFlush&&w.__labFlush()}catch(e){}try{for(var i=0;i<w.frames.length;i++)f(w.frames[i])}catch(e){}})(globalThis)'
 const CAP = { scripts: 5000, requests: 10000, console: 5000, caught: 2000, log: 2000, probe: 5000 }
 const frames = st => (st?.callFrames ?? []).slice(0, 8).map(f => ({ fn: f.functionName, url: f.url, line: f.lineNumber + 1, col: f.columnNumber + 1 }))
 const argText = a => a.type === 'string' ? a.value : a.unserializableValue ?? (a.value !== undefined ? JSON.stringify(a.value) : a.description ?? a.type)
@@ -12,11 +16,13 @@ const argText = a => a.type === 'string' ? a.value : a.unserializableValue ?? (a
 export class Recorder {
   // pins and responses are the run's launch options (pins.js): pins go into the probe, responses are served through the Fetch domain.
   // Responses answered with @probe (shape.js) also put shape-probe.js, with their patterns, ahead of the probe.
-  constructor(wc, { label, caught = true, pins = [], responses = [] } = {}) {
+  // trace (a traced run, P1.4) puts trace-probe.js ahead of the probe too; its reports go to trace.exec.
+  constructor(wc, { label, caught = true, pins = [], responses = [], trace = false } = {}) {
     this.wc = wc; this.dbg = wc.debugger; this.caught = caught; this.t0 = Date.now(); this.sessions = new Set([''])
-    this.probe = pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + PROBE; this.userAgent = userAgentPin(pins); this.responses = responses; this.answered = new Map()
+    this.probe = pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + (trace ? TRACE + ';\n' : '') + PROBE; this.userAgent = userAgentPin(pins); this.responses = responses; this.answered = new Map()
+    this.traced = trace; this.execCount = 0
     this.trace = { label, started: new Date().toISOString(), targets: [], scripts: [], requests: [], navigations: [], console: [], exceptions: [],
-      caught: [], log: [], probe: [], coverage: [], sources: {}, truncated: {} }
+      caught: [], log: [], probe: [], exec: [], coverage: [], sources: {}, truncated: {} }
     this.req = new Map()
   }
   t() { return Date.now() - this.t0 }
@@ -54,7 +60,7 @@ export class Recorder {
       case 'Debugger.scriptParsed':
         if (!p.url && !p.stackTrace) return // anonymous evals without a known cause are noise
         return this.push('scripts', { t, sid, id: p.scriptId, url: p.url, hash: p.hash, length: p.length, module: !!p.isModule,
-          sourceMap: p.sourceMapURL || '', from: frames(p.stackTrace) })
+          sourceMap: p.sourceMapURL || '', from: frames(p.stackTrace), ...(p.startLine || p.startColumn ? { start: [p.startLine, p.startColumn] } : {}) })
       case 'Debugger.paused':
         if (p.reason === 'exception' || p.reason === 'promiseRejection') this.push('caught', { t, sid, text: p.data?.description?.split('\n')[0] ?? p.data?.value ?? '', uncaught: !!p.data?.uncaught, at: frames({ callFrames: p.callFrames.map(f => ({ functionName: f.functionName, url: f.url, lineNumber: f.location.lineNumber, columnNumber: f.location.columnNumber })) }) })
         return this.send('Debugger.resume', {}, sid).catch(() => {})
@@ -91,8 +97,25 @@ export class Recorder {
       case 'Log.entryAdded': return this.push('log', { t, sid, level: p.entry.level, source: p.entry.source, text: p.entry.text.slice(0, 1000), url: p.entry.url ?? '' })
       case 'Runtime.bindingCalled':
         if (p.name !== '__labReport') return
-        try { this.push('probe', { t, sid, ...JSON.parse(p.payload) }) } catch { /* bad payload */ }
+        let d
+        try { d = JSON.parse(p.payload) } catch { return /* bad payload */ }
+        if (d?.type === 'exec' && Array.isArray(d.events)) return this.exec(t, sid, d)
+        this.push('probe', { t, sid, ...d })
         this.onProbe?.(this.trace.probe.at(-1))
+    }
+  }
+
+  // A batch of execution trace events: times made relative to the start of the run; the oldest dropped past EXEC_CAP.
+  exec(t, sid, d) {
+    for (const e of d.events) if (Array.isArray(e)) e[0] -= this.t0
+    const ex = this.trace.exec
+    ex.push({ t, sid, frame: d.frame, events: d.events })
+    this.execCount += d.events.length
+    if (d.wrapped) this.trace.truncated.exec = true
+    while (this.execCount > EXEC_CAP) {
+      const drop = Math.min(ex[0].events.length, this.execCount - EXEC_CAP)
+      ex[0].events.splice(0, drop); this.execCount -= drop; this.trace.truncated.exec = true
+      if (!ex[0].events.length) ex.shift()
     }
   }
 
@@ -101,6 +124,7 @@ export class Recorder {
     if (this.stopped) return this.trace
     this.stopped = true
     if (!this.detached) {
+      if (this.traced) for (const sid of this.sessions) await this.send('Runtime.evaluate', { expression: FLUSH, silent: true }, sid).catch(() => {})
       const byId = new Map(this.trace.scripts.map(s => [s.sid + ':' + s.id, s]))
       for (const sid of this.sessions) {
         const cov = await this.send('Profiler.takePreciseCoverage', {}, sid).catch(() => null)

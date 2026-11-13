@@ -59,6 +59,7 @@ Options for run (and report --run)
   --answer <pattern>=<reply>  Answer matching requests yourself: --answer '/api/player/config=@config.json' (a file) or
                             --answer '/api/player/config=200:{}' (status:body). The pattern is a glob or a /regex/. Repeatable.
   --launch-params <a=1&b=2> Extra query parameters on the launch address.
+  --trace                   Record which functions ran and which way each decision went (the saved run's trace.exec).
   --out <run.json>          Keep the full run (open it in the desktop app with Open saved…).
   --live <folder>           Write frames to <folder>/frame.jpg and read clicks and keys from <folder>/input/.
   --no-caught               Don't record errors the content catches itself.
@@ -217,6 +218,7 @@ function flagOptions(o) {
   if (o['no-caught']) f.caught = false
   if (o.wait !== undefined) f.wait = o.wait
   if (o['launch-params'] !== undefined) f.launchParams = o['launch-params']
+  if (o.trace) f.trace = true
   return f
 }
 
