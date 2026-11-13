@@ -91,7 +91,7 @@ Lists each launchable item: its number, title (indented by depth), type, identif
 ```bash
 scorm-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth n] [--window]
                          [--resume-from run.json] [--wait seconds] [--out run.json] [--live folder]
-                         [--no-caught] [--show] [--json] [--strict]
+                         [--no-caught] [--show] [--json] [--strict] [--options options.json]
 ```
 
 Launches the item in a hidden browser, with SCORM Lab's test LMS. It lets the item run for `--wait` seconds (default
@@ -106,6 +106,7 @@ app.
 | `--window` | off | Opens the content with `window.open`; it finds the API through `window.opener` |
 | `--resume-from` | none | Starts with the data model a previous run left: tests resuming |
 | `--wait` | `10` | Seconds to let it run |
+| `--options` | none | A JSON file of launch options, for anything a flag can't express (see below). A flag overrides the same option in the file |
 | `--out` | none | Keeps the full run (scripts, requests, coverage, sources). Open it in the desktop app with **Open saved…**, or pass it to `report` or `--resume-from` |
 | `--live` | none | See [Live runs](#live-runs) |
 | `--no-caught` | off | Don't record errors the content catches |
@@ -190,10 +191,21 @@ Starts the [web interface](web.md) and prints its address with the access token.
 
 `run --json`:
 
+#### Options file
+
+`--options file.json` takes any [launch option](developer-guide.md#launch-options). Leave out what you don't need;
+missing options get their defaults. An unknown option or a bad value stops the run with a message naming it.
+
+```json
+{ "expose": "both", "depth": 2, "wait": 20 }
+```
+
+The options the run used are saved in the run's `launch.options`.
+
 ```json
 {
   "package": "course.zip", "item": { "number": 1, "…": "…" },
-  "launch": { "version": "2004", "expose": "2004", "depth": 0, "opener": false, "item": "Module 1", "itemType": "sco", "url": "…", "resume": false },
+  "launch": { "version": "2004", "expose": "2004", "depth": 0, "opener": false, "item": "Module 1", "itemType": "sco", "url": "…", "resume": false, "options": { "expose": "manifest", "…": "…" } },
   "verdict": { "sev": "error", "title": "The content shows a blank page" },
   "counts": { "errors": 2, "warnings": 1, "info": 0, "apiCalls": 0, "requests": 37, "failedRequests": 1, "uncaught": 1, "seconds": 10 },
   "findings": ["…"],

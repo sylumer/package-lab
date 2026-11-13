@@ -166,6 +166,10 @@ Change one setting, launch again, and see whether the content gets further.
 | **In a new window** | The content opens with `window.open`, and finds the API through `window.opener` | Content that only searches parents fails in LMSs that launch in a new window |
 | **Resume last run's data** | The data model starts with the values the last run stored | Whether the content reads back and uses its bookmark and suspend data |
 
+Under the toolbar, **More options** shows every option the next launch will use, as JSON (read-only for now).
+**Copy as CLI command** copies the `scorm-lab run …` line that repeats the launch from the command line. Options that
+have no flag are left out of the line; it adds `--options options.json` to say a file is needed.
+
 ## Testing resume and progress saving
 
 1. Launch with **Stop after: I stop it**. Go part-way through, then leave the course the normal way. The API tab

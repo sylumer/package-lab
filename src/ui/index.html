@@ -31,6 +31,12 @@
     <button id="stop" type="button" disabled>Stop and analyse</button>
     <span id="status" role="status"></span>
   </div>
+  <details id="more">
+    <summary>More options</summary>
+    <p class="muted small">The options this launch will use. To set the others, use a file with <code>--options</code> on the command line.</p>
+    <pre id="options-json"></pre>
+    <div class="row"><button id="copy-cli" type="button" class="secondary">Copy as CLI command</button><code id="cli-line"></code></div>
+  </details>
 </header>
 <div class="main">
   <aside>

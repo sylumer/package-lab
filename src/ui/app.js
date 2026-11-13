@@ -183,9 +183,20 @@ $('file').onchange = () => act(async () => {
   showPackage(await lab.upload(f, p => say(`Uploading ${f.name}: ${Math.round(p * 100)}%`)))
   $('file').value = ''
 }, 'Uploading…')
+const launchOptions = () => ({ expose: $('expose').value, depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value })
+async function showOptions() {
+  try {
+    const n = st.pkg?.items.findIndex(i => i.index === +$('item').value) + 1
+    const r = await lab.invoke('options', { ...launchOptions(), item: n || undefined })
+    $('options-json').textContent = JSON.stringify(r.options, null, 2); $('cli-line').textContent = r.command
+  } catch (e) { $('options-json').textContent = e.message; $('cli-line').textContent = '' }
+}
+for (const id of ['item', 'expose', 'depth', 'opener', 'resume', 'caught', 'auto']) $(id).addEventListener('change', showOptions)
+$('more').addEventListener('toggle', showOptions)
+$('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeText($('cli-line').textContent); say('Copied.') })
 $('launch').onclick = () => act(async () => {
   st.live = []
-  await lab.invoke('launch', { item: +$('item').value, expose: $('expose').value, depth: $('depth').value, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value })
+  await lab.invoke('launch', { item: +$('item').value, ...launchOptions() })
   st.sel = null; st.tab = lab.web ? 'Live' : 'API'; render()
 }, 'Launching…')
 $('ref').onclick = () => act(async () => { st.live = []; await lab.invoke('reference', { url: $('ref-url').value.trim(), caught: $('caught').checked, auto: +$('auto').value }); st.sel = null; st.tab = lab.web ? 'Live' : 'API'; render() }, 'Opening the reference…')

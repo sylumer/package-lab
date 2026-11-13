@@ -51,6 +51,7 @@ src/
     scorm-runtime.js    SCORM 1.2 and 2004 run-time (from toolbox)
     probe.js            Injected into every frame: API lookups, assignments, wrapped calls, DOM snapshots
   zip.js, xml.js        Readers
+  options.js            Launch options: normaliseOptions (the only place defaults live), cliCommand
   analyze.js            Manifest and script scan
   bootpath.js           Boot graph (how the launch should load) and bootRun (against a run)
   rules.js              Findings: static, run, launch, comparison
@@ -95,7 +96,7 @@ The Concierge module is in the Concierge repo at `modules/scorm-lab/run`.
 |---|---|
 | none | Desktop window, single instance (a second launch hands its `.zip` to the first) |
 | `--serve[=port] [--host=…] [--no-window] [--show-runs]` | Web interface, with or without the window. Run windows are hidden without a window unless `--show-runs` |
-| `--run=<job.json>` | Headless: load, launch, wait, write the run, quit. Uses a throwaway profile in the temp folder |
+| `--run=<job.json>` | Headless (job: `{ zip, item, options, resumeFrom, out, live }`): load, launch, wait, write the run, quit. Uses a throwaway profile in the temp folder |
 
 `SCORM_LAB_DATA` replaces the data folder (`app.getPath('userData')`, by default
 `~/Library/Application Support/SCORM Lab`) for the first two modes.
@@ -117,6 +118,24 @@ The rest of the file, in order:
 - **Start-up:** handles `open-file` (Finder, `open -a`, Alfred), the single-instance lock, and window creation.
 - **`headless()`:** the `--run` mode. It reads input files from the live folder while it waits.
 
+### Launch options
+
+`src/options.js` is the one place that knows the options and their defaults. `normaliseOptions(o)` fills in defaults,
+validates every field and throws on unknown fields or bad values. Numbers may arrive as strings (UI selects). Adding an
+option means: a default and a check in `options.js`, then a flag (or just the `--options` file), a control in the UI,
+and a line in the guides. The shape:
+
+```
+{ expose: 'manifest'|'both'|'1.2'|'2004'|'none', depth: 0–5, opener, resume, caught (bool), auto (s, 0 = until stopped),
+  wait (s, headless runs), profile: 'none', browser: 'chromium', viewport: null | { width, height },
+  files: { path: text }, pins: [], responses: [], storage: 'normal', trace: false }
+```
+
+`launchItem` takes `{ item, cmi?, ...options }`, normalises the options and saves them in `launch.options` (the older
+`launch` fields stay for version 1 readers). The CLI merges the `--options` file and then the flags, normalises, and
+writes the result to the job file as `options`; the headless run normalises it again. `cliCommand(options, { zip, item })`
+builds the line for **Copy as CLI command**; fields without a flag become `--options options.json`.
+
 ### Handlers
 
 | Name | Argument | Returns |
@@ -124,7 +143,8 @@ The rest of the file, in order:
 | `open-package` | — | Package info (desktop only: opens a dialog) |
 | `state` | — | `{ pkg, runs, running, web }`: everything a new client needs |
 | `boot` | `{ item }` | The boot graph for a manifest item index |
-| `launch` | `{ item, expose, depth, opener, resume, caught, auto, cmi }` | `true` |
+| `launch` | `{ item, cmi?, …launch options }` (flat; unknown options throw) | `true` |
+| `options` | `{ item?, …launch options }` | `{ options, command }`: the normalised options and the equivalent `scorm-lab run` line |
 | `reference` | `{ url, caught, auto }` | `true` |
 | `stop` | — | The run's id, or null |
 | `compare` | `{ ref, run }` | `{ cmp, findings }` |
@@ -361,7 +381,7 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
 {
   format: 'scorm-lab-run', version: 1,
   kind: 'package' | 'reference', label, package,          // package file name
-  launch: { version, expose, depth, opener, item, itemIndex, itemType, url, resume },  // reference: { url }
+  launch: { version, expose, depth, opener, item, itemIndex, itemType, url, resume, options },  // reference: { url }; options (added in P0.1) is the normalised launch options
   findings: [finding],                                     // as computed when saved; readers recompute
   boot: bootGraph | null,
   trace: {

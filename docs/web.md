@@ -82,6 +82,8 @@ Everything works as in the [user guide](user-guide.md), except:
   the package open on the Mac for everyone.
 - **Open saved…** lists the runs saved on the Mac, newest first; click one to open it.
 - **Stop after** is the way to run a course unattended: launch, come back, and read the findings.
+- **More options** and **Copy as CLI command** work as in the desktop app. Copying needs the page to be open on
+  `localhost` or over https; if the browser refuses, select the command shown next to the button.
 - A **Live** tab shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** tab selected.
 

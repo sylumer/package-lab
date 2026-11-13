@@ -13,6 +13,7 @@ import { matchByPath, branchDiff, compare, segs } from '../src/diff.js'
 import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
 import { bootGraph, resolveRef } from '../src/bootpath.js'
 import { renderReport, verdict } from '../src/report.js'
+import { normaliseOptions, cliCommand } from '../src/options.js'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
 function fixture(name, edit = () => {}) {
@@ -128,6 +129,23 @@ const html = renderReport({ title: 'T', findings: [{ sev: 'error', title: '<img 
 assert.ok(html.includes('&lt;img src=x') && !html.includes('<img src=x') && html.includes('a &amp; b'), 'report escapes')
 assert.deepEqual(verdict([{ sev: 'warn', title: 'w' }, { sev: 'error', title: 'e' }]), { sev: 'error', title: 'e' })
 assert.deepEqual(verdict([]).sev, 'ok')
+// Launch options: defaults, validation, unknown fields, the CLI line.
+const dflt = normaliseOptions()
+assert.deepEqual(dflt, { expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10, profile: 'none', browser: 'chromium', viewport: null,
+  files: {}, pins: [], responses: [], storage: 'normal', trace: false }, 'options: defaults')
+assert.deepEqual(normaliseOptions({}), dflt); assert.notEqual(normaliseOptions().files, normaliseOptions().files, 'options: defaults are not shared')
+assert.deepEqual(normaliseOptions({ depth: '3', auto: '20', expose: '1.2', viewport: { width: 390, height: 844 } }), { ...dflt, depth: 3, auto: 20, expose: '1.2', viewport: { width: 390, height: 844 } })
+for (const [o, re] of [[{ nope: 1 }, /Unknown option: nope/], [{ nope: 1, other: 2 }, /Unknown options: nope, other/], [{ expose: 'x' }, /expose.*one of/], [{ depth: 6 }, /depth/], [{ depth: 1.5 }, /depth/],
+  [{ depth: 'a' }, /depth/], [{ opener: 'yes' }, /opener/], [{ caught: 0 }, /caught/], [{ resume: null }, /resume/], [{ auto: -1 }, /auto/], [{ wait: 0 }, /wait/], [{ trace: 1 }, /trace/],
+  [{ profile: '' }, /profile/], [{ browser: 'webkit' }, /browser/], [{ viewport: { width: 1 } }, /viewport/], [{ viewport: { width: 0, height: 5 } }, /viewport/], [{ files: [] }, /files/],
+  [{ files: { 'a.js': 1 } }, /files/], [{ pins: {} }, /pins/], [{ pins: [1] }, /pins/], [{ responses: 'x' }, /responses/], [{ storage: 3 }, /storage/], ['x', /object/]])
+  assert.throws(() => normaliseOptions(o), re, 'options: ' + JSON.stringify(o))
+assert.throws(() => normaliseOptions({ constructor: 1 }), /Unknown option: constructor/)
+assert.throws(() => normaliseOptions(JSON.parse('{"__proto__":1}')), /Unknown option: __proto__/)
+for (const p of ['', '/a.js', '../a.js', 'a/../b.js', 'a\\b.js']) assert.throws(() => normaliseOptions({ files: { [p]: 'x' } }), /files/, 'options: files key ' + p)
+assert.deepEqual(normaliseOptions({ files: { 'js/a.js': 'x' } }).files, { 'js/a.js': 'x' })
+assert.equal(cliCommand(dflt, { zip: 'a b.zip', item: 2 }), "scorm-lab run 'a b.zip' --item 2")
+assert.equal(cliCommand({ expose: 'both', depth: 2, opener: true, caught: false, auto: 20, trace: true }), 'scorm-lab run package.zip --api both --depth 2 --window --no-caught --wait 20 --options options.json')
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -160,6 +178,14 @@ if (!process.argv.includes('--unit')) {
   const res = run(good, '--resume-from', out)
   // The sample only resumes after exit = suspend, which a timed-out run never sets; what carries over is its status.
   assert.ok(res.launch.resume && res.api.some(a => a.el === 'cmi.core.lesson_status' && a.call === 'LMSGetValue' && a.result === 'incomplete'), 'resume: stored data offered: ' + calls(res))
+  // The same options by flags and by --options give the same saved launch.options.
+  const optFile = join(work, 'opts.json'); writeFileSync(optFile, JSON.stringify({ expose: 'both', depth: 1, wait: 3 }))
+  const byFlags = run(good, '--api', 'both', '--depth', '1'), byFile = JSON.parse(node(['run', good, '--options', optFile, '--json']).stdout)
+  assert.deepEqual(byFile.launch.options, byFlags.launch.options, 'options: file and flags agree')
+  assert.equal(byFile.launch.options.expose, 'both'); assert.equal(byFile.launch.expose, 'both', 'options: version 1 fields kept')
+  assert.equal(node(['run', good, '--api', 'x']).status, 2, 'options: bad flag value fails')
+  assert.equal(node(['run', good, '--wait', 'x']).status, 2, 'options: bad --wait fails')
+  writeFileSync(optFile, '[]'); assert.match(node(['run', good, '--options', optFile]).stderr, /one JSON object/, 'options: array file rejected')
   const mm = run(mismatch)
   assert.equal(mm.api.length, 0, 'mismatch: no calls')
   assert.ok(titles(mm).some(t => /looked for API and found nothing/.test(t)), 'mismatch: lookup finding: ' + titles(mm))

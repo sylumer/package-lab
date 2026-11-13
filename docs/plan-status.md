@@ -5,13 +5,13 @@ Progress on [plan.md](plan.md). The orchestrator updates this file with each wor
 
 ## Summary
 
-Not started.
+In progress on branch `next`. Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
 
 ## Work packages
 
 | # | Work package | Model | State | Commit | Notes |
 |---|---|---|---|---|---|
-| P0.1 | Launch options model | sonnet | todo | | |
+| P0.1 | Launch options model | sonnet | done | | One review round |
 | P0.2 | Milestones and progress | sonnet | todo | | |
 | P0.3 | Experiment runner | sonnet | todo | | |
 | P1.1 | Change files and rerun (overlays) | sonnet | todo | | |

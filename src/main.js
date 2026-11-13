@@ -19,6 +19,7 @@ import { compare } from './diff.js'
 import { staticFindings, runFindings, launchFindings, compareFindings, sortFindings } from './rules.js'
 import { bootGraph, bootRun } from './bootpath.js'
 import { startWeb } from './web.js'
+import { normaliseOptions, cliCommand } from './options.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
@@ -229,23 +230,24 @@ function bootFor(path) {
   return pkg.boots.get(path)
 }
 
-async function launchItem(o) {
+// o: { item, cmi?, ...launch options } (see options.js). Unknown options throw.
+async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
   if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
-  const m = pkg.analysis.manifest, item = m.items[o.item]
+  const o = normaliseOptions(rest)
+  const m = pkg.analysis.manifest, item = m.items[itemIndex]
   if (!item?.res) throw new Error('That item has nothing to launch.')
   const res = item.res
   let url = res.path ? 'lab://run/pkg/' + res.path.split('/').map(encodeURIComponent).join('/') + res.query : res.href
   const params = item.params.replace(/^[?&]/, '')
   if (params) url += (url.includes('?') ? '&' : '?') + params
   const expose = !o.expose || o.expose === 'manifest' ? m.version : o.expose
-  if (!['1.2', '2004', 'both', 'none'].includes(expose)) throw new Error(`Unknown API setting “${o.expose}”: use manifest, both, 1.2, 2004 or none.`)
-  const cmi = o.cmi ?? (o.resume && pkg.lastCmi ? pkg.lastCmi : null)
-  config = { expose, depth: Math.min(5, Math.max(0, +o.depth || 0)), opener: !!o.opener, launch: url, cmi,
+  const cmi = givenCmi ?? (o.resume && pkg.lastCmi ? pkg.lastCmi : null)
+  config = { expose, depth: o.depth, opener: o.opener, launch: url, cmi,
     runtime: { edition: m.edition === '2nd' ? '2nd edition' : '', learner: { id: 'learner-1', name: 'Learner, Test' }, credit: 'credit', mode: 'normal',
       launchData: item.launchData, mastery: item.mastery, maxTime: item.maxTime, timeLimitAction: item.timeLimitAction, completionThreshold: item.completionThreshold } }
-  const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex: o.item, itemType: item.type, url, resume: !!cmi }
+  const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o }
   await begin({ kind: 'package', label: `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}`,
-    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught !== false, boot: res.path ? bootFor(res.path) : null, auto: +o.auto || 0 })
+    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path) : null, auto: o.auto })
   return true
 }
 
@@ -268,6 +270,8 @@ const handlers = {
   state: () => ({ pkg: pkgInfo(), runs: [...runs.values()].map(summary), running: active ? { running: active.kind, label: active.label } : null, web: web ? { url: web.url } : null }),
   boot: ({ item }) => { const res = pkg?.analysis.manifest?.items[item]?.res; return res?.path ? bootFor(res.path) : null },
   launch: o => launchItem(o),
+  // The normalised options for the current controls, and the CLI line that repeats the launch.
+  options: ({ item, ...o }) => { const options = normaliseOptions(o); return { options, command: cliCommand(options, { zip: pkg?.name, item }) } },
   reference: async o => {
     const u = new URL(o.url)
     if (!/^https?:$/.test(u.protocol)) throw new Error('A reference is a web address (http or https).')
@@ -342,7 +346,7 @@ app.on('window-all-closed', () => { if (!web && !JOB && process.platform !== 'da
 app.on('activate', () => { if (WINDOW && !ui && app.isReady()) createWindow() })
 
 // ---- Headless runs (bin/scorm-lab.js run) ----
-// The job file: { zip, item, expose, depth, opener, resumeFrom, caught, wait (seconds), out, live (folder) }. Writes
+// The job file: { zip, item, options (see options.js), resumeFrom, out, live (folder) }. Writes
 // the run to out in the saved-run format. With live: frames to live/frame.jpg, progress to live/status.json, and
 // input (and { type: 'stop' }) read from live/input/*.json.
 async function headless(jobFile) {
@@ -356,8 +360,9 @@ async function headless(jobFile) {
   const cmi = job.resumeFrom ? JSON.parse(readFileSync(job.resumeFrom, 'utf8')).trace?.cmi ?? null : null
   if (job.live) { mkdirSync(join(job.live, 'input'), { recursive: true }); live.dir = job.live }
   status({ state: 'starting' })
-  await launchItem({ item, expose: job.expose, depth: job.depth, opener: job.opener, caught: job.caught !== false, cmi })
-  const until = Date.now() + Math.max(1, +job.wait || 10) * 1000
+  const options = normaliseOptions(job.options)
+  await launchItem({ ...options, resume: options.resume || !!cmi, item, cmi })
+  const until = Date.now() + options.wait * 1000
   let stop = false
   while (!stop && Date.now() < until && active) {
     await new Promise(r => setTimeout(r, 200))

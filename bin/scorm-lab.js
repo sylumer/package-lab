@@ -10,6 +10,7 @@ import { unzip } from '../src/zip.js'
 import { analyze } from '../src/analyze.js'
 import { bootGraph } from '../src/bootpath.js'
 import { staticFindings, sortFindings } from '../src/rules.js'
+import { normaliseOptions } from '../src/options.js'
 import { renderReport, verdict, counts, screens } from '../src/report.js'
 
 const APP_DIR = new URL('..', import.meta.url).pathname
@@ -43,6 +44,7 @@ Options for run (and report --run)
   --window                  Open the content in a new window (it finds the API through window.opener).
   --resume-from <run.json>  Start with the data a previous run left (to test resuming).
   --wait <seconds>          How long to let it run. Default 10.
+  --options <file.json>     Launch options as JSON, for anything a flag can't express. Flags override the file.
   --out <run.json>          Keep the full run (open it in the desktop app with Open saved…).
   --live <folder>           Write frames to <folder>/frame.jpg and read clicks and keys from <folder>/input/.
   --no-caught               Don't record errors the content catches itself.
@@ -71,7 +73,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'out', 'live', 'port', 'host']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'out', 'live', 'port', 'host']
     o[k] = v !== undefined ? v : takes.includes(k) ? args[++i] : true
   }
   return o
@@ -133,13 +135,38 @@ function electron() {
   fail('Electron isn’t installed: run npm install in the scorm-lab folder, or install SCORM Lab.app.')
 }
 
+// Launch options from --options <file.json>, and from the flags that were given (flags win).
+function optionsFile(path) {
+  if (!path) return {}
+  if (!existsSync(path)) fail(`No such file: ${path}`)
+  let j
+  try { j = JSON.parse(readFileSync(path, 'utf8')) } catch (e) { fail(`${basename(path)} isn’t valid JSON: ${e.message}`) }
+  if (!j || typeof j !== 'object' || Array.isArray(j)) fail(`${basename(path)} must hold one JSON object of options, like { "depth": 1 }.`)
+  return j
+}
+function flagOptions(o) {
+  const f = {}
+  if (o.api !== undefined) f.expose = o.api
+  if (o.depth !== undefined) f.depth = o.depth
+  if (o.window) f.opener = true
+  if (o['no-caught']) f.caught = false
+  if (o.wait !== undefined) f.wait = o.wait
+  return f
+}
+
+function buildOptions(o) {
+  const f = optionsFile(o.options)
+  try { return normaliseOptions({ ...f, ...flagOptions(o) }) } catch (e) { fail(e.message) }
+}
+
 // Runs one item headless and returns the saved run. Options as for the run command.
 function runPackage(pkg, o) {
   const item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'scorm-lab-cli-'))
-  const out = o.out ? resolve(o.out) : join(dir, 'run.json'), wait = Math.max(1, +(o.wait ?? 10) || 10)
-  const job = { zip: pkg.path, item: item.index, expose: o.api ?? 'manifest', depth: +(o.depth ?? 0) || 0, opener: !!o.window, caught: !o['no-caught'],
-    resumeFrom: o['resume-from'] ? resolve(o['resume-from']) : null, wait, out, live: o.live ? resolve(o.live) : null }
-  if (!['manifest', 'both', '1.2', '2004', 'none'].includes(job.expose)) fail(`--api must be manifest, both, 1.2, 2004 or none, not “${job.expose}”.`)
+  const out = o.out ? resolve(o.out) : join(dir, 'run.json')
+  let options
+  try { options = buildOptions(o) } catch (e) { rmSync(dir, { recursive: true, force: true }); throw e }
+  const wait = options.wait
+  const job = { zip: pkg.path, item: item.index, options, resumeFrom: o['resume-from'] ? resolve(o['resume-from']) : null, out, live: o.live ? resolve(o.live) : null }
   writeFileSync(join(dir, 'job.json'), JSON.stringify(job))
   const [bin, pre] = electron(), log = join(dir, 'electron.log'), fd = openSync(log, 'w')
   const r = spawnSync(bin, [...pre, `--run=${join(dir, 'job.json')}`, ...(o.show ? ['--show-runs'] : [])], { stdio: ['ignore', 'ignore', fd], timeout: (wait + 120) * 1000 })
@@ -176,8 +203,8 @@ const commands = {
     return 0
   },
   run(o) {
-    const pkg = openZip(o._[0])
-    if (!o.json) process.stderr.write(`Running ${pkg.name} for ${o.wait ?? 10} s…\n`)
+    const pkg = openZip(o._[0]), { wait } = buildOptions(o)
+    if (!o.json) process.stderr.write(`Running ${pkg.name} for ${wait} s…\n`)
     const { run, item, out } = runPackage(pkg, o)
     if (o.json) console.log(JSON.stringify(runJson(pkg, item, run, out), null, 1))
     else {
