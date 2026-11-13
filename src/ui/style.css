@@ -42,6 +42,7 @@ pre { background: var(--code); padding: 8px; border-radius: 6px; white-space: pr
 .finding.error .sev { color: var(--err); } .finding.warn .sev { color: var(--warn); } .finding.info .sev { color: var(--info); }
 .finding ul { margin: 4px 0; padding-left: 18px; } .finding li { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-word; }
 .fix { margin: 4px 0 0; } .fix b { font-weight: 600; }
+.milestones { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; margin: 6px 0; }
 .bad { color: var(--err); } .ok { color: inherit; }
 h3.section { font-size: 13px; margin: 14px 0 4px; }
 

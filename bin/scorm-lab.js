@@ -11,6 +11,7 @@ import { analyze } from '../src/analyze.js'
 import { bootGraph } from '../src/bootpath.js'
 import { staticFindings, sortFindings } from '../src/rules.js'
 import { normaliseOptions } from '../src/options.js'
+import { furthest, strip } from '../src/milestones.js'
 import { renderReport, verdict, counts, screens } from '../src/report.js'
 
 const APP_DIR = new URL('..', import.meta.url).pathname
@@ -181,7 +182,7 @@ function runPackage(pkg, o) {
   return { run, item, out: o.out ? out : null }
 }
 const runJson = (pkg, item, run, out) => ({ package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), launch: run.launch,
-  verdict: verdict(run.findings), counts: counts(run.findings, run.trace), findings: run.findings,
+  verdict: verdict(run.findings), counts: counts(run.findings, run.trace), milestones: run.milestones ?? null, furthest: run.milestones ? furthest(run.milestones)?.id ?? null : null, findings: run.findings,
   api: run.trace.probe.filter(p => p.type === 'api').slice(0, 200).map(({ call, el, value, result, err }) => ({ call, el, value, result, err })),
   screens: screens(run.trace).map(({ frame, readyState, text, visible, media, loader, hidden, sample }) => ({ frame, readyState, text, visible, media, loader, hidden, sample })),
   out })
@@ -212,6 +213,7 @@ const commands = {
       printHeader(pkg, item)
       console.log(`Ran for ${c.seconds} s · offered ${run.launch.expose === 'both' ? 'both APIs' : run.launch.expose === 'none' ? 'no API' : 'SCORM ' + run.launch.expose} · ${c.apiCalls} API calls · ${c.requests} requests (${c.failedRequests} failed) · ${c.uncaught} uncaught errors`)
       for (const d of screens(run.trace)) console.log(paint('2', `Showing in ${d.frame.replace(/^lab:\/\/run\/pkg\//, '')}: ${d.visible} visible elements${d.loader ? ', loading indicator ' + d.loader : ''}, text “${(d.sample ?? '').slice(0, 80)}”`))
+      if (run.milestones) console.log(`Milestones: ${strip(run.milestones)}`)
       printFindings(run.findings); printVerdict(run.findings)
       if (out) console.log(paint('2', `\nRun saved to ${out}`))
     }

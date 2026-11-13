@@ -16,6 +16,7 @@ if there are no errors.
 - [From a run: launching and showing](#from-a-run-launching-and-showing)
 - [From a run: finding the LMS](#from-a-run-finding-the-lms)
 - [From a run: requests and errors](#from-a-run-requests-and-errors)
+- [From a run: milestones](#from-a-run-milestones)
 - [From a run: progress](#from-a-run-progress)
 - [From a comparison](#from-a-comparison)
 
@@ -100,6 +101,15 @@ These come from following everything the launch page loads (see **Boot path** in
 | *N* uncaught errors | warning | Errors nothing caught, with where they happened |
 | The browser refused to load or run something | warning | Content Security Policy, MIME type, mixed content and similar refusals |
 | *N* errors were thrown and caught | info | Shown when there are no API calls and no uncaught errors: caught errors can hide the real failure |
+
+## From a run: milestones
+
+Every package run has this finding first, whatever else is found. The same steps show as ticks and crosses at the top
+of the Findings tab, in the report, and in `run --json`. See [Milestones](user-guide.md#milestones) for the ten steps.
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| Got as far as: *step*. Didn't reach: *step*. | info | The last step of the SCORM path the run reached, and the first it didn't. If every step was reached it says so | Start at the step it didn't reach: the findings below say why |
 
 ## From a run: progress
 

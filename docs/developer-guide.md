@@ -51,6 +51,7 @@ src/
     scorm-runtime.js    SCORM 1.2 and 2004 run-time (from toolbox)
     probe.js            Injected into every frame: API lookups, assignments, wrapped calls, DOM snapshots
   zip.js, xml.js        Readers
+  milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
   options.js            Launch options: normaliseOptions (the only place defaults live), cliCommand
   analyze.js            Manifest and script scan
   bootpath.js           Boot graph (how the launch should load) and bootRun (against a run)
@@ -281,6 +282,7 @@ A finding is:
 | `bootGraph().risks` | files | Everything in [the boot graph](#the-boot-graph) |
 | `launchFindings(trace, boot)` | a run and its boot graph | Launch page not loaded, blank page, stuck loading screen (with causes in loading order), loading stopped, loading code never ran |
 | `runFindings(trace, launch)` | a run and its launch settings | API never looked for, not found, found but not called, own API object, top unreachable, server requests, failed requests, uncaught errors, refusals, caught errors, and progress (failed calls, finish, commit, suspend data, exit, completion) |
+| `milestoneFinding(milestones(trace, boot))` | a run and its boot graph | The "Got as far as" note; added first to every package run by `main.js` |
 | `compareFindings(cmp)` | `compare()` | First divergence, branches, differing files, errors only in the run |
 
 `sortFindings` orders by severity (stable, so each function's own order is kept within a severity). `verdict()` in
@@ -320,6 +322,28 @@ path segments (at least the file name). It returns:
 `branchDiff` compares V8 block coverage. Nested ranges are listed only where their count differs from the enclosing
 range, so an unlisted block takes the innermost enclosing count. Coverage is compared only for scripts with the same
 hash.
+
+## Milestones
+
+`src/milestones.js` is pure. `milestones(trace, boot)` returns the ten steps in order, each
+`{ id, label, reached, t, evidence }` (`t` is ms from the start of the run; `evidence` is one plain sentence). The
+ids, in order, are `launched`, `scripts`, `shown`, `looked`, `found`, `initialised`, `read`, `wrote`, `committed`,
+`finished`. Rules worth knowing:
+- `launched` and `scripts` use `bootRun(boot, trace)`: the launch page returned 2xx or 3xx, and every script tag in the
+  boot path that lives in the package was requested without failing. Script tags on other sites are not counted. With
+  no boot graph (`null`), they are judged from the package requests instead.
+- `shown` uses any content frame's DOM report (not SCORM Lab's own page), at any time in the run.
+- `found` is also true if the API was called, since a call implies the API was there.
+- `initialised`, `committed` and `finished` need the call to have returned `'true'`; `read` and `wrote` match the
+  element names (1.2 and 2004) in `READ` and `WRITE` and don't look at the result.
+
+`furthest(list)` is the last step reached (not necessarily unbroken), `firstMissing(list)` the first not reached.
+`runCounts(trace)` gives the numbers `progress` compares. `progress(a, b)` takes two `{ milestones, counts }` objects
+(or bare lists) and returns `{ better, steps, counts, summary }`: `better` is 1 if b got further than a, -1 if less far,
+0 if equal. The tie-break is the number of steps reached. P0.3 and later work packages use it to compare runs.
+
+`main.js` adds `milestones` to each package run (the run summary the interfaces get, and the saved run) and puts
+`milestoneFinding` first in its findings. Saved runs from before this have no `milestones`; the report computes them.
 
 ## Reports
 
@@ -383,6 +407,7 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
   kind: 'package' | 'reference', label, package,          // package file name
   launch: { version, expose, depth, opener, item, itemIndex, itemType, url, resume, options },  // reference: { url }; options (added in P0.1) is the normalised launch options
   findings: [finding],                                     // as computed when saved; readers recompute
+  milestones: [milestone] | null,                          // added in P0.2: see Milestones; null for a reference run
   boot: bootGraph | null,
   trace: {
     label, started, ended, duration,                       // ISO times, ms
@@ -440,7 +465,8 @@ npm test
 
 The end-to-end part covers:
 - **CLI:** analyze (JSON, `--strict` statuses, missing file), items, report (static and run).
-- **Runs:** all fixtures, including a saved run, resume, and `--api both`.
+- **Runs:** all fixtures, including a saved run, resume, and `--api both`. Milestones: `good` reaches at least
+  `wrote` (also with the live click), `mismatch` reaches `looked`, `blank` reaches `launched` only.
 - **Live:** a frame appears, a click on **Next** reaches the course (`lesson_location` 2), and stop ends it early.
 - **Web:** 401 without the token, the token exchange, upload, launch with auto-stop, live frames over SSE, the run in
   `state`, saved runs, and `load-run` refusing paths outside the runs folder.

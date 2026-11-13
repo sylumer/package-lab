@@ -112,7 +112,20 @@ app.
 | `--no-caught` | off | Don't record errors the content catches |
 | `--show` | off | Shows the content window while it runs |
 
-The text output adds what the content was showing at the end (visible elements, any loading indicator, and the
+#### Options file
+
+`--options file.json` takes any [launch option](developer-guide.md#launch-options). Leave out what you don't need;
+missing options get their defaults. An unknown option or a bad value stops the run with a message naming it.
+
+```json
+{ "expose": "both", "depth": 2, "wait": 20 }
+```
+
+The options the run used are saved in the run's `launch.options`.
+
+`milestones` lists the ten steps of the SCORM path, each reached or not (see [Milestones](user-guide.md#milestones));
+`furthest` is the id of the last one reached, or `null`. The text output adds a **Milestones** line with a tick or a
+cross for each step, and what the content was showing at the end (visible elements, any loading indicator, and the
 start of its text), the counts (API calls, requests, failures, uncaught errors), and the run's findings.
 
 ## report
@@ -191,23 +204,14 @@ Starts the [web interface](web.md) and prints its address with the access token.
 
 `run --json`:
 
-#### Options file
-
-`--options file.json` takes any [launch option](developer-guide.md#launch-options). Leave out what you don't need;
-missing options get their defaults. An unknown option or a bad value stops the run with a message naming it.
-
-```json
-{ "expose": "both", "depth": 2, "wait": 20 }
-```
-
-The options the run used are saved in the run's `launch.options`.
-
 ```json
 {
   "package": "course.zip", "item": { "number": 1, "…": "…" },
   "launch": { "version": "2004", "expose": "2004", "depth": 0, "opener": false, "item": "Module 1", "itemType": "sco", "url": "…", "resume": false, "options": { "expose": "manifest", "…": "…" } },
   "verdict": { "sev": "error", "title": "The content shows a blank page" },
   "counts": { "errors": 2, "warnings": 1, "info": 0, "apiCalls": 0, "requests": 37, "failedRequests": 1, "uncaught": 1, "seconds": 10 },
+  "milestones": [{ "id": "launched", "label": "Launch page loaded", "reached": true, "t": 120, "evidence": "index.html responded 200" }, "…"],
+  "furthest": "looked",
   "findings": ["…"],
   "api": [{ "call": "Initialize", "el": "", "value": null, "result": "true", "err": 0 }],
   "screens": [{ "frame": "lab://run/pkg/index.html", "readyState": "complete", "text": 0, "visible": 3, "media": 0, "loader": "div#preloader", "hidden": false, "sample": "" }],

@@ -32,7 +32,9 @@ const VIEWS = {
   Findings() {
     const r = run()
     if (!r) return [h('h3', { class: 'section' }, 'Package'), findingsList(st.pkg?.findings ?? [])]
-    return [h('p', { class: 'muted small' }, `${r.label}. Saved to ${r.file || '(not saved)'}.`), findingsList(r.findings)]
+    return [h('p', { class: 'muted small' }, `${r.label}. Saved to ${r.file || '(not saved)'}.`),
+      r.milestones && h('p', { class: 'milestones' }, r.milestones.map(s => h('span', { class: s.reached ? 'ok' : 'bad', title: s.evidence }, `${s.reached ? '✓' : '✗'} ${s.label}`))),
+      findingsList(r.findings)]
   },
   'Boot path'() {
     const r = run(), item = $('item').value

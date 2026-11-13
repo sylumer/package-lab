@@ -117,7 +117,29 @@ SCORM Lab then collects code coverage and scripts, works out the findings, saves
 
 ## Reading a run
 
-Start with **Findings**. The run's findings come first, then the ones from the files. The most useful are:
+Start with **Findings**. At the top is the **Milestones** strip, then the run's findings, then the ones from the files.
+
+### Milestones
+
+Every package run is placed on the path a SCORM course should follow. Each step has a tick if the run reached it and a
+cross if not. Hover over a step to see what showed it.
+
+1. **Launch page loaded**: the launch page came back with a successful status (2xx, or a redirect).
+2. **Scripts loaded**: every script the launch page names was requested, and none failed.
+3. **Content shown**: some frame showed 20 characters of text or more, or an image or other media.
+4. **Looked for the API**: the content searched for the SCORM API.
+5. **Found the API**: it found one.
+6. **Initialised**: `LMSInitialize` or `Initialize` returned true.
+7. **Read saved data**: it read the entry, location or suspend data.
+8. **Wrote data**: it set the location, suspend data, status, score or completion.
+9. **Committed**: a commit returned true.
+10. **Finished**: `LMSFinish` or `Terminate` returned true.
+
+The first finding says it in words: "Got as far as: …. Didn’t reach: …." The first step with a cross is where to
+start looking. A timed run usually stops before the learner finishes, so a cross at **Committed** or **Finished** is
+often expected: use **Stop and analyse** after using the course to see them.
+
+The most useful findings are:
 
 - **The content shows a blank page** or **is stuck on a loading screen**: what went wrong while it loaded, in order.
   Its evidence covers:

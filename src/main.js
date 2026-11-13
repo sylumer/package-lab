@@ -18,6 +18,7 @@ import { Recorder } from './recorder.js'
 import { compare } from './diff.js'
 import { staticFindings, runFindings, launchFindings, compareFindings, sortFindings } from './rules.js'
 import { bootGraph, bootRun } from './bootpath.js'
+import { milestones, milestoneFinding } from './milestones.js'
 import { startWeb } from './web.js'
 import { normaliseOptions, cliCommand } from './options.js'
 
@@ -84,15 +85,22 @@ function serve(req) {
 
 // ---- Runs ----
 // What the interfaces get for a run: everything but the script sources and raw coverage, which can be large.
-const summary = r => ({ id: r.id, label: r.label, kind: r.kind, launch: r.launch, findings: r.findings, file: r.file,
+const summary = r => ({ id: r.id, label: r.label, kind: r.kind, launch: r.launch, findings: r.findings, milestones: r.milestones, file: r.file,
   boot: r.boot && { ...r.boot, nodes: bootRun(r.boot, r.trace) },
   trace: { ...r.trace, sources: undefined, coverage: undefined, coveredScripts: r.trace.coverage?.length ?? 0 } })
 
+// Milestones (package runs only) and the findings with the "Got as far as" note first.
+function withProgress(kind, trace, boot, findings) {
+  if (kind !== 'package') return { findings: sortFindings(findings), milestones: null }
+  const ms = milestones(trace, boot)
+  return { findings: [milestoneFinding(ms), ...sortFindings(findings)], milestones: ms }
+}
+
 function addRun(kind, label, launch, trace, boot) {
   const id = nextId++
-  const findings = sortFindings([...launchFindings(trace, boot), ...runFindings(trace, { kind, ...launch }),
+  const { findings, milestones } = withProgress(kind, trace, boot, [...launchFindings(trace, boot), ...runFindings(trace, { kind, ...launch }),
     ...(kind === 'package' ? [...staticFindings(pkg?.analysis), ...(boot?.risks ?? [])] : [])])
-  const run = { id, kind, label, launch, trace, findings, file: '', boot, package: pkg && kind === 'package' ? pkg.name : null }
+  const run = { id, kind, label, launch, trace, findings, milestones, file: '', boot, package: pkg && kind === 'package' ? pkg.name : null }
   if (!JOB) {
     const file = join(runsDir(), `${new Date().toISOString().replace(/[:.]/g, '-')}-${label.replace(/[^\w.-]+/g, '_').slice(0, 60)}.json`)
     try { writeFileSync(file, JSON.stringify(savedRun(run))); run.file = file } catch { /* not saved */ }
@@ -102,7 +110,7 @@ function addRun(kind, label, launch, trace, boot) {
   return run
 }
 // A run as saved to disk: what Open saved… and the CLI read back. See docs/developer-guide.md for the format.
-const savedRun = r => ({ format: 'scorm-lab-run', version: 1, kind: r.kind, label: r.label, package: r.package, launch: r.launch, trace: r.trace, boot: r.boot, findings: r.findings })
+const savedRun = r => ({ format: 'scorm-lab-run', version: 1, kind: r.kind, label: r.label, package: r.package, launch: r.launch, trace: r.trace, boot: r.boot, findings: r.findings, milestones: r.milestones })
 
 // Popups (window-opener profiles, or content that opens itself in a new window) get their own recorder, merged at the end.
 function watchPopups(wc, extra, caught, wins) {
@@ -256,7 +264,7 @@ function readRun(file) {
   if (!d.trace) throw new Error(`${basename(file)} isn’t a SCORM Lab run.`)
   const id = nextId++
   const run = { id, kind: d.kind, label: (d.label ?? basename(file)) + ' (saved)', launch: d.launch, trace: d.trace, file, boot: d.boot, package: d.package,
-    findings: sortFindings([...launchFindings(d.trace, d.boot), ...runFindings(d.trace, { kind: d.kind, ...d.launch }), ...(d.boot?.risks ?? [])]) }
+    ...withProgress(d.kind, d.trace, d.boot, [...launchFindings(d.trace, d.boot), ...runFindings(d.trace, { kind: d.kind, ...d.launch }), ...(d.boot?.risks ?? [])]) }
   runs.set(id, run)
   return summary(run)
 }

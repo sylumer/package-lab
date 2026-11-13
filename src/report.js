@@ -3,6 +3,7 @@
 // with its own scoped styles, for embedding (the Concierge module prints it inside its page).
 import { bootRun } from './bootpath.js'
 import { isLab } from './diff.js'
+import { milestones } from './milestones.js'
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const short = u => String(u ?? '').replace(/^lab:\/\/run\/pkg\//, '')
@@ -91,6 +92,10 @@ function runHtml(run) {
 <h2>Errors</h2>${table(['s', 'Kind', 'Message', 'Where'], errs, 200)}`
 }
 
+function milestoneHtml(list) {
+  return `<h2>Milestones</h2><p class="sl-mono">${list.map(s => `<span class="${s.reached ? '' : 'sl-bad'}" title="${esc(s.evidence)}">${s.reached ? '✓' : '✗'} ${esc(s.label)}</span>`).join(' &nbsp; ')}</p>`
+}
+
 // o: { title, subtitle, findings, boot, run (a saved run), analysis, fragment }
 export function renderReport(o) {
   const run = o.run, findings = o.findings ?? run?.findings ?? [], v = verdict(findings), c = counts(findings)
@@ -100,7 +105,7 @@ export function renderReport(o) {
   const body = `<div class="sl"><style>${CSS}</style>
 ${o.fragment ? '' : `<h1>${esc(o.title ?? 'SCORM Lab report')}</h1>`}${o.subtitle ? `<p class="sl-muted">${esc(o.subtitle)}</p>` : ''}
 <div class="sl-verdict"><span class="sl-badge ${v.sev}">${v.sev === 'warn' ? 'warning' : v.sev === 'ok' ? 'ok' : 'error'}</span><b>${esc(v.title)}</b><span class="sl-muted">${c.errors} errors · ${c.warnings} warnings · ${c.info} notes</span></div>
-<h2>Findings</h2>${findingsHtml(findings)}
+${run?.kind === 'package' ? milestoneHtml(Array.isArray(run.milestones) ? run.milestones : milestones(run.trace, run.boot)) : ''}<h2>Findings</h2>${findingsHtml(findings)}
 ${run ? runHtml(run) : ''}
 ${o.boot ?? run?.boot ? `<h2>Loading path</h2>${bootHtml(o.boot ?? run.boot, run?.trace)}` : ''}
 ${pkgTable}

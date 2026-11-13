@@ -11,8 +11,8 @@ In progress on branch `next`. Each commit column is filled in by the following w
 
 | # | Work package | Model | State | Commit | Notes |
 |---|---|---|---|---|---|
-| P0.1 | Launch options model | sonnet | done | | One review round |
-| P0.2 | Milestones and progress | sonnet | todo | | |
+| P0.1 | Launch options model | sonnet | done | fb103a3 | One review round |
+| P0.2 | Milestones and progress | sonnet | done | | One review round |
 | P0.3 | Experiment runner | sonnet | todo | | |
 | P1.1 | Change files and rerun (overlays) | sonnet | todo | | |
 | P1.2 | Pin variables, answer requests | sonnet | todo | | |
