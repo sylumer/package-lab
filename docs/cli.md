@@ -93,7 +93,8 @@ Lists each launchable item: its number, title (indented by depth), type, identif
 scorm-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth n] [--window]
                          [--resume-from run.json] [--wait seconds] [--out run.json] [--live folder]
                          [--no-caught] [--show] [--json] [--strict] [--options options.json]
-                         [--options-from run.json] [--override path=file …]
+                         [--options-from run.json] [--override path=file …] [--pin name=json …]
+                         [--answer pattern=reply …] [--launch-params a=1&b=2]
 ```
 
 Launches the item in a hidden browser, with SCORM Lab's test LMS. It lets the item run for `--wait` seconds (default
@@ -111,6 +112,9 @@ app.
 | `--options` | none | A JSON file of launch options, for anything a flag can't express (see below). A flag overrides the same option in the file |
 | `--options-from` | none | Takes the launch options a saved run recorded (`launch.options`), changed files included, to run it again. `--options` and the flags override it |
 | `--override` | none | `<path>=<local file>`: runs with a changed copy of a file of the package (see [Changing files](#changing-files-and-running-again)). Repeat it for more files |
+| `--pin` | none | `<name>=<json>`: forces a value the content reads, before its own code runs (see [Pins and answers](#pins-and-answers)). Repeat it for more |
+| `--answer` | none | `<pattern>=@<file>` or `<pattern>=<status>:<body>`: answers matching requests with a response of your own (see [Pins and answers](#pins-and-answers)). Repeat it for more |
+| `--launch-params` | none | Extra query parameters added to the launch address, like `a=1&b=2` |
 | `--out` | none | Keeps the full run (scripts, requests, coverage, sources). Open it in the desktop app with **Open saved…**, or pass it to `report` or `--resume-from` |
 | `--live` | none | See [Live runs](#live-runs) |
 | `--no-caught` | off | Don't record errors the content catches |
@@ -148,6 +152,40 @@ scorm-lab run course.zip --options-from changed.json     # the same changes agai
 
 To see whether a change helped, compare `furthest` in the two `run --json` outputs (with and without `--override`), or
 use an [experiment](#experiment). The desktop and web interfaces compare for you.
+
+#### Pins and answers
+
+A pin forces a value the content reads, before its own code runs. The value is JSON, so text needs quotes:
+
+```bash
+scorm-lab run course.zip --pin previewMode=false
+scorm-lab run course.zip --pin config.mode='"live"' --pin 'navigator.userAgent="Mozilla/5.0 (test)"'
+```
+
+A name is a global (`previewMode`) or a dotted path (`config.mode`). `navigator.userAgent` is the only `navigator` name
+you can pin; `location` can't be pinned (use `--launch-params`). The content's attempts to change a pinned value, and
+pins it never read, appear in the findings.
+
+An answer replaces the server's reply to matching requests. The pattern is a glob (`*` any text, `?` one character) or a
+`/regex/` with the flags `i`, `m`, `s` or `u`, tried against the whole address, the path with its query, and the path
+alone. `@file` answers with 200 and the file's text; `status:body` gives the status and body yourself:
+
+```bash
+scorm-lab run course.zip --answer '/api/player/config=@config.json'
+scorm-lab run course.zip --answer '/api/player/config=200:{}' --answer '*/user.json=404:'
+```
+
+Anything beyond a pattern, status and body (a method, headers) goes in the options file, where a response can name a
+`bodyFile` (read by the command line, relative to the options file; its text goes into the saved options):
+
+```json
+{ "pins": [{ "path": "previewMode", "value": false, "frames": "all" }],
+  "responses": [{ "match": "/api/*", "method": "GET", "status": 200, "headers": { "Content-Type": "application/json" }, "bodyFile": "config.json" }] }
+```
+
+A response with no content type gets `application/json` if its body starts with `{` or `[`, otherwise `text/plain`, and
+`Access-Control-Allow-Origin: *` unless you set it. SCORM Lab's own pages are never answered. Flags add to the pins and
+responses of an options file or `--options-from` run.
 
 `milestones` lists the ten steps of the SCORM path, each reached or not (see [Milestones](user-guide.md#milestones));
 `furthest` is the id of the last one reached, or `null`. The text output adds a **Milestones** line with a tick or a

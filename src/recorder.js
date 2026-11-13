@@ -1,6 +1,7 @@
 // Records one run through the Chrome DevTools Protocol: the page and, by auto-attach, every frame and worker it
 // starts (so cross-origin frames are recorded too). The trace is plain JSON: see DESIGN.md.
 import { readFileSync } from 'node:fs'
+import { pinPrefix, userAgentPin, answerFor, buildAnswer } from './pins.js'
 
 const PROBE = readFileSync(new URL('./host/probe.js', import.meta.url), 'utf8')
 const CAP = { scripts: 5000, requests: 10000, console: 5000, caught: 2000, log: 2000, probe: 5000 }
@@ -8,8 +9,10 @@ const frames = st => (st?.callFrames ?? []).slice(0, 8).map(f => ({ fn: f.functi
 const argText = a => a.type === 'string' ? a.value : a.unserializableValue ?? (a.value !== undefined ? JSON.stringify(a.value) : a.description ?? a.type)
 
 export class Recorder {
-  constructor(wc, { label, caught = true } = {}) {
+  // pins and responses are the run's launch options (pins.js): pins go into the probe, responses are served through the Fetch domain.
+  constructor(wc, { label, caught = true, pins = [], responses = [] } = {}) {
     this.wc = wc; this.dbg = wc.debugger; this.caught = caught; this.t0 = Date.now(); this.sessions = new Set([''])
+    this.probe = pinPrefix(pins) + PROBE; this.userAgent = userAgentPin(pins); this.responses = responses; this.answered = new Map()
     this.trace = { label, started: new Date().toISOString(), targets: [], scripts: [], requests: [], navigations: [], console: [], exceptions: [],
       caught: [], log: [], probe: [], coverage: [], sources: {}, truncated: {} }
     this.req = new Map()
@@ -31,7 +34,9 @@ export class Recorder {
     await s('Debugger.setPauseOnExceptions', { state: this.caught ? 'all' : 'none' })
     await s('Network.enable'); await s('Log.enable')
     await s('Profiler.enable'); await s('Profiler.startPreciseCoverage', { callCount: true, detailed: true })
-    if (type === 'page' || type === 'iframe') { await s('Page.enable'); await s('Page.addScriptToEvaluateOnNewDocument', { source: PROBE }) }
+    if (this.userAgent) await s('Emulation.setUserAgentOverride', { userAgent: this.userAgent })
+    if (this.responses.length) await s('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] })
+    if (type === 'page' || type === 'iframe') { await s('Page.enable'); await s('Page.addScriptToEvaluateOnNewDocument', { source: this.probe }) }
     await s('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true })
     if (sid) await s('Runtime.runIfWaitingForDebugger')
   }
@@ -55,7 +60,22 @@ export class Recorder {
         const r = { t, sid, id: p.requestId, url: p.request.url, method: p.request.method, type: p.type, initiator: p.initiator?.type,
           from: p.initiator?.stack ? frames(p.initiator.stack) : p.initiator?.url ? [{ url: p.initiator.url, line: (p.initiator.lineNumber ?? 0) + 1 }] : [] }
         if (p.redirectResponse) { const prev = this.req.get(p.requestId); if (prev) { prev.status = p.redirectResponse.status; prev.redirect = p.request.url } }
+        if (this.answered.has(p.requestId)) Object.assign(r, this.answered.get(p.requestId))
         this.req.set(p.requestId, r); return this.push('requests', r)
+      }
+      // Requests a response answers are fulfilled here and never reach the server; everything else carries on.
+      case 'Fetch.requestPaused': {
+        // At the request stage (all we enable) responseStatusCode is unset; a response-stage pause is never answered.
+        const hit = p.responseStatusCode === undefined ? answerFor(this.responses, p.request.url, p.request.method) : null
+        if (!hit) return this.send('Fetch.continueRequest', { requestId: p.requestId }, sid).catch(() => {})
+        const a = buildAnswer(hit.response), mark = { answered: true, answeredBy: hit.index }
+        if (p.networkId) { this.answered.set(p.networkId, mark); const r = this.req.get(p.networkId); if (r) Object.assign(r, mark) }
+        // If answering fails, let the request go to the server and record that it wasn't answered.
+        return this.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: a.status, responseHeaders: a.headers, body: a.body }, sid).catch(e => {
+          const fail = { answered: false, answeredBy: undefined, answerFailed: String(e?.message ?? e).slice(0, 200), answerMatch: hit.response.match }
+          if (p.networkId) { this.answered.set(p.networkId, fail); const r = this.req.get(p.networkId); if (r) Object.assign(r, fail) }
+          return this.send('Fetch.continueRequest', { requestId: p.requestId }, sid).catch(() => {})
+        })
       }
       case 'Network.responseReceived': { const r = this.req.get(p.requestId); if (r) { r.status = p.response.status; r.mime = p.response.mimeType } return }
       case 'Network.loadingFailed': { const r = this.req.get(p.requestId); if (r) { r.failed = p.blockedReason || p.corsErrorStatus?.corsError || p.errorText; r.canceled = p.canceled } return }

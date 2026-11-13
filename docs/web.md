@@ -86,6 +86,7 @@ Everything works as in the [user guide](user-guide.md), except:
   `localhost` or over https; if the browser refuses, select the command shown next to the button.
 - The Findings tab starts with the **Milestones** strip, as in the desktop app.
 - The **Files** tab works as in the desktop app. **Replace from a file…** sends the file from the device you are on (up to about 15 MB). Changed files are kept on the Mac for the session and shared by everyone using the interface; paths outside the package are refused.
+- Pins (More options and the **Lookups** tab) and answers (the **Network** tab's **Answer this request…**, listed under More options) work as in the desktop app. They are kept in the page, so reloading it clears them; the CLI line under **Copy as CLI command** repeats them.
 - The **Experiments** tab works as in the desktop app. The runs happen one after another on the Mac, and the table fills in as each finishes. Open another browser and it shows the same events as they arrive; the table itself is not kept, so a page opened mid-experiment shows only the runs that finish after it joined.
 - A **Live** tab shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** tab selected.

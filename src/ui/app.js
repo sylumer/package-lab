@@ -11,7 +11,7 @@ const short = u => (u || '').replace(/^lab:\/\/run\/pkg\//, '')
 const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
-const st = { running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
+const st = { pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
 const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', ...(lab.web ? ['Live'] : [])]
 
 function findingsList(fs) {
@@ -82,14 +82,18 @@ const VIEWS = {
   },
   Lookups() {
     const list = (run() ? run().trace.probe : st.live).filter(p => p.type !== 'api')
-    return table(['s', 'Kind', 'Name', 'Result', 'Frame', 'Where'], list.map(p => [secs(p.t ?? 0), p.type, p.name ?? '',
+    return [h('h3', { class: 'section' }, 'Pins'), pinsEditor(), ...table(['s', 'Kind', 'Name', 'Result', 'Frame', 'Where'], list.map(p => [secs(p.t ?? 0), p.type, p.name ?? p.path ?? '',
+      p.type === 'pin-read' ? `pinned value read${p.n > 1 ? ` ×${p.n}` : ''}` : p.type === 'pin-write' ? h('span', { class: 'bad' }, `tried to set it to ${p.value}`) : p.type === 'pin-failed' ? h('span', { class: 'bad' }, `couldn’t pin: ${p.error}`) :
       p.type === 'lookup' ? h('span', { class: p.found ? 'ok' : 'bad' }, (p.found ? 'found' : 'missing') + (p.n > 1 ? ` ×${p.n}` : '')) : p.type === 'frame' ? `depth ${p.depth}${p.topReachable ? '' : ', top unreachable'}${p.opener ? ', has opener' : ''}` : p.type === 'assign' ? `${p.kind} {${(p.keys || []).join(', ')}}` : p.error ?? '',
-      short(p.frame), h('code', {}, (p.stack || []).slice(0, 3).join('\n'))]))
+      short(p.frame), h('code', {}, (p.stack || []).slice(0, 3).join('\n'))]))]
   },
   Network() {
     const r = run(); if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
-    return table(['s', 'Method', 'URL', 'Type', 'Status', 'From'], r.trace.requests.map(q => [secs(q.t), q.method, short(q.url), q.type,
-      q.failed || q.status >= 400 ? h('span', { class: 'bad' }, String(q.status ?? q.failed) + (q.failed && q.status ? ' ' + q.failed : '')) : q.status ?? '…', h('code', {}, (q.from || []).slice(0, 3).map(at).join('\n'))]))
+    // Any failed request, or one for the server's root or another site, can be answered with a response of your own.
+    const answerable = q => !/^lab:\/\/run\/(pkg|__lab)\//.test(q.url) && !/^(data|blob):/.test(q.url) || q.failed && !q.canceled || q.status >= 400
+    return [answerForm(), ...table(['s', 'Method', 'URL', 'Type', 'Status', 'From', ''], r.trace.requests.map(q => [secs(q.t), q.method, short(q.url), q.type,
+      q.answered ? h('span', { class: 'ok' }, `answered ${q.status ?? ''}`) : q.failed || q.status >= 400 ? h('span', { class: 'bad' }, String(q.status ?? q.failed) + (q.failed && q.status ? ' ' + q.failed : '')) : q.status ?? '…', h('code', {}, (q.from || []).slice(0, 3).map(at).join('\n')),
+      answerable(q) ? h('button', { type: 'button', class: 'secondary', onclick: () => { st.answer = answerDraft(q); render() } }, 'Answer this request…') : '']))]
   },
   Scripts() {
     const r = run(); if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
@@ -127,6 +131,64 @@ const VIEWS = {
     return out
   },
 }
+
+// ---- Pins and answers: values forced before the content's code runs, and responses given instead of the network ----
+// Both live in the session (st.pins, st.responses) and go with every launch; "Run with these" launches now.
+const afterChange = () => { render(); showOptions(); showPinBox() }
+const runWithThese = () => $('launch').click()
+function pinsEditor() {
+  const d = st.pinDraft, field = (key, props = {}) => h('input', { type: 'text', value: d[key], spellcheck: 'false', oninput: e => { d[key] = e.target.value }, ...props })
+  const add = () => {
+    let value
+    try { value = JSON.parse(d.value) } catch { return say('The value must be JSON: false, 3, "text", {"a":1}. Text needs quotes.') }
+    if (!d.path.trim()) return say('Give the name to pin, like previewMode or config.mode.')
+    st.pins.push({ path: d.path.trim(), value, frames: d.frames }); st.pinDraft = { path: '', value: '', frames: d.frames }; afterChange()
+  }
+  return [st.pins.length ? h('ul', { class: 'overrides' }, st.pins.map((p, i) => h('li', {}, h('code', {}, `${p.path} = ${JSON.stringify(p.value)}`), ` ${p.frames === 'all' ? 'in every frame ' : ''}`,
+      h('button', { type: 'button', class: 'secondary', onclick: () => { st.pinDraft = { path: p.path, value: JSON.stringify(p.value), frames: p.frames }; st.pins.splice(i, 1); afterChange() } }, 'Edit'),
+      h('button', { type: 'button', class: 'secondary', onclick: () => { st.pins.splice(i, 1); afterChange() } }, 'Remove')))) : h('p', { class: 'muted small' }, 'No pins. A pin makes the content read the value you give, whatever it sets itself.'),
+    h('div', { class: 'row pins-form' }, h('label', {}, 'Name ', field('path', { placeholder: 'previewMode or config.mode', 'aria-label': 'Name to pin' })), h('label', {}, 'Value (JSON) ', field('value', { placeholder: 'false', 'aria-label': 'Value as JSON' })),
+      h('label', {}, 'In ', h('select', { onchange: e => { d.frames = e.target.value } }, h('option', { value: 'content', selected: d.frames === 'content' }, 'the content’s frames'), h('option', { value: 'all', selected: d.frames === 'all' }, 'every frame'))),
+      h('button', { type: 'button', onclick: add }, 'Add pin'), h('button', { type: 'button', class: 'secondary', disabled: !!st.running || !st.pkg?.items.length, onclick: runWithThese }, 'Run with these'))]
+}
+const looksJson = u => /\.json(\?|$)|\/api\/|\/rest\/|graphql/i.test(u)
+const autoType = body => /^\s*[{[]/.test(body) ? 'application/json' : 'text/plain; charset=utf-8'
+// The form's starting values for a request: its path (for the server's root) or address (another site), and {} if it looks like JSON.
+function answerDraft(q) {
+  let match = q.url
+  try { const u = new URL(q.url); match = u.protocol === 'lab:' ? u.pathname : u.origin + u.pathname } catch { /* leave it whole */ }
+  const json = looksJson(q.url)
+  return { index: -1, match, method: q.method && q.method !== 'GET' ? q.method : '', status: 200, type: json ? 'application/json' : '', body: json ? '{}' : '' }
+}
+function answerForm() {
+  const a = st.answer
+  if (!a) return null
+  const field = (key, props = {}) => h('input', { type: 'text', value: a[key], spellcheck: 'false', oninput: e => { a[key] = e.target.value }, ...props })
+  const save = andRun => {
+    const status = +a.status
+    if (!a.match.trim()) return say('Say which requests to answer: a path like /api/config, a glob like *.json, or a /regex/.')
+    if (!Number.isInteger(status) || status < 100 || status > 599) return say('The status must be a whole number from 100 to 599, like 200.')
+    const r = { match: a.match.trim(), ...(a.method.trim() ? { method: a.method.trim().toUpperCase() } : {}), status, headers: a.type.trim() && a.type.trim() !== autoType(a.body) ? { 'Content-Type': a.type.trim() } : {}, body: a.body }
+    if (a.index >= 0) st.responses[a.index] = r; else st.responses.push(r)
+    st.answer = null; afterChange(); say('Answer added. It applies to the next launch.')
+    if (andRun) runWithThese()
+  }
+  return h('div', { class: 'answer-form' }, h('h3', { class: 'section' }, 'Answer this request'),
+    h('p', { class: 'muted small' }, 'The content gets this instead of what the server would send. It applies to every request that matches, from the next launch.'),
+    h('div', { class: 'row pins-form' }, h('label', {}, 'Match ', field('match', { 'aria-label': 'Which requests to answer' })), h('label', {}, 'Method ', field('method', { placeholder: 'any', size: '6', 'aria-label': 'Method' })),
+      h('label', {}, 'Status ', field('status', { size: '4', 'aria-label': 'Status' })), h('label', {}, 'Content type ', field('type', { placeholder: 'automatic', 'aria-label': 'Content type' }))),
+    h('textarea', { class: 'answer', spellcheck: 'false', 'aria-label': 'Body', oninput: e => { a.body = e.target.value } }, a.body),
+    h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => save(false) }, a.index >= 0 ? 'Save answer' : 'Add answer'),
+      h('button', { type: 'button', disabled: !!st.running || !st.pkg?.items.length, onclick: () => save(true) }, 'Add and run with these'), h('button', { type: 'button', class: 'secondary', onclick: () => { st.answer = null; render() } }, 'Cancel')))
+}
+function answersList() {
+  return st.responses.length ? h('ul', { class: 'overrides' }, st.responses.map((r, i) => h('li', {}, h('code', {}, `${r.method ? r.method + ' ' : ''}${r.match} → ${r.status}`), ` ${r.body.length} characters `,
+    h('button', { type: 'button', class: 'secondary', onclick: () => { st.answer = { index: i, match: r.match, method: r.method ?? '', status: r.status, type: r.headers['Content-Type'] ?? '', body: r.body }; st.tab = 'Network'; render() } }, 'Edit'),
+    h('button', { type: 'button', class: 'secondary', onclick: () => { st.responses.splice(i, 1); afterChange() } }, 'Remove'))))
+    : h('p', { class: 'muted small' }, 'None. In a run’s Network tab, choose “Answer this request…” on a request.')
+}
+// The More options boxes. Drawn when pins or answers change, not on every redraw, so typing isn't interrupted.
+function showPinBox() { $('pins').replaceChildren(...pinsEditor()); $('answers').replaceChildren(answersList()) }
 
 // ---- Files: look at any file of the package, change it for the next run (an override), and see what changed ----
 st.files = { list: null, open: null, draft: '', diffs: {}, note: '' }
@@ -251,7 +313,7 @@ function render() {
   if (lab.web) liveWatch(st.tab === 'Live' && !!st.running)
   $('tabs').replaceChildren(...TABS.map(t => h('button', { type: 'button', role: 'tab', 'aria-selected': String(t === st.tab), onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))
   // Not while the file editor has focus: a redraw (a run or state event) would lose the cursor and scroll position.
-  if (!(st.tab === 'Files' && document.activeElement?.classList.contains('code'))) $('view').replaceChildren(...[VIEWS[st.tab]()].flat(Infinity))
+  if (!(st.tab === 'Files' && document.activeElement?.classList.contains('code')) && !document.activeElement?.matches?.('#view .pins-form input, #view .answer-form input, #view .answer-form textarea')) $('view').replaceChildren(...[VIEWS[st.tab]()].flat(Infinity))
   $('runs').replaceChildren(...st.runs.map(r => h('li', { class: r.id === st.sel ? 'sel' : null, onclick: () => { st.sel = r.id; render() } },
     h('label', { title: 'Reference: the run that works' }, h('input', { type: 'radio', name: 'ref', checked: st.ref === r.id, onclick: e => { e.stopPropagation(); st.ref = r.id; render() } }), h('span', { class: 'tag' }, 'R')),
     h('label', { title: 'The run that fails' }, h('input', { type: 'radio', name: 'fail', checked: st.fail === r.id, onclick: e => { e.stopPropagation(); st.fail = r.id; render() } }), h('span', { class: 'tag' }, 'F')),
@@ -279,7 +341,8 @@ $('file').onchange = () => act(async () => {
   showPackage(await lab.upload(f, p => say(`Uploading ${f.name}: ${Math.round(p * 100)}%`)))
   $('file').value = ''
 }, 'Uploading…')
-const launchOptions = () => ({ expose: $('expose').value, depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value })
+const launchOptions = () => ({ expose: $('expose').value, depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
+  pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim() })
 async function showOptions() {
   try {
     const n = st.pkg?.items.findIndex(i => i.index === +$('item').value) + 1
@@ -287,7 +350,7 @@ async function showOptions() {
     $('options-json').textContent = JSON.stringify(r.options, null, 2); $('cli-line').textContent = r.command
   } catch (e) { $('options-json').textContent = e.message; $('cli-line').textContent = '' }
 }
-for (const id of ['item', 'expose', 'depth', 'opener', 'resume', 'caught', 'auto']) $(id).addEventListener('change', showOptions)
+for (const id of ['item', 'expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params']) $(id).addEventListener('change', showOptions)
 $('more').addEventListener('toggle', showOptions)
 $('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeText($('cli-line').textContent); say('Copied.') })
 $('launch').onclick = () => act(async () => {
@@ -320,6 +383,7 @@ lab.on('experiment', e => {
   else { x.busy = false; x.note = e.message }
   render()
 })
+showPinBox()
 lab.on('package', p => { if (p?.loaded !== st.pkg?.loaded) showPackage(p) })
 render()
 // The web interface may join a session already under way: show its package, runs and any run in progress.

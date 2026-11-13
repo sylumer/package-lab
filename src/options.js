@@ -1,10 +1,12 @@
 // Launch options: the one structure for everything that changes how a run is set up. The desktop and web UI, the
 // launch handler, the CLI (flags and --options file) and the saved run's launch.options all use it. Pure; no Electron.
 // Later work packages add fields here and nowhere else. Defaults live here and only here.
+import { pinPathProblem, PIN_MODES, matcher } from './pins.js'
 const DEFAULTS = Object.freeze({
   expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10,
-  profile: 'none', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], storage: 'normal', trace: false,
+  profile: 'none', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false,
 })
+const MAX_PIN = 1024 ** 2, MAX_BODY = 10 * 1024 ** 2, MAX_BODIES = 20 * 1024 ** 2, MAX_LIST = 100   // a pin's value, a response's body, entries in pins or responses
 const MAX_FILE = 50 * 1024 ** 2, MAX_TOTAL = 200 * 1024 ** 2   // changed files: per file and in all
 const EXPOSE = ['manifest', 'both', '1.2', '2004', 'none']
 const bad = (k, why) => { throw new Error(`Option “${k}” ${why}.`) }
@@ -45,8 +47,49 @@ const check = {
     }
     return Object.fromEntries(out)   // not out[p] = …, which would set the prototype for a path called __proto__
   },
-  pins: (k, v) => Array.isArray(v) && v.every(obj) ? v.map(x => ({ ...x })) : bad(k, 'must be a list of objects'),
-  responses: (k, v) => Array.isArray(v) && v.every(obj) ? v.map(x => ({ ...x })) : bad(k, 'must be a list of objects'),
+  // [{ path, value (JSON), frames: 'content' | 'all', mode: 'force' }]
+  pins: (k, v) => {
+    if (!Array.isArray(v) || !v.every(obj)) bad(k, 'must be a list of { path, value }')
+    if (v.length > MAX_LIST) bad(k, `can hold at most ${MAX_LIST} pins`)
+    return v.map(x => {
+      const extra = Object.keys(x).filter(f => !['path', 'value', 'frames', 'mode'].includes(f))
+      if (extra.length) bad(k, `has an unknown field: ${extra.join(', ')}`)
+      const why = pinPathProblem(x.path)
+      if (why) bad(k, `has a path that ${why}: ${JSON.stringify(x.path)}`)
+      if (!Object.hasOwn(x, 'value') || typeof JSON.stringify(x.value) !== 'string') bad(k, `needs a value (any JSON, null included) for ${x.path}`)
+      if (JSON.stringify(x.value).length > MAX_PIN) bad(k, `has a value over ${MAX_PIN / 1024 ** 2} MB for ${x.path}`)
+      const frames = x.frames ?? 'content', mode = x.mode ?? 'force'
+      if (!['content', 'all'].includes(frames)) bad(k, `needs frames to be content or all for ${x.path}`)
+      if (!PIN_MODES.includes(mode)) bad(k, `needs mode to be ${PIN_MODES.join(' or ')} for ${x.path}`)
+      return { path: x.path, value: structuredClone(x.value), frames, mode }
+    })
+  },
+  // [{ match: glob or /regex/, method?, status: 200, headers: {}, body: '' }]. bodyFile is for the command line, which turns it into body.
+  responses: (k, v) => {
+    if (!Array.isArray(v) || !v.every(obj)) bad(k, 'must be a list of { match, body }')
+    if (v.length > MAX_LIST) bad(k, `can hold at most ${MAX_LIST} responses`)
+    let total = 0
+    return v.map(x => {
+      const extra = Object.keys(x).filter(f => !['match', 'method', 'status', 'headers', 'body'].includes(f))
+      if (extra.includes('bodyFile')) bad(k, 'can’t read files: the command line reads bodyFile and puts the content in body')
+      if (extra.length) bad(k, `has an unknown field: ${extra.join(', ')}`)
+      if (typeof x.match !== 'string' || !x.match) bad(k, 'needs match: a glob like /api/*.json or a /regex/')
+      try { matcher(x.match) } catch (e) { bad(k, `has a pattern that doesn’t work (${e.message}): ${JSON.stringify(x.match)}`) }
+      const status = x.status === undefined ? 200 : x.status, headers = x.headers ?? {}, body = x.body ?? ''
+      if (!Number.isInteger(status) || status < 100 || status > 599) bad(k, `needs status to be a whole number from 100 to 599 for ${x.match}`)
+      if (x.method !== undefined && !(typeof x.method === 'string' && /^[A-Za-z]+$/.test(x.method))) bad(k, `needs method to be a name like GET for ${x.match}`)
+      if (!obj(headers) || !Object.values(headers).every(h => typeof h === 'string' || typeof h === 'number')) bad(k, `needs headers to be an object of text for ${x.match}`)
+      if (typeof body !== 'string') bad(k, `needs body to be text for ${x.match}`)
+      if (Buffer.byteLength(body) > MAX_BODY) bad(k, `has a body over ${MAX_BODY / 1024 ** 2} MB for ${x.match}`)
+      if ((total += Buffer.byteLength(body)) > MAX_BODIES) bad(k, `holds more than ${MAX_BODIES / 1024 ** 2} MB of response bodies in all`)
+      return { match: x.match, ...(x.method ? { method: x.method.toUpperCase() } : {}), status, headers: { ...headers }, body }
+    })
+  },
+  // Extra query parameters for the launch URL, like 'a=1&b=2'.
+  launchParams: (k, v) => {
+    if (typeof v !== 'string' || /[\s#]/.test(v)) bad(k, 'must be query text without spaces or #, like a=1&b=2')
+    return v.replace(/^[?&]+/, '')
+  },
   storage: str,                                  // narrowed by the work package that adds storage modes
 }
 
@@ -73,9 +116,15 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (!o.caught) a.push('--no-caught')
   const wait = o.auto || o.wait   // the CLI always stops by itself: --wait is the auto-stop
   if (wait !== DEFAULTS.wait) a.push('--wait', String(wait))
-  const rest = Object.keys(DEFAULTS).filter(k => !['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files'].includes(k) && JSON.stringify(o[k]) !== JSON.stringify(DEFAULTS[k]))
+  // Pins and responses with a flag's worth of settings get one; anything else (frames, headers, a method) goes in the options file.
+  const pinFlag = o.pins.every(p => p.frames === 'content' && p.mode === 'force'), answerFlag = o.responses.every(r => !r.method && !Object.keys(r.headers).length)
+  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
+  const rest = Object.keys(DEFAULTS).filter(k => !flagged.includes(k) && JSON.stringify(o[k]) !== JSON.stringify(DEFAULTS[k]))
   // Changed files: --override path=path, which assumes a local copy saved at the same relative path.
   for (const p of Object.keys(o.files)) a.push('--override', quote(`${p}=${p}`))
+  if (pinFlag) for (const p of o.pins) a.push('--pin', quote(`${p.path}=${JSON.stringify(p.value)}`))
+  if (answerFlag) for (const r of o.responses) a.push('--answer', quote(`${r.match}=${r.status}:${r.body}`))
+  if (o.launchParams) a.push('--launch-params', quote(o.launchParams))
   if (rest.length) a.push('--options', 'options.json')
   return a.join(' ')
 }

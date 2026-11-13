@@ -51,6 +51,7 @@ src/
     scorm-runtime.js    SCORM 1.2 and 2004 run-time (from toolbox)
     probe.js            Injected into every frame: API lookups, assignments, wrapped calls, DOM snapshots
   zip.js, xml.js        Readers
+  pins.js               Pins and answers: matching, the probe's prefix, the findings, the CLI's spellings
   overlay.js            Overrides: the file set a run is served from, and the findings about changed files
   textdiff.js           A small LCS line diff (diffLines, unified)
   milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
@@ -131,13 +132,15 @@ and a line in the guides. The shape:
 ```
 { expose: 'manifest'|'both'|'1.2'|'2004'|'none', depth: 0–5, opener, resume, caught (bool), auto (s, 0 = until stopped),
   wait (s, headless runs), profile: 'none', browser: 'chromium', viewport: null | { width, height },
-  files: { path: { content } | { base64 } }, pins: [], responses: [], storage: 'normal', trace: false }
+  files: { path: { content } | { base64 } },
+  pins: [{ path, value (JSON), frames: 'content'|'all', mode: 'force' }],
+  responses: [{ match, method?, status, headers, body }], launchParams: 'a=1&b=2', storage: 'normal', trace: false }
 ```
 
 `launchItem` takes `{ item, cmi?, ...options }`, normalises the options and saves them in `launch.options` (the older
 `launch` fields stay for version 1 readers). The CLI merges the `--options` file and then the flags, normalises, and
 writes the result to the job file as `options`; the headless run normalises it again. `cliCommand(options, { zip, item })`
-builds the line for **Copy as CLI command**; fields without a flag become `--options options.json`.
+builds the line for **Copy as CLI command**; fields without a flag become `--options options.json`. Pins and responses get `--pin` and `--answer` when the flag can say everything in them (`frames: 'content'`, no method or headers), and `--options options.json` when not.
 
 ### Handlers
 
@@ -206,6 +209,9 @@ auto-attached target too). It reports through the `__labReport` binding:
 | `{ type: 'lookup', name, found, n, stack }` | Each read of `window.API` or `window.API_1484_11` (an accessor property). Throttled to the first three per call site, then every hundredth, because content polls |
 | `{ type: 'assign', name, kind, keys, stack }` | Each assignment to those names |
 | `{ type: 'api', …, host: true }` | Calls to an API object the probe wrapped: one on a real LMS (references), or content's own object in a package run |
+| `{ type: 'pin-read', path, n, stack }` | Each read of a pinned value (an accessor property). Throttled like lookups |
+| `{ type: 'pin-write', path, value, n, stack }` | Each assignment to a pinned name; the pin ignores it. `value` is a short text preview |
+| `{ type: 'pin-failed', path, error }` | The pin couldn't be defined: a frozen object, a name the browser won't redefine |
 | `{ type: 'dom', readyState, text, sample, visible, media, frames, loader, hidden, elements, w, h }` | What the frame shows. Sent at DOMContentLoaded, load, page hide, and 1–60 s after start, only when it changes. Not sent from SCORM Lab's host pages |
 
 The recorder adds `t` (ms since start), `sid` and `frame` (the frame's URL).
@@ -223,7 +229,9 @@ session it enables:
 | Network | Requests with their initiator and outcome |
 | Log | Browser messages (CSP, mixed content, MIME type) |
 | Profiler | Precise block coverage with call counts |
-| Page | Navigations, and adds the probe |
+| Page | Navigations, and adds the probe (ahead of it, the run's pins) |
+| Fetch | Only when the run has `responses`: every request is paused; those a response matches are fulfilled, the rest continue |
+| Emulation | Only with a `navigator.userAgent` pin: `setUserAgentOverride` |
 
 `stop()` takes coverage and script sources from every session still open. The lists are capped (5,000 scripts,
 10,000 requests…); `truncated` says which overflowed.
@@ -278,6 +286,14 @@ session it enables:
 `bootRun(boot, trace)` adds `run: { status, failed, pending, t }` to each node, from the run's requests. It matches
 `lab://run/pkg/<path>`, and `lab://run/<path>` for server paths.
 
+## Pins and answers
+
+`src/pins.js` is pure. A **pin** is `{ path, value, frames, mode }` in `options.pins` (checked in `options.js`; `mode` is always `'force'` for now, and P1.5's `'watch'` slots in there: `PIN_MODES` in `pins.js`). The recorder puts `globalThis.__labPins = [...]` ahead of `probe.js` (`pinPrefix`, applied through `Page.addScriptToEvaluateOnNewDocument` in every page and iframe); the probe reads and deletes it, drops the pins whose `frames` doesn't cover this frame (`'content'` excludes SCORM Lab's own `lab://run/__lab/` pages) and installs each one. A top-level name becomes an accessor on `window`: the getter returns the value and reports `pin-read`, the setter ignores the assignment and reports `pin-write`, so `var x = …` at the top of a classic script assigns through it. A dotted path is an accessor on the root that, when given an object, installs the next segment on that object, and so on; a frozen object makes `defineProperty` throw, which is reported as `pin-failed`. The accessors are `configurable: true` (the plan said `false`) so that a top-level `let` or `const` in the content creates its own binding instead of a SyntaxError that would stop the whole script; `pinFindings` then recognises that case (the pin was never read or written, and `lexicalDeclaration` finds a column-0 `let`/`const` of the root name in `trace.sources`) and says so. Inline scripts count only if the browser recorded them under their page's URL; a `let` inside a function or an indented block isn't a global and isn't matched. `navigator.userAgent` is the exception: `userAgentPin` gives the value, and the recorder sends `Emulation.setUserAgentOverride` to every session. `location` and the other `navigator` names are refused; `launchParams` goes on the launch URL instead.
+
+An **answer** is `{ match, method?, status, headers, body }` in `options.responses`. With responses set, `Recorder.setup` calls `Fetch.enable` (all URLs, request stage) on every session. `Fetch.requestPaused` runs `answerFor(responses, url, method)`: the first response that matches (glob or `/regex/flags`, tried on the whole URL, the path with query, and the path) and isn't for `lab://run/__lab/` is sent with `Fetch.fulfillRequest` (`buildAnswer`: base64 body, a content type guessed from the body if none, CORS opened if not set); everything else gets `Fetch.continueRequest`. The matching request in `trace.requests` gets `answered: true` and `answeredBy` (the response's index in the list). `networkId` links the paused request to the Network event, which can arrive on either side of it. Responses apply to package runs only, in every frame and popup. `bodyFile` isn't an option: only the CLI reads files (`--answer pattern=@file`, or a response's `bodyFile` in an `--options` file, relative to that file) and it puts the text in `body`; `normaliseOptions` refuses `bodyFile`, so the web handlers can't be made to read a path.
+
+`pinFindings(trace, options)` (called from `runFindings` for package runs) gives the findings in [findings.md](findings.md); it works from `launch.options`, so saved runs get them again when reopened. `parsePinFlag` and `parseAnswerFlag` are the CLI's spellings. In the UI, pins and answers are in `st.pins` and `st.responses` and go with every `launchOptions()`.
+
 ## Overrides
 
 `options.files` replaces or adds files for one run. The session's overrides live in `pkg.overrides` (`{ path: { content } | { base64 } }`, reset when a package is opened); the Files tab's handlers change them. `launchItem` uses `options.files` if the caller gave it and otherwise `pkg.overrides`; the headless run and the CLI always give it. A run is served from `overlayFiles(pkg.files, o.files)` (`served` in `main.js`, which `serve()` reads, so the original `pkg.files` is never touched), and its boot graph is recomputed for that file set and not cached. The static analysis of the package (`pkg.analysis`) stays that of the original.
@@ -299,6 +315,7 @@ A finding is:
 | `staticFindings(analysis)` | `analyze()` | Manifest problems, version mismatch, server paths, own API, mode switches, tool |
 | `bootGraph().risks` | files | Everything in [the boot graph](#the-boot-graph) |
 | `launchFindings(trace, boot)` | a run and its boot graph | Launch page not loaded, blank page, stuck loading screen (with causes in loading order), loading stopped, loading code never ran |
+| `pinFindings(trace, options)` | a run and its launch options | Pinned value changed, couldn't be pinned (frozen, `let`/`const`), never read; requests answered, responses nothing matched. Called by `runFindings` |
 | `runFindings(trace, launch)` | a run and its launch settings | API never looked for, not found, found but not called, own API object, top unreachable, server requests, failed requests, uncaught errors, refusals, caught errors, and progress (failed calls, finish, commit, suspend data, exit, completion) |
 | `milestoneFinding(milestones(trace, boot))` | a run and its boot graph | The "Got as far as" note; added first to every package run by `main.js` |
 | `compareFindings(cmp)` | `compare()` | First divergence, branches, differing files, errors only in the run |
@@ -449,7 +466,7 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
     label, started, ended, duration,                       // ISO times, ms
     targets:    [{ t, sid, parent, type, url }],
     scripts:    [{ t, sid, id, url, hash, length, module, sourceMap, from: [frame] }],
-    requests:   [{ t, sid, id, url, method, type, initiator, from: [frame], status?, mime?, failed?, canceled?, redirect? }],
+    requests:   [{ t, sid, id, url, method, type, initiator, from: [frame], status?, mime?, failed?, canceled?, redirect?, answered?, answeredBy? }],   // answered, answeredBy (index into launch.options.responses): added in P1.2
     navigations:[{ t, sid, frame, parent, url }],
     console:    [{ t, sid, level, text, at: [frame] }],
     exceptions: [{ t, sid, text, url, line, at: [frame] }],
@@ -489,7 +506,7 @@ A frame is `{ fn, url, line, col }`. Older runs without `format` (from before ve
 npm test
 ```
 
-`npm test` runs `node test/test.js`; add `--unit` for only the unit checks. The test builds fixtures from
+`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
 `test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
 
 | Fixture | Change | Tests |
@@ -500,15 +517,18 @@ npm test
 | `blank` | Empty launch page; script referenced as `js/app.js`, file `js/App.js`; missing `vendor/missing.js` | Capitals, missing file, empty page; blank-page finding with not-found evidence |
 | `order` | Inline script uses `scorm` before the deferred `scorm.js` | Load-order error |
 | `gated` | `lesson.js` calls `start()` only if `window.startOK` | No API calls; with `lesson.js` overridden (CLI, and over the web handlers) the API is used, the run got further and says so |
+| `pinned` | `boot.js` sets `previewMode`, a `config` object and a frozen object itself, and logs what it reads | Pins hold (`previewMode`, `config.mode`, `navigator.userAgent`), the writes are reported with `boot.js`, a frozen object can't be pinned, an unread pin is noted |
+| `lexical` | `boot.js` declares `let previewMode` | The can't-pin finding, and the content keeps its own value |
 | `loader` | Loading screen; `data/config.json` with a trailing comma; `js/next.js` loaded only after the config parses | Invalid JSON; stuck on loading screen; code that loads next never ran |
 
 The end-to-end part covers:
 - **CLI:** analyze (JSON, `--strict` statuses, missing file), items, report (static and run).
 - **Runs:** all fixtures, including a saved run, resume, and `--api both`. Milestones: `good` reaches at least
   `wrote` (also with the live click), `mismatch` reaches `looked`, `blank` reaches `launched` only.
+- **Pins and answers:** `hosted` with `/api/player/config` answered (no own API, calls reach the LMS, request marked answered, `--options-from` repeats it, `bodyFile` read at the CLI) and with `previewMode` pinned (the change is reported at `boot.js`); `pinned` and `lexical` as above; bad flags exit with status 2.
 - **Live:** a frame appears, a click on **Next** reaches the course (`lesson_location` 2), and stop ends it early.
 - **Web:** 401 without the token, the token exchange, upload, launch with auto-stop, live frames over SSE, the run in
-  `state`, saved runs, and `load-run` refusing paths outside the runs folder.
+  `state`, saved runs, and `load-run` refusing paths outside the runs folder, the `options` handler building the pin and answer flags and refusing `bodyFile`.
 - **Concierge module:** run as Concierge would (CGI environment, temp data folder): upload, the static report, a run,
   the report, widget and download. Skipped if `../concierge` isn't there.
 

@@ -127,26 +127,26 @@ function addRun(kind, label, launch, trace, boot) {
 const savedRun = r => ({ format: 'scorm-lab-run', version: 1, kind: r.kind, label: r.label, package: r.package, launch: r.launch, trace: r.trace, boot: r.boot, findings: r.findings, milestones: r.milestones })
 
 // Popups (window-opener profiles, or content that opens itself in a new window) get their own recorder, merged at the end.
-function watchPopups(wc, extra, caught, wins) {
+function watchPopups(wc, extra, ropts, wins) {
   wc.on('did-create-window', child => {
-    const rec = new Recorder(child.webContents, { caught })
+    const rec = new Recorder(child.webContents, ropts)
     rec.onProbe = p => emit('probe', p)
     extra.push(rec); wins.push(child)
     rec.start().catch(() => {})
-    watchPopups(child.webContents, extra, caught, wins)
+    watchPopups(child.webContents, extra, ropts, wins)
     child.on('close', e => { if (!rec.stopped) { e.preventDefault(); rec.stop().finally(() => child.destroy()) } })
   })
 }
 
-async function begin({ kind, label, url, launch, partition, caught, boot, auto, files }) {
+async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses }) {
   await finish()
   served = files ?? null   // only now: the previous run may have been using the old set
   const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
-  const rec = new Recorder(win.webContents, { label, caught }), extra = [], wins = [win]
+  const ropts = { caught, pins, responses }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
   rec.onProbe = p => emit('probe', p)
   win.webContents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { show: SHOW_RUNS, webPreferences: { partition, sandbox: true, backgroundThrottling: false } } }))
-  watchPopups(win.webContents, extra, caught, wins)
+  watchPopups(win.webContents, extra, ropts, wins)
   active = { win, wins, rec, extra, kind, label, launch, boot, started: Date.now() }
   win.on('close', e => { if (active?.win === win) { e.preventDefault(); finish() } })
   if (auto > 0) { const a = active; a.timer = setTimeout(() => { if (active === a) finish() }, auto * 1000) }
@@ -270,6 +270,7 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
   let url = res.path ? 'lab://run/pkg/' + res.path.split('/').map(encodeURIComponent).join('/') + res.query : res.href
   const params = item.params.replace(/^[?&]/, '')
   if (params) url += (url.includes('?') ? '&' : '?') + params
+  if (o.launchParams) url += (url.includes('?') ? '&' : '?') + o.launchParams
   const expose = !o.expose || o.expose === 'manifest' ? m.version : o.expose
   const cmi = givenCmi ?? (o.resume && pkg.lastCmi ? pkg.lastCmi : null)
   config = { expose, depth: o.depth, opener: o.opener, launch: url, cmi,
@@ -277,7 +278,7 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
       launchData: item.launchData, mastery: item.mastery, maxTime: item.maxTime, timeLimitAction: item.timeLimitAction, completionThreshold: item.completionThreshold } }
   const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o }
   await begin({ kind: 'package', label: `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}`,
-    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files })
+    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses })
   return true
 }
 

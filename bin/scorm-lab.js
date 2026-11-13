@@ -5,12 +5,13 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync
 import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { tmpdir, homedir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { unzip } from '../src/zip.js'
 import { analyze } from '../src/analyze.js'
 import { bootGraph } from '../src/bootpath.js'
 import { staticFindings, sortFindings } from '../src/rules.js'
 import { normaliseOptions } from '../src/options.js'
+import { parsePinFlag, parseAnswerFlag } from '../src/pins.js'
 import { entryFor } from '../src/overlay.js'
 import { furthest, strip } from '../src/milestones.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
@@ -51,6 +52,11 @@ Options for run (and report --run)
   --options <file.json>     Launch options as JSON, for anything a flag can't express. Flags override the file.
   --options-from <run.json> Use the launch options a saved run recorded (changed files included). Other options and flags override them.
   --override <path>=<file>  Run with a changed copy of a package file: the file's contents replace <path>. Repeatable.
+  --pin <name>=<json>       Force a value the content reads, before its own code runs: --pin previewMode=false, --pin config.mode='"live"'.
+                            navigator.userAgent can be pinned too. Repeatable.
+  --answer <pattern>=<reply>  Answer matching requests yourself: --answer '/api/player/config=@config.json' (a file) or
+                            --answer '/api/player/config=200:{}' (status:body). The pattern is a glob or a /regex/. Repeatable.
+  --launch-params <a=1&b=2> Extra query parameters on the launch address.
   --out <run.json>          Keep the full run (open it in the desktop app with Open saved…).
   --live <folder>           Write frames to <folder>/frame.jpg and read clicks and keys from <folder>/input/.
   --no-caught               Don't record errors the content catches itself.
@@ -85,9 +91,9 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'out', 'live', 'port', 'host', 'variants', 'preset']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'out', 'live', 'port', 'host', 'variants', 'preset']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
-    if (k === 'override') (o.override ??= []).push(val); else o[k] = val
+    if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
   return o
 }
@@ -155,7 +161,20 @@ function optionsFile(path) {
   let j
   try { j = JSON.parse(readFileSync(path, 'utf8')) } catch (e) { fail(`${basename(path)} isn’t valid JSON: ${e.message}`) }
   if (!j || typeof j !== 'object' || Array.isArray(j)) fail(`${basename(path)} must hold one JSON object of options, like { "depth": 1 }.`)
+  // A response's bodyFile is read here, relative to the options file, and its content goes into body: the options never carry paths.
+  if (Array.isArray(j.responses)) j.responses = j.responses.map(r => {
+    if (!r || typeof r !== 'object' || r.bodyFile === undefined) return r
+    if (r.body !== undefined) fail(`A response for ${JSON.stringify(r.match)} has both body and bodyFile. Use one.`)
+    const { bodyFile, ...rest } = r
+    const dir = resolve(dirname(path)), file = resolve(dir, String(bodyFile))
+    if (isAbsolute(String(bodyFile)) || file !== dir && !file.startsWith(dir + sep)) fail(`bodyFile ${JSON.stringify(bodyFile)} must be inside the folder of ${basename(path)}: a relative path without “..”.`)
+    return { ...rest, body: readText(file) }
+  })
   return j
+}
+function readText(file) {
+  if (!existsSync(file)) fail(`No such file: ${file}`)
+  try { return readFileSync(file, 'utf8') } catch (e) { fail(`Can’t read ${file}: ${e.code === 'EISDIR' ? 'it is a folder' : e.message}`) }
 }
 // --options-from run.json: the launch options a saved run recorded.
 function optionsFromRun(path) {
@@ -188,6 +207,7 @@ function flagOptions(o) {
   if (o.window) f.opener = true
   if (o['no-caught']) f.caught = false
   if (o.wait !== undefined) f.wait = o.wait
+  if (o['launch-params'] !== undefined) f.launchParams = o['launch-params']
   return f
 }
 
@@ -195,6 +215,13 @@ function buildOptions(o) {
   const f = { ...optionsFromRun(o['options-from']), ...optionsFile(o.options) }, flags = flagOptions(o)
   // --override adds to (and wins over) the files from the options file or saved run.
   if (o.override) flags.files = { ...(f.files ?? {}), ...overrideFiles(o.override) }
+  // --pin and --answer add to the options file's pins and responses.
+  const asFail = fn => { try { return fn() } catch (e) { fail(e.message) } }
+  if (o.pin) flags.pins = [...(f.pins ?? []), ...o.pin.map(x => asFail(() => parsePinFlag(x)))]
+  if (o.answer) flags.responses = [...(f.responses ?? []), ...o.answer.map(x => {
+    const a = asFail(() => parseAnswerFlag(x))
+    return a.file !== undefined ? { match: a.match, body: readText(a.file) } : a
+  })]
   try { return normaliseOptions({ ...f, ...flags }) } catch (e) { fail(e.message) }
 }
 

@@ -2,6 +2,7 @@
 // causes. Pure. Each finding: { sev: 'error' | 'warn' | 'info', title, detail, evidence: [string], fix }.
 import { isLab } from './diff.js'
 import { bootRun } from './bootpath.js'
+import { pinFindings } from './pins.js'
 
 const where = f => f ? `${f.fn || '(anonymous)'} ${f.url ? f.url.replace(/^lab:\/\/run\/pkg\//, '') : ''}:${f.line}` : ''
 const short = u => (u || '').replace(/^lab:\/\/run\/pkg\//, '')
@@ -93,6 +94,7 @@ export function runFindings(trace, launch = {}) {
     const rest = failed.filter(r => !server.includes(r))
     if (rest.length) out.push({ sev: 'warn', title: `${rest.length} request${rest.length > 1 ? 's' : ''} failed`, evidence: rest.slice(0, 10).map(r => `${r.method} ${short(r.url)} → ${r.status ?? r.failed} from ${where(r.from?.[0])}`), fix: '' })
   }
+  if (launch.kind === 'package') out.push(...pinFindings(trace, launch.options))
   if (trace.exceptions.length)
     out.push({ sev: 'warn', title: `${trace.exceptions.length} uncaught error${trace.exceptions.length > 1 ? 's' : ''}`, evidence: trace.exceptions.slice(0, 6).map(e => `${e.text}  at ${where(e.at[0]) || short(e.url) + ':' + e.line}`), fix: '' })
   const csp = trace.log.filter(l => /Content Security Policy|Refused to/i.test(l.text))

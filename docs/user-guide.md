@@ -213,6 +213,40 @@ files are used by experiments too, as part of the default launch.
 SCORM Lab works out the boot path again for the changed files, but the checks on the manifest and scripts under
 **Package** still describe the original package.
 
+## Forcing values and answering requests
+
+Two more ways to test a theory without touching the course. Both happen before the content's own code could notice.
+
+**Pin a value.** Many courses decide how to behave from a name, such as `previewMode` or `config.mode`. A pin makes the
+content read the value you choose, whatever it sets itself.
+
+1. In **More options**, under **Pins** (the **Lookups** tab has the same list), type the name, the value as JSON
+   (`false`, `3`, `"text"`, `{"a":1}`; text needs quotes), and choose **Add pin**. **Edit** and **Remove** change the list.
+2. Choose **Run with these**, or **Launch**. Pins go with every launch until you remove them.
+
+Names can be dotted (`config.mode`): the pin applies to that part of the object once the content creates it.
+`navigator.userAgent` can be pinned too (it changes what the content and its server requests see). Other `navigator` names
+and `location` can't; for extra query parameters on the launch address, use **Launch parameters** in More options.
+**In** chooses whether the pin applies in the content's frames only (the default) or in every frame.
+
+The Lookups tab then shows each read of a pinned value, and each time the content tried to change it. If the content
+tried, the Findings say where: that is often the code that sets its mode. If a script declares the name with `let` or
+`const` at its top level, a pin can't replace it: the Findings say so and point at the line. Change that line in the Files
+tab instead.
+
+**Answer a request.** When the content asks its platform for something (a configuration file, a user record) and gets
+nothing, it may fall back to a mode that never talks to an LMS. Give it an answer and see what it does.
+
+1. In the **Network** tab, choose **Answer this request…** on a failed request, or one for the server's root or another site.
+2. Check the pattern, status, content type and body. The body starts as `{}` for paths that look like JSON.
+   The pattern is a path such as `/api/player/config`, a glob (`*` and `?`), or a `/regex/`.
+3. Choose **Add and run with these**. Answered requests show as **answered** in the Network tab.
+
+The list of answers is under **Answers** in More options. The Findings list the requests that were answered, and any answer
+nothing asked for. An answer applies to every request that matches, in every frame.
+
+Pins and answers are saved in a run's options, so the CLI's `--options-from` repeats them.
+
 ## Trying every setting at once: experiments
 
 Instead of changing one setting at a time, let SCORM Lab do it. Open the **Experiments** tab, choose a set of variants,

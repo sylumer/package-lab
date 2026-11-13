@@ -70,3 +70,5 @@ textarea.code { flex: 1; border: 0; padding: 8px; background: transparent; color
 .diff { padding: 6px 0; } .diff div { padding: 0 8px; white-space: pre-wrap; }
 .diff .add { background: color-mix(in srgb, var(--ok, #2a8a3e) 20%, transparent); } .diff .del { background: color-mix(in srgb, var(--err) 20%, transparent); } .diff .hunk { color: var(--muted); }
 @media (max-width: 800px) { .files { flex-direction: column; } .tree { width: auto; max-height: 30vh; } }
+input[type=text], textarea.answer { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
+.pins-form { flex-wrap: wrap; } .pins-form input[type=text] { min-width: 140px; } textarea.answer { width: 100%; min-height: 80px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }

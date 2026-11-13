@@ -6,7 +6,7 @@
   if (window.__labProbed) return
   window.__labProbed = true
   const report = data => { try { __labReport(JSON.stringify({ frame: location.href, ...data })) } catch (e) { /* binding missing */ } }
-  const stack = () => (new Error().stack || '').split('\n').slice(3, 9).map(s => s.trim().replace(/^at /, '')).filter(s => !s.includes('probe.js'))
+  const stack = (skip = 0) => (new Error().stack || '').split('\n').slice(3 + skip, 9 + skip).map(s => s.trim().replace(/^at /, '')).filter(s => !s.includes('probe.js'))
   let depth = 0, w = window
   try { while (w !== w.parent && depth < 20) { w = w.parent; depth++ } } catch (e) { depth = -1 }
   let topReachable = true
@@ -71,6 +71,38 @@
     ;[1, 2, 4, 7, 10, 15, 25, 40, 60].forEach(s => setTimeout(dom, s * 1000)) // also when load never comes
     addEventListener('pagehide', dom)
   }
+  // Pins (P1.2): the recorder puts the pins for this run in window.__labPins. Top-level names become accessors on the
+  // window, so `var x = …` at the top of a classic script assigns through the setter and is ignored. A dotted path is
+  // an accessor on its root that, when given an object, pins the next name on that object, and so on. Every read and
+  // write is reported (throttled like lookups). The accessors are configurable on purpose: a let or const at the top
+  // of a script then makes its own binding (which the pin can't replace) instead of a SyntaxError that stops the script.
+  const pins = (window.__labPins || []).filter(p => p.frames === 'all' || !ownHost)
+  try { delete window.__labPins } catch (e) { /* kept */ }
+  const preview = v => { try { return String(typeof v === 'object' ? JSON.stringify(v) : v).slice(0, 200) } catch (e) { return typeof v } }
+  const pinSeen = new Map()
+  const pinNote = (type, path, extra) => {
+    const s = stack(1), key = type + path + s.join('|'), n = (pinSeen.get(key) || 0) + 1
+    pinSeen.set(key, n)
+    if (n <= 3 || n % 100 === 0) report({ type, path, n, stack: s, ...extra })
+  }
+  const pinAt = (obj, segs, pin) => {
+    const [key, ...rest] = segs
+    try {
+      if (!rest.length) {
+        Object.defineProperty(obj, key, { configurable: true, enumerable: true,
+          get() { pinNote('pin-read', pin.path); return pin.value },
+          set(v) { pinNote('pin-write', pin.path, { value: preview(v) }) } })
+        return
+      }
+      let held = obj[key]
+      if (held && typeof held === 'object') pinAt(held, rest, pin)
+      Object.defineProperty(obj, key, { configurable: true, enumerable: true, get: () => held,
+        set(v) { held = v; if (v && typeof v === 'object') pinAt(v, rest, pin) } })
+    } catch (e) { report({ type: 'pin-failed', path: pin.path, error: String(e.message || e).slice(0, 200) }) }
+  }
+  const held = pins.map(pin => { const root = pin.path.split('.')[0]; pinAt(window, [root, ...pin.path.split('.').slice(1)], pin); return [pin, root, Object.getOwnPropertyDescriptor(window, root)?.get] })
+  // Content that redefines a pinned name (defineProperty, delete, a function declaration) replaces the pin: say so once the page has loaded.
+  addEventListener('load', () => { for (const [pin, root, get] of held) if (get && Object.getOwnPropertyDescriptor(window, root)?.get !== get) report({ type: 'pin-failed', path: pin.path, error: 'the content redefined ' + root + ' after the pin was set, so the pin no longer applies' }) })
   for (const name of ['API', 'API_1484_11']) {
     let value = wrap(name, window[name])
     try {

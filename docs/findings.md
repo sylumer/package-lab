@@ -135,6 +135,22 @@ Added to a run that used changed files (overrides), after the milestones note. S
 | This run used *N* changed files: *names* | info | Files were replaced inside SCORM Lab for this run, so the findings describe the changed copy. The package on disk is unchanged | Run again without the changes to see the original |
 | Compared with the run before the changes: got further / got less far / no change … | info (warning if it got less far) | Only in the desktop and web interfaces, when the same item has an earlier run in this session without changed files. Says whether the change helped, step by step | If it got further, make the same change in the course's source and publish again. If it got less far, revert the change |
 
+## From a run: pins and answers
+
+Added to a package run that used pins or responses. See
+[Pins and answers](user-guide.md#forcing-values-and-answering-requests).
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| The content tried to change a pinned value | warning | The content assigned a different value to something you pinned. The pin held. The evidence names the code that did it (`previewMode = true from boot.js:12:3`), which is usually where the content decides its mode | Look at that code. Change it with a file override, or take the pin off if you wanted the content to choose |
+| Couldn’t pin *name* | warning | The browser refused: the name is on a frozen or locked object, or can't be redefined | Use a file override instead |
+| Couldn’t pin *name*: the script declares it with let or const | warning | A `let` or `const` at the top of a script makes a name of its own, which a pin can't replace. The content kept its own value. The evidence gives the file and line | Use a file override instead: change that line in the Files tab |
+| Couldn’t pin *name*: the content redefined it | warning | The content redefined or deleted the pinned name after the pin was set (checked when the page has loaded), so the pin no longer applies. A pin is an ordinary window property and content can replace it | Use a file override instead |
+| Couldn’t answer *N* requests | warning | The browser refused a response, so the request went to the server as normal | Check the status, headers and body |
+| Pinned value never read | info | The content never looked at the pinned value (the name may be wrong, the code that reads it never ran, or the name is declared with `let` or `const` somewhere other than the start of a line, which SCORM Lab can’t see). `navigator.userAgent` pins aren't checked | Check the spelling, and whether the content got as far as the code that reads it |
+| Answered *N* requests with your responses | info | These requests never reached a server: the content got your response. The evidence lists them | Compare with a run without the answer to see what changed |
+| *A response* matched no request | info | The content never made a request that matches one of your responses | Check the pattern against the Network tab, and whether the content got as far as making the request |
+
 ## From an experiment
 
 Only after **Run all** on the Experiments tab, or `scorm-lab experiment`. They compare each variant with the default run.

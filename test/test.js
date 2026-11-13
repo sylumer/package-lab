@@ -17,6 +17,7 @@ import { normaliseOptions, cliCommand } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
+import { pinPathProblem, matcher, answerFor, buildAnswer, pinPrefix, userAgentPin, lexicalDeclaration, pinFindings, parsePinFlag, parseAnswerFlag } from '../src/pins.js'
 import { STEPS, milestones, furthest, firstMissing, milestoneFinding, progress, runCounts } from '../src/milestones.js'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
@@ -77,6 +78,26 @@ fetch('data/config.json').then(function (r) { return r.text() }).then(function (
 const gated = fixture('gated', d => sub(d, 'lesson.js', /\nstart\(\)\s*$/, '\nif (window.startOK) start()\n'))
 const gatedFix = join(work, 'lesson-fixed.js')
 writeFileSync(gatedFix, readFileSync(join(work, 'gated', 'lesson.js'), 'utf8').replace('if (window.startOK) start()', 'start()'))
+
+// pinned: a mode flag the content sets itself (a pin holds it), a settings object, a frozen object, and the user agent.
+// lexical: the same flag declared with let, which a pin can't replace.
+const pinned = fixture('pinned', d => {
+  writeFileSync(join(d, 'boot.js'), `
+var previewMode = true
+var config = { mode: 'preview' }
+var locked = Object.freeze({ a: 1 })
+console.log('PINNED mode=' + config.mode + ' preview=' + previewMode + ' ua=' + navigator.userAgent)
+config.mode = 'set by the content'
+addEventListener('load', function () { if (!previewMode) scorm.start() })
+`)
+  sub(d, 'lesson.html', /<script/, '<script src="boot.js"></script><script')
+  sub(d, 'lesson.js', /scorm\.start\(\)/g, 'true')
+})
+const lexical = fixture('lexical', d => {
+  writeFileSync(join(d, 'boot.js'), "let previewMode = true\naddEventListener('load', function () { if (!previewMode) scorm.start() })\n")
+  sub(d, 'lesson.html', /<script/, '<script src="boot.js"></script><script')
+  sub(d, 'lesson.js', /scorm\.start\(\)/g, 'true')
+})
 
 // ---- Unit ----
 const files = unzip(readFileSync(good))
@@ -196,13 +217,19 @@ assert.deepEqual(verdict([]).sev, 'ok')
 // Launch options: defaults, validation, unknown fields, the CLI line.
 const dflt = normaliseOptions()
 assert.deepEqual(dflt, { expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10, profile: 'none', browser: 'chromium', viewport: null,
-  files: {}, pins: [], responses: [], storage: 'normal', trace: false }, 'options: defaults')
+  files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false }, 'options: defaults')
 assert.deepEqual(normaliseOptions({}), dflt); assert.notEqual(normaliseOptions().files, normaliseOptions().files, 'options: defaults are not shared')
 assert.deepEqual(normaliseOptions({ depth: '3', auto: '20', expose: '1.2', viewport: { width: 390, height: 844 } }), { ...dflt, depth: 3, auto: 20, expose: '1.2', viewport: { width: 390, height: 844 } })
 for (const [o, re] of [[{ nope: 1 }, /Unknown option: nope/], [{ nope: 1, other: 2 }, /Unknown options: nope, other/], [{ expose: 'x' }, /expose.*one of/], [{ depth: 6 }, /depth/], [{ depth: 1.5 }, /depth/],
   [{ depth: 'a' }, /depth/], [{ opener: 'yes' }, /opener/], [{ caught: 0 }, /caught/], [{ resume: null }, /resume/], [{ auto: -1 }, /auto/], [{ wait: 0 }, /wait/], [{ trace: 1 }, /trace/],
   [{ profile: '' }, /profile/], [{ browser: 'webkit' }, /browser/], [{ viewport: { width: 1 } }, /viewport/], [{ viewport: { width: 0, height: 5 } }, /viewport/], [{ files: [] }, /files/],
-  [{ files: { 'a.js': 1 } }, /files/], [{ pins: {} }, /pins/], [{ pins: [1] }, /pins/], [{ responses: 'x' }, /responses/], [{ storage: 3 }, /storage/], ['x', /object/]])
+  [{ files: { 'a.js': 1 } }, /files/], [{ pins: {} }, /pins/], [{ pins: [1] }, /pins/], [{ responses: 'x' }, /responses/],
+  [{ pins: [{ path: 'a b', value: 1 }] }, /pins.*path/], [{ pins: [{ path: 'a' }] }, /pins.*value/], [{ pins: [{ path: 'a', value: undefined }] }, /pins.*value/], [{ pins: [{ path: 'a', value: 1, frames: 'top' }] }, /frames/],
+  [{ pins: [{ path: 'a', value: 1, mode: 'watch' }] }, /mode/], [{ pins: [{ path: 'a', value: 1, nope: 1 }] }, /unknown field: nope/], [{ pins: [{ path: 'API', value: 1 }] }, /can’t pin API/],
+  [{ pins: [{ path: 'location.search', value: 'a' }] }, /launch parameters/], [{ pins: [{ path: 'navigator.language', value: 'a' }] }, /navigator\.userAgent/], [{ pins: [{ path: 'a.__proto__.b', value: 1 }] }, /pins/],
+  [{ responses: [{ body: 'x' }] }, /match/], [{ responses: [{ match: '/(/', body: 'x' }] }, /pattern/], [{ responses: [{ match: '/a/', status: 99 }] }, /status/], [{ responses: [{ match: 'a', body: 1 }] }, /body/],
+  [{ responses: [{ match: 'a', headers: { x: {} } }] }, /headers/], [{ responses: [{ match: 'a', bodyFile: 'x.json' }] }, /command line/], [{ responses: [{ match: 'a', nope: 1 }] }, /unknown field/],
+  [{ launchParams: 'a b' }, /launchParams/], [{ launchParams: 'a=1#x' }, /launchParams/], [{ launchParams: 1 }, /launchParams/], [{ storage: 3 }, /storage/], ['x', /object/]])
   assert.throws(() => normaliseOptions(o), re, 'options: ' + JSON.stringify(o))
 assert.throws(() => normaliseOptions({ constructor: 1 }), /Unknown option: constructor/)
 assert.throws(() => normaliseOptions(JSON.parse('{"__proto__":1}')), /Unknown option: __proto__/)
@@ -273,9 +300,62 @@ const pf1 = overrideProgressFinding({ milestones: ms(3), counts: {} }, { milesto
 assert.match(pf1.title, /got further: reached Initialised \(was Content shown\)/); assert.equal(pf1.sev, 'info'); assert.ok(pf1.evidence.length === 3)
 assert.equal(overrideProgressFinding({ milestones: ms(6), counts: {} }, { milestones: ms(3), counts: {} }).sev, 'warn', 'overlay: worse is a warning')
 assert.match(overrideProgressFinding({ milestones: ms(3), counts: {} }, { milestones: ms(3), counts: {} }).title, /no change/)
+// Pins and answers: validation shapes, matching, the probe prefix, findings, the command line's spellings.
+assert.deepEqual(normaliseOptions({ pins: [{ path: 'previewMode', value: false }, { path: 'config.mode', value: null, frames: 'all' }] }).pins,
+  [{ path: 'previewMode', value: false, frames: 'content', mode: 'force' }, { path: 'config.mode', value: null, frames: 'all', mode: 'force' }], 'options: pin defaults')
+assert.deepEqual(normaliseOptions({ responses: [{ match: '/api/*', method: 'post', body: '{}' }, { match: '/x/i', status: '404', headers: { A: 'b' } }].map(r => ({ ...r, status: r.status && +r.status })) }).responses,
+  [{ match: '/api/*', method: 'POST', status: 200, headers: {}, body: '{}' }, { match: '/x/i', status: 404, headers: { A: 'b' }, body: '' }], 'options: response defaults')
+assert.equal(normaliseOptions({ launchParams: '?a=1&b=2' }).launchParams, 'a=1&b=2', 'options: launchParams loses its ?')
+assert.equal(normaliseOptions({ pins: [{ path: 'navigator.userAgent', value: 'X' }] }).pins[0].path, 'navigator.userAgent')
+const again = normaliseOptions({ pins: [{ path: 'a', value: { b: [1] } }], responses: [{ match: 'a', body: 'x' }] }); assert.deepEqual(normaliseOptions(again), again, 'options: normalising twice changes nothing')
+assert.equal(pinPathProblem('config.mode'), ''); assert.match(pinPathProblem('1a'), /name/); assert.match(pinPathProblem('window'), /can’t pin/); assert.match(pinPathProblem('__labPins'), /can’t pin/)
+const wide = normaliseOptions({ pins: [{ path: 'x', value: 1 }] }).pins
+assert.equal(pinPrefix(wide), 'globalThis.__labPins = [{"path":"x","value":1,"frames":"content","mode":"force"}];\n'); assert.equal(pinPrefix([]), '')
+assert.equal(pinPrefix(normaliseOptions({ pins: [{ path: 'navigator.userAgent', value: 'U' }] }).pins), 'globalThis.__labPins = [];\n', 'pins: the user agent is not a probe pin')
+assert.equal(userAgentPin(normaliseOptions({ pins: [{ path: 'navigator.userAgent', value: 'U' }, { path: 'a', value: 1 }] }).pins), 'U'); assert.equal(userAgentPin(wide), undefined)
+assert.ok(matcher('/api/*')('https://h.test/api/x?y=1') && matcher('/api/player/config')('lab://run/api/player/config') && !matcher('/api/player/config')('lab://run/api/player/config2'), 'answer: glob against the path')
+assert.ok(matcher('*.json')('lab://run/pkg/data/a.json') && matcher('/a?c')('x://h/abc') && !matcher('/a?c')('x://h/abbc'), 'answer: * and ?')
+assert.ok(matcher('/\\.json$/')('lab://run/x/a.json') && matcher('/API/i')('lab://run/api/x') && !matcher('/^x$/')('lab://run/a'), 'answer: regex')
+assert.ok(matcher('https://h.test/a.b')('https://h.test/a.b') && !matcher('https://h.test/a.b')('https://h.test/aXb'), 'answer: a dot in a glob is a dot')
+assert.throws(() => matcher('/(/'))
+const rs = normaliseOptions({ responses: [{ match: '/api/*', method: 'POST', body: 'post' }, { match: '/api/*', body: 'any' }, { match: '*', body: 'all' }] }).responses
+assert.equal(answerFor(rs, 'lab://run/api/x', 'POST').index, 0); assert.equal(answerFor(rs, 'lab://run/api/x', 'GET').index, 1, 'answer: method and order'); assert.equal(answerFor(rs, 'lab://run/other', 'get').index, 2)
+assert.equal(answerFor(rs, 'lab://run/__lab/host.js', 'GET'), null, 'answer: SCORM Lab’s own pages are never answered'); assert.equal(answerFor([], 'x://y'), null)
+const ba = buildAnswer({ status: 201, headers: { 'X-A': 'b' }, body: '{"a":1}' })
+assert.equal(ba.status, 201); assert.equal(Buffer.from(ba.body, 'base64').toString(), '{"a":1}')
+assert.deepEqual(ba.headers, [{ name: 'X-A', value: 'b' }, { name: 'Content-Type', value: 'application/json' }, { name: 'Access-Control-Allow-Origin', value: '*' }], 'answer: type from the body, CORS opened')
+assert.equal(buildAnswer({ body: 'hi' }).headers[0].value, 'text/plain; charset=utf-8')
+assert.equal(buildAnswer({ headers: { 'content-type': 'x/y', 'access-control-allow-origin': 'a' }, body: '' }).headers.length, 2, 'answer: given headers are kept')
+assert.equal(lexicalDeclaration('var a\nlet previewMode = 1', 'previewMode'), 2); assert.equal(lexicalDeclaration('  let previewMode = 1', 'previewMode'), 0, 'pins: only column 0')
+assert.equal(lexicalDeclaration('const $x = 1', '$x'), 1); assert.equal(lexicalDeclaration('let previewModeTwo', 'previewMode'), 0); assert.equal(lexicalDeclaration(undefined, 'a'), 0)
+const pinOpts = normaliseOptions({ pins: [{ path: 'previewMode', value: false }, { path: 'config.mode', value: 'live' }, { path: 'nobody', value: 1 }, { path: 'navigator.userAgent', value: 'U' }, { path: 'locked.a', value: 1 }, { path: 'lex', value: 1 }],
+  responses: [{ match: '/api/*', body: '{}' }, { match: '/never', body: '' }] })
+const pinTrace = trace({ sources: { 'lab://run/pkg/boot.js': 'var a\nlet lex = 1' }, requests: [{ url: 'lab://run/api/x', method: 'GET', answered: true, answeredBy: 0 }, { url: 'lab://run/pkg/a.js', method: 'GET' }],
+  probe: [{ type: 'pin-write', path: 'previewMode', value: 'true', stack: ['lab://run/pkg/boot.js:7:5'] }, { type: 'pin-write', path: 'previewMode', value: 'true', stack: ['lab://run/pkg/boot.js:7:5'] },
+    { type: 'pin-read', path: 'config.mode', stack: [] }, { type: 'pin-failed', path: 'locked.a', error: 'TypeError: Cannot redefine property: a' }] })
+const pf2 = pinFindings(pinTrace, pinOpts), pt = t => pf2.find(f => t.test(f.title))
+assert.deepEqual(pt(/tried to change/).evidence, ['previewMode = true from boot.js:7:5'], 'pins: write finding, repeats folded'); assert.equal(pt(/tried to change/).sev, 'warn')
+assert.deepEqual(pt(/never read/).evidence, ['nobody = 1']); assert.equal(pt(/never read/).sev, 'info', 'pins: never read is a note, and neither the user agent nor a failed pin is listed')
+assert.match(pt(/Couldn’t pin locked\.a/).detail, /frozen/); assert.match(pt(/Couldn’t pin lex: .*let or const/).evidence[0], /boot\.js:2/); assert.match(pt(/Couldn’t pin lex/).fix, /file override/)
+assert.equal(pt(/Answered 1 request/).evidence[0], 'GET lab://run/api/x → 200'); assert.deepEqual(pt(/matched no request/).evidence, ['/never'])
+assert.deepEqual(pinFindings(trace(), {}), []); assert.deepEqual(pinFindings(trace(), normaliseOptions()), [], 'pins: none set, nothing said')
+assert.ok(runFindings(pinTrace, { kind: 'package', itemType: 'asset', options: pinOpts }).some(f => /tried to change a pinned value/.test(f.title)), 'pins: runFindings includes them')
+assert.ok(!runFindings(pinTrace, { kind: 'reference', options: pinOpts }).some(f => /pinned/.test(f.title)), 'pins: not for a reference')
+assert.deepEqual(parsePinFlag('previewMode=false'), { path: 'previewMode', value: false }); assert.deepEqual(parsePinFlag('a.b={"x":[1]}'), { path: 'a.b', value: { x: [1] } })
+assert.deepEqual(parsePinFlag('navigator.userAgent="X=Y"'), { path: 'navigator.userAgent', value: 'X=Y' })
+for (const bad of ['x', '=1', 'x=notjson', 'x=', true, undefined]) assert.throws(() => parsePinFlag(bad), /--pin/, 'pins: bad flag ' + bad)
+assert.deepEqual(parseAnswerFlag('/api/config=@c.json'), { match: '/api/config', file: 'c.json' }); assert.deepEqual(parseAnswerFlag('/api/config=200:{}'), { match: '/api/config', status: 200, body: '{}' })
+assert.deepEqual(parseAnswerFlag('/a?x=1=404:no: way'), { match: '/a?x=1', status: 404, body: 'no: way' }, 'answer flag: = in the pattern, : in the body'); assert.deepEqual(parseAnswerFlag('/a=200:'), { match: '/a', status: 200, body: '' })
+for (const bad of ['/a', '/a=x', '/a=20:{}', '=200:x', true]) assert.throws(() => parseAnswerFlag(bad), /--answer/, 'answer: bad flag ' + bad)
+assert.equal(cliCommand(normaliseOptions({ pins: [{ path: 'previewMode', value: false }, { path: 'navigator.userAgent', value: 'a b' }], responses: [{ match: '/api/*', status: 404, body: '{"a":1}' }], launchParams: 'a=1&b=2' })),
+  `scorm-lab run package.zip --pin previewMode=false --pin 'navigator.userAgent="a b"' --answer '/api/*=404:{"a":1}' --launch-params 'a=1&b=2'`, 'cliCommand: pins, answers, launch parameters')
+assert.equal(cliCommand(normaliseOptions({ pins: [{ path: 'x', value: 1, frames: 'all' }], responses: [{ match: 'a', headers: { A: 'b' } }] })), 'scorm-lab run package.zip --options options.json', 'cliCommand: what a flag can’t say goes to the options file')
+assert.throws(() => normaliseOptions({ responses: [1, 2, 3].map(i => ({ match: 'a' + i, body: 'x'.repeat(8 * 1024 ** 2) })) }), /more than 20 MB/, 'options: total response size cap')
+assert.match(pinFindings(trace({ requests: [{ url: 'lab://run/api/x', method: 'GET', answerFailed: 'bad header' }] }), normaliseOptions({ responses: [{ match: 'a' }] })).find(f => /Couldn’t answer 1 request/.test(f.title)).evidence[0], /bad header/)
 console.log('unit: ok')
 
 // ---- End to end ----
+const slow = process.argv.includes('--slow')   // the slower end-to-end checks: run at phase ends (see docs/developer-guide.md)
 if (!process.argv.includes('--unit')) {
   const root = new URL('..', import.meta.url).pathname, cli = join(root, 'bin', 'scorm-lab.js'), electron = join(root, 'node_modules', '.bin', 'electron')
   const node = (args, opts = {}) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', timeout: 120000, ...opts })
@@ -356,6 +436,54 @@ if (!process.argv.includes('--unit')) {
   assert.equal(node(['run', gated, '--override', 'a.js=' + join(work, 'nope.js')]).status, 2, 'override: missing local file')
   assert.equal(node(['run', gated, '--options-from', join(work, 'nope.json')]).status, 2, 'options-from: missing file')
   console.log('overrides: ok')
+
+  // Pins and answers: the hosted content asks its platform for /api/player/config and falls back to its own API without it.
+  const hOut = join(work, 'hosted-answered.json')
+  const hAns = run(hosted, '--answer', '/api/player/config=200:{}', '--pin', 'previewMode=false', '--out', hOut), hAnsT = titles(hAns)
+  assert.ok(!hAnsT.some(t => /set its own window.API/.test(t)), 'answer: no fallback, so no own API: ' + hAnsT)
+  assert.ok(calls(hAns).includes('LMSInitialize '), 'answer: the content reaches SCORM Lab’s LMS: ' + calls(hAns))
+  assert.ok(hAns.findings.some(f => /^Answered 1 request with your responses$/.test(f.title) && /api\/player\/config → 200/.test(f.evidence.join())), 'answer: finding: ' + hAnsT)
+  assert.ok(hAnsT.some(t => /tried to change a pinned value/.test(t) && /previewMode = false from boot\.js/.test(t)), 'pin: write finding points at boot.js: ' + hAnsT)
+  const hSaved = JSON.parse(readFileSync(hOut, 'utf8'))
+  assert.ok(hSaved.trace.requests.some(q => q.answered && /\/api\/player\/config$/.test(q.url) && q.status === 200), 'answer: the request is marked answered in the trace')
+  assert.deepEqual(hSaved.launch.options.responses, [{ match: '/api/player/config', status: 200, headers: {}, body: '{}' }], 'answer: saved with the run')
+  const bodyFile = join(work, 'cfg-body.txt'), optFile2 = join(work, 'answers.json'); writeFileSync(bodyFile, '{}')
+  if (slow) {
+    const hAgain = JSON.parse(node(['run', hosted, '--options-from', hOut, '--wait', '3', '--json']).stdout)
+    assert.ok(!titles(hAgain).some(t => /set its own window.API/.test(t)) && calls(hAgain).includes('LMSInitialize '), 'answer: --options-from reproduces it')
+    // An options file with bodyFile (read at the CLI, relative to the file) and a header, plus --answer @file for a response nothing asks for.
+    writeFileSync(optFile2, JSON.stringify({ responses: [{ match: '/api/player/config', bodyFile: 'cfg-body.txt', headers: { 'X-Test': '1' } }] }))
+    const viaFile = JSON.parse(node(['run', hosted, '--options', optFile2, '--answer', '/nothing/here=@' + bodyFile, '--wait', '3', '--json']).stdout)
+    assert.deepEqual(viaFile.launch.options.responses.map(r => r.body), ['{}', '{}'], 'answer: bodyFile and @file are read at the CLI and their content goes into the options')
+    assert.ok(viaFile.launch.options.responses.every(r => r.bodyFile === undefined) && viaFile.launch.options.responses[0].headers['X-Test'] === '1')
+    assert.ok(!titles(viaFile).some(t => /set its own window.API/.test(t)) && titles(viaFile).some(t => /^A response matched no request/.test(t) && /\/nothing\/here/.test(t)), 'answer: options file, and an unused response is said so: ' + titles(viaFile))
+  }
+  if (slow) {
+    const pOut = join(work, 'pinned-run.json')
+    const pRun = run(pinned, '--pin', 'previewMode=false', '--pin', 'config.mode="live"', '--pin', 'locked.a=2', '--pin', 'nobody=1', '--pin', 'navigator.userAgent="LabAgent/1"', '--launch-params', 'a=1&b=2', '--out', pOut), pT = titles(pRun)
+    assert.ok(calls(pRun).includes('LMSInitialize '), 'pin: previewMode held false, so the content started: ' + calls(pRun) + pT)
+    const pSaved = JSON.parse(readFileSync(pOut, 'utf8')), consoleText = pSaved.trace.console.map(c => c.text).join('\n')
+    assert.match(consoleText, /PINNED mode=live preview=false ua=LabAgent\/1/, 'pin: forced values, dotted path and user agent seen by the content: ' + consoleText)
+    assert.ok(pT.some(t => /tried to change a pinned value/.test(t) && /previewMode = true from boot\.js/.test(t) && /config\.mode = set by the content from boot\.js/.test(t)), 'pin: both writes reported: ' + pT)
+    assert.ok(pT.some(t => /Couldn’t pin locked\.a/.test(t)), 'pin: frozen object reported: ' + pT)
+    assert.ok(pT.some(t => /^Pinned value never read nobody = 1$/.test(t)), 'pin: never read, and only that one: ' + pT)
+    assert.ok(pSaved.trace.probe.some(p => p.type === 'pin-read' && p.path === 'previewMode'), 'pin: reads reported')
+    assert.ok(/[?&]a=1&b=2$/.test(pSaved.launch.url), 'launch parameters are on the launch address: ' + pSaved.launch.url)
+    assert.deepEqual(pSaved.launch.options.pins.map(x => x.path), ['previewMode', 'config.mode', 'locked.a', 'nobody', 'navigator.userAgent'], 'pin: saved with the run')
+  }
+  if (slow) {
+    const lx = run(lexical, '--pin', 'previewMode=false'), lxT = titles(lx)
+    assert.ok(lxT.some(t => /Couldn’t pin previewMode: the script declares it with let or const .*boot\.js:1/.test(t)), 'pin: let can’t be pinned: ' + lxT)
+    assert.ok(!lxT.some(t => /never read|SyntaxError/.test(t)) && !calls(lx).includes('LMSInitialize '), 'pin: the let page ran, and went on with its own value: ' + lxT)
+  }
+  assert.equal(node(['run', hosted, '--pin', 'previewMode']).status, 2, 'pin: needs a value'); assert.equal(node(['run', hosted, '--pin', 'previewMode=nope']).status, 2, 'pin: value must be JSON')
+  assert.equal(node(['run', hosted, '--pin', 'location.search="a"']).status, 2, 'pin: location is refused'); assert.equal(node(['run', hosted, '--answer', 'x']).status, 2, 'answer: bad spelling')
+  assert.equal(node(['run', hosted, '--answer', '/a=@' + join(work, 'nope.json')]).status, 2, 'answer: missing file'); assert.equal(node(['run', hosted, '--launch-params', 'a b']).status, 2, 'launch params: no spaces')
+  writeFileSync(optFile2, JSON.stringify({ responses: [{ match: 'a', body: 'x', bodyFile: 'cfg-body.txt' }] })); assert.match(node(['run', hosted, '--options', optFile2]).stderr, /both body and bodyFile/, 'answer: body and bodyFile')
+  writeFileSync(optFile2, JSON.stringify({ responses: [{ match: 'a', bodyFile: 'missing.txt' }] })); assert.equal(node(['run', hosted, '--options', optFile2]).status, 2, 'answer: missing bodyFile')
+  writeFileSync(optFile2, JSON.stringify({ responses: [{ match: 'a', bodyFile: '../cfg-body.txt' }] })); assert.match(node(['run', hosted, '--options', optFile2]).stderr, /must be inside the folder/, 'answer: bodyFile may not leave the options folder')
+  writeFileSync(optFile2, JSON.stringify({ responses: [{ match: 'a', bodyFile: bodyFile }] })); assert.match(node(['run', hosted, '--options', optFile2]).stderr, /must be inside the folder/, 'answer: bodyFile may not be absolute')
+  console.log('pins and answers: ok')
 
   // Experiments: the api preset on mismatch shows that offering both APIs, or 1.2, gets further.
   const exDir = join(work, 'experiment')
@@ -444,6 +572,10 @@ if (!process.argv.includes('--unit')) {
     assert.deepEqual((await invoke('override-set', { path: '__proto__', content: 'x' })).map(o => o.path), ['__proto__'], 'web: __proto__ is just a path')
     await assert.rejects(invoke('file', { path: 'constructor' }), /isn’t in the package/, 'web: constructor is not a file')
     await invoke('override-revert', {})
+    const po = await invoke('options', { item: 1, pins: [{ path: 'previewMode', value: false }], responses: [{ match: '/api/*', status: 404, body: '{}' }], launchParams: 'a=1' })
+    assert.equal(po.command, "scorm-lab run gated.zip --item 1 --pin previewMode=false --answer '/api/*=404:{}' --launch-params a=1", 'web: options handler builds the pin and answer flags')
+    await assert.rejects(invoke('options', { pins: [{ path: 'location.search', value: 'a' }] }), /launch parameters/, 'web: a bad pin is refused')
+    await assert.rejects(invoke('options', { responses: [{ match: 'a', bodyFile: '/etc/passwd' }] }), /command line/, 'web: bodyFile is not read over HTTP')
     let ov = await invoke('override-set', { path: 'img/logo.png', base64: 'AAECAw==' })
     assert.deepEqual(ov, [{ path: 'img/logo.png', size: 4, binary: true, added: true }], 'web: a binary replacement')
     assert.equal((await invoke('file', { path: 'img/logo.png' })).content, null, 'web: binary files have no text')
