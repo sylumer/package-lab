@@ -13,3 +13,4 @@ For people changing it:
 
 - [Developer guide](developer-guide.md): architecture, each part in turn, data formats, adding findings, tests, packaging.
 - [Design](../DESIGN.md): the approach and the roadmap.
+- [Build plan](plan.md): the next stage, written to be run by an orchestrating session and subagents; progress in [plan-status.md](plan-status.md).
