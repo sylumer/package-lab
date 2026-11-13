@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'API', 'Lookups', 'Network', 'Scripts', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', ...(lab.web ? ['Live'] : [])]
 
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
@@ -128,6 +128,77 @@ const VIEWS = {
   },
 }
 
+// ---- Files: look at any file of the package, change it for the next run (an override), and see what changed ----
+st.files = { list: null, open: null, draft: '', diffs: {}, note: '' }
+const overrides = () => st.pkg?.overrides ?? []
+const setOverrides = list => { if (st.pkg) st.pkg.overrides = list; st.files.list = null; render(); showOptions() }
+const openFile = path => act(async () => {
+  const f = await lab.invoke('file', { path }); st.files.open = f; st.files.draft = f.content ?? ''; st.files.note = ''; render()
+})
+const saveOverride = body => act(async () => {
+  const f = st.files.open
+  st.files.diffs = {}
+  setOverrides(await lab.invoke('override-set', { path: f.path, ...body }))
+  await openFile(f.path); st.files.note = 'Saved as an override. The next launch uses it.'; render()
+})
+const revert = path => act(async () => {
+  setOverrides(await lab.invoke('override-revert', path === undefined ? {} : { path })); if (path === undefined) st.files.diffs = {}; else delete st.files.diffs[path]
+  if (st.files.open && (path === undefined || path === st.files.open.path)) await openFile(st.files.open.path)
+})
+const readBase64 = file => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(',')[1] ?? ''); r.onerror = () => reject(new Error('Couldn’t read that file.')); r.readAsDataURL(file) })
+const pick = h('input', { type: 'file', hidden: true })
+pick.onchange = () => { const f = pick.files[0]; pick.value = ''; if (f) readBase64(f).then(b => saveOverride({ base64: b })).catch(e => say(e.message)) }
+function editor() {
+  const f = st.files.open
+  if (!f) return h('p', { class: 'muted' }, 'Click a file to see it.')
+  const out = [h('h3', { class: 'section' }, f.path), h('p', { class: 'muted small' }, `${f.size} bytes${f.overridden ? ' · changed for the next run' : ''}`)]
+  if (f.text && !f.tooBig) {
+    const gutter = h('pre', { class: 'gutter', 'aria-hidden': 'true' }), area = h('textarea', { class: 'code', spellcheck: 'false', wrap: 'off', 'aria-label': `Contents of ${f.path}` })
+    area.value = st.files.draft
+    const numbers = () => { gutter.textContent = Array.from({ length: area.value.split('\n').length }, (_, i) => i + 1).join('\n') }
+    area.oninput = () => { st.files.draft = area.value; numbers() }
+    area.onscroll = () => { gutter.scrollTop = area.scrollTop }
+    numbers()
+    out.push(h('div', { class: 'editor' }, gutter, area),
+      h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => saveOverride({ content: f.crlf ? area.value.replace(/\r?\n/g, '\r\n') : area.value }) }, 'Save as override'),
+        h('button', { type: 'button', class: 'secondary', disabled: !f.overridden, onclick: () => revert(f.path) }, 'Revert'),
+        h('button', { type: 'button', class: 'secondary', onclick: () => pick.click() }, 'Replace from a file…')))
+  } else out.push(h('p', { class: 'muted' }, f.tooBig ? 'This file is too large to edit here. You can replace it with a file.' : 'This is not a text file, so it can’t be edited here. You can replace it with a file.'),
+    h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => pick.click() }, 'Replace from a file…'), h('button', { type: 'button', class: 'secondary', disabled: !f.overridden, onclick: () => revert(f.path) }, 'Revert')))
+  if (st.files.note) out.push(h('p', { class: 'muted small' }, st.files.note))
+  return out
+}
+function diffBlock(path) {
+  const d = st.files.diffs[path]
+  if (!d) return null
+  if (d.binary) return h('p', { class: 'muted small' }, `Replaced file: ${d.before ?? 'new'} → ${d.after} bytes. Binary files have no line diff.`)
+  return h('pre', { class: 'diff' }, d.diff.split('\n').map(l => h('div', { class: l[0] === '+' ? 'add' : l[0] === '-' ? 'del' : l[0] === '@' ? 'hunk' : null }, l || ' ')))
+}
+VIEWS.Files = () => {
+  if (!st.pkg) return h('p', { class: 'muted' }, 'Open a package.')
+  const x = st.files
+  if (!x.list) { x.list = []; lab.invoke('files').then(l => { x.list = l; render() }) }
+  const q = $('filter').value.trim().toLowerCase(), shown = x.list.filter(f => !q || f.path.toLowerCase().includes(q)), tree = []
+  let dirs = []
+  for (const f of shown) {
+    const parts = f.path.split('/'), dir = parts.slice(0, -1)
+    if (!q) { let i = 0; while (i < dir.length && dirs[i] === dir[i]) i++; for (; i < dir.length; i++) tree.push(h('li', { class: 'dir' }, '  '.repeat(i) + dir[i] + '/')); dirs = dir }
+    tree.push(h('li', { class: f.path === x.open?.path ? 'sel' : null }, h('button', { type: 'button', class: 'link', onclick: () => openFile(f.path) }, (q ? '' : '  '.repeat(dir.length)) + (q ? f.path : parts.at(-1))),
+      f.overridden && h('span', { class: 'tag' }, 'changed'), !f.text && h('span', { class: 'muted small' }, ' binary')))
+  }
+  const list = overrides()
+  return [h('div', { class: 'files' },
+    h('ol', { class: 'tree' }, tree.length ? tree : h('li', { class: 'muted' }, x.list.length ? 'No file matches the filter.' : 'Loading…')),
+    h('div', { class: 'file' }, editor())),
+    h('h3', { class: 'section' }, 'Changed files'),
+    list.length ? [h('p', { class: 'muted small' }, 'The next launch uses these, and the package on disk stays as it is.'),
+      h('ul', { class: 'overrides' }, list.map(o => h('li', {}, h('b', {}, o.path), ` ${o.binary ? 'replaced file' : 'changed text'}, ${o.size} bytes${o.added ? ', not in the package' : ''} `,
+        !o.binary && h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => { if (x.diffs[o.path]) delete x.diffs[o.path]; else x.diffs[o.path] = await lab.invoke('override-diff', { path: o.path }); render() }) }, x.diffs[o.path] ? 'Hide changes' : 'Show changes'),
+        o.binary && h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => { x.diffs[o.path] = await lab.invoke('override-diff', { path: o.path }); render() }) }, 'Size'),
+        h('button', { type: 'button', class: 'secondary', onclick: () => revert(o.path) }, 'Revert'), diffBlock(o.path)))),
+      h('button', { type: 'button', class: 'secondary', onclick: () => revert() }, 'Revert all')] : h('p', { class: 'muted' }, 'None. Click a file, change it and choose Save as override, then Launch.'), pick]
+}
+
 // ---- Experiments: one launch run several ways, with a table that fills as each run finishes ----
 st.exp = { preset: 'standard', presets: null, names: [], rows: [], findings: [], busy: false, note: '' }
 VIEWS.Experiments = () => {
@@ -178,8 +249,9 @@ VIEWS.Live = () => st.running ? livePanel : h('p', { class: 'muted' }, 'Launch a
 
 function render() {
   if (lab.web) liveWatch(st.tab === 'Live' && !!st.running)
-  $('tabs').replaceChildren(...TABS.map(t => h('button', { type: 'button', role: 'tab', 'aria-selected': String(t === st.tab), onclick: () => { st.tab = t; render() } }, t)))
-  $('view').replaceChildren(...[VIEWS[st.tab]()].flat(Infinity))
+  $('tabs').replaceChildren(...TABS.map(t => h('button', { type: 'button', role: 'tab', 'aria-selected': String(t === st.tab), onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))
+  // Not while the file editor has focus: a redraw (a run or state event) would lose the cursor and scroll position.
+  if (!(st.tab === 'Files' && document.activeElement?.classList.contains('code'))) $('view').replaceChildren(...[VIEWS[st.tab]()].flat(Infinity))
   $('runs').replaceChildren(...st.runs.map(r => h('li', { class: r.id === st.sel ? 'sel' : null, onclick: () => { st.sel = r.id; render() } },
     h('label', { title: 'Reference: the run that works' }, h('input', { type: 'radio', name: 'ref', checked: st.ref === r.id, onclick: e => { e.stopPropagation(); st.ref = r.id; render() } }), h('span', { class: 'tag' }, 'R')),
     h('label', { title: 'The run that fails' }, h('input', { type: 'radio', name: 'fail', checked: st.fail === r.id, onclick: e => { e.stopPropagation(); st.fail = r.id; render() } }), h('span', { class: 'tag' }, 'F')),
@@ -192,7 +264,7 @@ async function act(fn, busy) {
 }
 function showPackage(p) {
   if (!p) return
-  st.pkg = p; st.sel = null; st.boots = {}
+  st.pkg = p; st.sel = null; st.boots = {}; st.files = { list: null, open: null, draft: '', diffs: {}, note: '' }
   $('pkg-name').textContent = p.name
   $('item').replaceChildren(...p.items.map(i => h('option', { value: i.index }, `${'· '.repeat(i.depth)}${i.title} (${i.type || '?'})`)))
   const firstSco = p.items.find(i => i.type === 'sco'); if (firstSco) $('item').value = firstSco.index

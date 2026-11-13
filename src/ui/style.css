@@ -56,3 +56,17 @@ dialog ul { list-style: none; padding: 0; max-height: 60vh; overflow: auto; } di
 dialog h2 { font-size: 15px; margin: 0 0 4px; }
 @media (max-width: 800px) { .main { flex-direction: column; } aside { width: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 30vh; } }
 tr.click { cursor: pointer; } tr.click:hover { background: var(--code); }
+
+/* Files tab */
+.files { display: flex; gap: 12px; align-items: flex-start; }
+.tree { list-style: none; margin: 6px 0; padding: 0; width: 260px; flex: none; max-height: 60vh; overflow: auto; font-size: 12px; white-space: pre; }
+.tree li.sel { background: var(--code); } .tree li.dir { color: var(--muted); }
+.tree button.link { font: inherit; white-space: pre; }
+.file { flex: 1; min-width: 0; }
+.editor { display: flex; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); height: 50vh; }
+.gutter { margin: 0; padding: 8px 6px; text-align: right; color: var(--muted); background: var(--code); border-radius: 6px 0 0 6px; overflow: hidden; white-space: pre; line-height: 1.5; min-width: 3ch; }
+textarea.code { flex: 1; border: 0; padding: 8px; background: transparent; color: var(--fg); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; overflow: auto; resize: none; }
+.overrides { padding-left: 18px; font-size: 12px; } .overrides li { margin: 6px 0; }
+.diff { padding: 6px 0; } .diff div { padding: 0 8px; white-space: pre-wrap; }
+.diff .add { background: color-mix(in srgb, var(--ok, #2a8a3e) 20%, transparent); } .diff .del { background: color-mix(in srgb, var(--err) 20%, transparent); } .diff .hunk { color: var(--muted); }
+@media (max-width: 800px) { .files { flex-direction: column; } .tree { width: auto; max-height: 30vh; } }

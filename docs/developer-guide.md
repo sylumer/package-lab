@@ -51,6 +51,8 @@ src/
     scorm-runtime.js    SCORM 1.2 and 2004 run-time (from toolbox)
     probe.js            Injected into every frame: API lookups, assignments, wrapped calls, DOM snapshots
   zip.js, xml.js        Readers
+  overlay.js            Overrides: the file set a run is served from, and the findings about changed files
+  textdiff.js           A small LCS line diff (diffLines, unified)
   milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
   options.js            Launch options: normaliseOptions (the only place defaults live), cliCommand
   analyze.js            Manifest and script scan
@@ -129,7 +131,7 @@ and a line in the guides. The shape:
 ```
 { expose: 'manifest'|'both'|'1.2'|'2004'|'none', depth: 0–5, opener, resume, caught (bool), auto (s, 0 = until stopped),
   wait (s, headless runs), profile: 'none', browser: 'chromium', viewport: null | { width, height },
-  files: { path: text }, pins: [], responses: [], storage: 'normal', trace: false }
+  files: { path: { content } | { base64 } }, pins: [], responses: [], storage: 'normal', trace: false }
 ```
 
 `launchItem` takes `{ item, cmi?, ...options }`, normalises the options and saves them in `launch.options` (the older
@@ -147,6 +149,11 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `launch` | `{ item, cmi?, …launch options }` (flat; unknown options throw) | `true` |
 | `options` | `{ item?, …launch options }` | `{ options, command }`: the normalised options and the equivalent `scorm-lab run` line |
 | `reference` | `{ url, caught, auto }` | `true` |
+| `files` | — | Every file of the package (and added override paths): `[{ path, size, text, overridden }]` |
+| `file` | `{ path }` | `{ path, size, text, tooBig, overridden, content, original }`. `content` is the text (the override if there is one), `null` for binary or over 1 MB; `original` the unchanged text when overridden |
+| `override-set` | `{ path, content }` or `{ path, base64 }` | The overrides list. Setting a file to exactly its original removes the override |
+| `override-revert` | `{ path? }` | The overrides list; no path reverts all |
+| `override-diff` | `{ path }` | `{ binary: false, diff (unified), added }` or `{ binary: true, before, after }` |
 | `experiment-presets` | — | The preset names |
 | `experiment-start` | `{ item, preset? (default `standard`), variants?, …launch options (the base) }` | The variant names, at once; progress comes as `experiment` events. Throws if a run or experiment is under way |
 | `experiment-stop` | — | `true`: stops the run in progress and the rest of the experiment |
@@ -158,7 +165,7 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `source` | `{ run, url }` | A script's source from a run |
 | `live-input` | an input event | `true` if delivered |
 
-Package info is `{ name, loaded, analysis, findings, items: [{ index, title, type, depth, href }] }`. A run summary is
+Package info is `{ name, loaded, analysis, overrides: [{ path, size, binary, added }], findings, items: [{ index, title, type, depth, href }] }`. A run summary is
 the run without script sources and raw coverage, with `boot.nodes` already matched against the run (`bootRun`).
 
 ## Serving the package: lab://
@@ -270,6 +277,14 @@ session it enables:
 
 `bootRun(boot, trace)` adds `run: { status, failed, pending, t }` to each node, from the run's requests. It matches
 `lab://run/pkg/<path>`, and `lab://run/<path>` for server paths.
+
+## Overrides
+
+`options.files` replaces or adds files for one run. The session's overrides live in `pkg.overrides` (`{ path: { content } | { base64 } }`, reset when a package is opened); the Files tab's handlers change them. `launchItem` uses `options.files` if the caller gave it and otherwise `pkg.overrides`; the headless run and the CLI always give it. A run is served from `overlayFiles(pkg.files, o.files)` (`served` in `main.js`, which `serve()` reads, so the original `pkg.files` is never touched), and its boot graph is recomputed for that file set and not cached. The static analysis of the package (`pkg.analysis`) stays that of the original.
+
+All paths are checked by `packagePath` in `options.js` (relative, `/` only, no `..`, no empty segment): in `normaliseOptions`, and again in each handler before it looks at `pkg.files`. Nothing is ever read from or written to disk from an override path; the web interface sends replacement files as base64 inside the JSON body (limit 20 MB).
+
+`src/overlay.js` is pure: `isText`, `entryFor(buffer)` (text as `{ content }`, otherwise `{ base64 }`), `overlayFiles`, `overrideList`, `overrideFinding(files)` (the "This run used N changed files" note, `null` for none) and `overrideProgressFinding(before, after)` (uses `progress()` from milestones). `withProgress` in `main.js` puts the notes straight after the milestone finding; the comparison runs only when an earlier run of the same item (same package name and item index) had no overrides, so it exists in the desktop and web interfaces but not in headless runs, and it is not rebuilt when a saved run is reopened (the override note is, from `launch.options.files`). `src/textdiff.js` is a line diff by longest common subsequence (common start and end trimmed first; over four million cells the middle is shown as replaced): `diffLines(a, b)` and `unified(a, b, context = 3)`.
 
 ## Findings
 
@@ -449,6 +464,8 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
 }
 ```
 
+`launch.options.files` holds the content of every changed file, so a run can be repeated from the saved run alone (`--options-from`).
+
 A frame is `{ fn, url, line, col }`. Older runs without `format` (from before version 1) still open.
 
 ### Boot graph
@@ -482,6 +499,7 @@ npm test
 | `hosted` | Asks `/api/player/config`, falls back to its own `window.API` | Server path, mode switch, own API (static and run) |
 | `blank` | Empty launch page; script referenced as `js/app.js`, file `js/App.js`; missing `vendor/missing.js` | Capitals, missing file, empty page; blank-page finding with not-found evidence |
 | `order` | Inline script uses `scorm` before the deferred `scorm.js` | Load-order error |
+| `gated` | `lesson.js` calls `start()` only if `window.startOK` | No API calls; with `lesson.js` overridden (CLI, and over the web handlers) the API is used, the run got further and says so |
 | `loader` | Loading screen; `data/config.json` with a trailing comma; `js/next.js` loaded only after the config parses | Invalid JSON; stuck on loading screen; code that loads next never ran |
 
 The end-to-end part covers:

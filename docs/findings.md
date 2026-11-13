@@ -125,6 +125,16 @@ These appear only when the content called the API.
 | The content never set exit | info | Without `suspend`, many LMSs start a new attempt next time | |
 | The content never reported completion | info | | |
 
+## From a run: changed files
+
+Added to a run that used changed files (overrides), after the milestones note. See
+[Changing files](user-guide.md#changing-files-and-running-again).
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| This run used *N* changed files: *names* | info | Files were replaced inside SCORM Lab for this run, so the findings describe the changed copy. The package on disk is unchanged | Run again without the changes to see the original |
+| Compared with the run before the changes: got further / got less far / no change … | info (warning if it got less far) | Only in the desktop and web interfaces, when the same item has an earlier run in this session without changed files. Says whether the change helped, step by step | If it got further, make the same change in the course's source and publish again. If it got less far, revert the change |
+
 ## From an experiment
 
 Only after **Run all** on the Experiments tab, or `scorm-lab experiment`. They compare each variant with the default run.

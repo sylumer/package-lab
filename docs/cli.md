@@ -93,6 +93,7 @@ Lists each launchable item: its number, title (indented by depth), type, identif
 scorm-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth n] [--window]
                          [--resume-from run.json] [--wait seconds] [--out run.json] [--live folder]
                          [--no-caught] [--show] [--json] [--strict] [--options options.json]
+                         [--options-from run.json] [--override path=file …]
 ```
 
 Launches the item in a hidden browser, with SCORM Lab's test LMS. It lets the item run for `--wait` seconds (default
@@ -108,6 +109,8 @@ app.
 | `--resume-from` | none | Starts with the data model a previous run left: tests resuming |
 | `--wait` | `10` | Seconds to let it run |
 | `--options` | none | A JSON file of launch options, for anything a flag can't express (see below). A flag overrides the same option in the file |
+| `--options-from` | none | Takes the launch options a saved run recorded (`launch.options`), changed files included, to run it again. `--options` and the flags override it |
+| `--override` | none | `<path>=<local file>`: runs with a changed copy of a file of the package (see [Changing files](#changing-files-and-running-again)). Repeat it for more files |
 | `--out` | none | Keeps the full run (scripts, requests, coverage, sources). Open it in the desktop app with **Open saved…**, or pass it to `report` or `--resume-from` |
 | `--live` | none | See [Live runs](#live-runs) |
 | `--no-caught` | off | Don't record errors the content catches |
@@ -123,6 +126,28 @@ missing options get their defaults. An unknown option or a bad value stops the r
 ```
 
 The options the run used are saved in the run's `launch.options`.
+
+#### Changing files and running again
+
+`--override js/app.js=fixed-app.js` runs the package as if `js/app.js` held the contents of `fixed-app.js`. The ZIP and
+the local file are not changed. The path is relative to the package root, with `/` between folders; `..`, a leading `/`
+and `\` are refused (exit status 2). A path that isn't in the package adds a file. A file that is valid UTF-8 text is
+kept as text; any other file is kept as base64. The same files can go in an options file:
+
+```json
+{ "files": { "js/app.js": { "content": "…" }, "img/logo.png": { "base64": "iVBOR…" } } }
+```
+
+The run's findings start with "This run used *N* changed files", and `launch.options.files` in the saved run holds the
+content, so the run can be repeated from the run alone:
+
+```bash
+scorm-lab run course.zip --override js/app.js=fixed-app.js --out changed.json
+scorm-lab run course.zip --options-from changed.json     # the same changes again
+```
+
+To see whether a change helped, compare `furthest` in the two `run --json` outputs (with and without `--override`), or
+use an [experiment](#experiment). The desktop and web interfaces compare for you.
 
 `milestones` lists the ten steps of the SCORM path, each reached or not (see [Milestones](user-guide.md#milestones));
 `furthest` is the id of the last one reached, or `null`. The text output adds a **Milestones** line with a tick or a

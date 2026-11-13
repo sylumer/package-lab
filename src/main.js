@@ -18,9 +18,11 @@ import { Recorder } from './recorder.js'
 import { compare } from './diff.js'
 import { staticFindings, runFindings, launchFindings, compareFindings, sortFindings } from './rules.js'
 import { bootGraph, bootRun } from './bootpath.js'
-import { milestones, milestoneFinding } from './milestones.js'
+import { milestones, milestoneFinding, runCounts } from './milestones.js'
 import { startWeb } from './web.js'
-import { normaliseOptions, cliCommand } from './options.js'
+import { normaliseOptions, cliCommand, packagePath } from './options.js'
+import { overlayFiles, overrideList, overrideFinding, overrideProgressFinding, entryBuffer, isText } from './overlay.js'
+import { unified } from './textdiff.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -48,6 +50,7 @@ const MIME = { html: 'text/html', htm: 'text/html', js: 'text/javascript', mjs: 
 const mime = name => (MIME[extname(name).slice(1).toLowerCase()] ?? 'application/octet-stream') + (/^(html?|js|mjs|css|json|xml|svg|txt|vtt)$/i.test(extname(name).slice(1)) ? '; charset=utf-8' : '')
 
 let ui = null, web = null, pkg = null, config = {}, active = null, nextId = 1
+let served = null   // the files the running content is served from: the package's, with any overrides on top
 const runs = new Map()
 const runsDir = () => { const d = join(app.getPath('userData'), 'runs'); mkdirSync(d, { recursive: true }); return d }
 
@@ -69,7 +72,7 @@ function serve(req) {
     if (HOST_FILES.has(name)) return new Response(readFileSync(new URL('./host/' + name, import.meta.url)), { headers: { ...headers, 'Content-Type': mime(name) } })
   }
   if (path.startsWith('/pkg/') && pkg) {
-    const p = path.slice(5), buf = pkg.files.get(p) ?? (p === '' || p.endsWith('/') ? pkg.files.get(p + 'index.html') : undefined)
+    const p = path.slice(5), files = served ?? pkg.files, buf = files.get(p) ?? (p === '' || p.endsWith('/') ? files.get(p + 'index.html') : undefined)
     if (buf) {
       headers['Content-Type'] = mime(p); headers['Accept-Ranges'] = 'bytes'
       const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('Range') || '')
@@ -86,21 +89,31 @@ function serve(req) {
 
 // ---- Runs ----
 // What the interfaces get for a run: everything but the script sources and raw coverage, which can be large.
-const summary = r => ({ id: r.id, label: r.label, kind: r.kind, launch: r.launch, findings: r.findings, milestones: r.milestones, file: r.file,
+// Changed files go to the interfaces as paths and sizes only.
+const slim = l => l?.options?.files && { ...l, options: { ...l.options, files: Object.fromEntries(Object.entries(l.options.files).map(([p, e]) => [p, { size: entryBuffer(e).length }])) } }
+const summary = r => ({ id: r.id, label: r.label, kind: r.kind, launch: slim(r.launch) ?? r.launch, findings: r.findings, milestones: r.milestones, file: r.file,
   boot: r.boot && { ...r.boot, nodes: bootRun(r.boot, r.trace) },
   trace: { ...r.trace, sources: undefined, coverage: undefined, coveredScripts: r.trace.coverage?.length ?? 0 } })
 
 // Milestones (package runs only) and the findings with the "Got as far as" note first.
-function withProgress(kind, trace, boot, findings) {
+// A run that used overrides also gets a note saying so, and, if there is an earlier run of the item without them, whether the change helped.
+function withProgress(kind, trace, boot, findings, launch, before) {
   if (kind !== 'package') return { findings: sortFindings(findings), milestones: null }
-  const ms = milestones(trace, boot)
-  return { findings: [milestoneFinding(ms), ...sortFindings(findings)], milestones: ms }
+  const ms = milestones(trace, boot), over = overrideFinding(launch?.options?.files)
+  const helped = over && before && overrideProgressFinding(before, { milestones: ms, counts: runCounts(trace) })
+  return { findings: [milestoneFinding(ms), ...(over ? [over] : []), ...(helped ? [helped] : []), ...sortFindings(findings)], milestones: ms }
+}
+// The latest earlier run of the same item of this package that used no overrides.
+function runBefore(launch) {
+  if (!Object.keys(launch?.options?.files ?? {}).length) return null
+  const r = [...runs.values()].reverse().find(r => r.kind === 'package' && r.package === pkg?.name && r.launch?.itemIndex === launch.itemIndex && r.milestones && !Object.keys(r.launch.options?.files ?? {}).length)
+  return r && { milestones: r.milestones, counts: runCounts(r.trace) }
 }
 
 function addRun(kind, label, launch, trace, boot) {
   const id = nextId++
   const { findings, milestones } = withProgress(kind, trace, boot, [...launchFindings(trace, boot), ...runFindings(trace, { kind, ...launch }),
-    ...(kind === 'package' ? [...staticFindings(pkg?.analysis), ...(boot?.risks ?? [])] : [])])
+    ...(kind === 'package' ? [...staticFindings(pkg?.analysis), ...(boot?.risks ?? [])] : [])], launch, runBefore(launch))
   const run = { id, kind, label, launch, trace, findings, milestones, file: '', boot, package: pkg && kind === 'package' ? pkg.name : null }
   if (!JOB) {
     const file = join(runsDir(), `${new Date().toISOString().replace(/[:.]/g, '-')}-${label.replace(/[^\w.-]+/g, '_').slice(0, 60)}.json`)
@@ -125,8 +138,9 @@ function watchPopups(wc, extra, caught, wins) {
   })
 }
 
-async function begin({ kind, label, url, launch, partition, caught, boot, auto }) {
+async function begin({ kind, label, url, launch, partition, caught, boot, auto, files }) {
   await finish()
+  served = files ?? null   // only now: the previous run may have been using the old set
   const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
   const rec = new Recorder(win.webContents, { label, caught }), extra = [], wins = [win]
@@ -225,7 +239,8 @@ const live = {
 function loadPackage(path) { return loadPackageData(basename(path), readFileSync(path), path) }
 function loadPackageData(name, buf, path = '') {
   const files = unzip(buf), analysis = analyze(files)
-  pkg = { name, path, files, analysis, lastCmi: null, boots: new Map(), loaded: Date.now() }
+  served = null
+  pkg = { name, path, files, analysis, lastCmi: null, boots: new Map(), overrides: Object.create(null), loaded: Date.now() }
   const info = pkgInfo()
   emit('package', info)
   return info
@@ -234,11 +249,12 @@ function loadPackageData(name, buf, path = '') {
 function pkgInfo() {
   if (!pkg) return null
   const m = pkg.analysis.manifest, first = m?.items.find(i => i.type === 'sco' && i.res?.path) ?? m?.items.find(i => i.res?.path)
-  return { name: pkg.name, loaded: pkg.loaded, analysis: pkg.analysis, findings: sortFindings([...staticFindings(pkg.analysis), ...(first ? bootFor(first.res.path).risks : [])]),
+  return { name: pkg.name, loaded: pkg.loaded, analysis: pkg.analysis, overrides: overrideList(pkg.files, pkg.overrides), findings: sortFindings([...staticFindings(pkg.analysis), ...(first ? bootFor(first.res.path).risks : [])]),
     items: (m?.items ?? []).filter(i => i.res).map(i => ({ index: m.items.indexOf(i), title: i.title || i.id, type: i.type, depth: i.depth, href: i.res.path ?? i.res.href })) }
 }
 // The boot graph of a launch page, worked out once per package.
-function bootFor(path) {
+function bootFor(path, files = pkg.files) {
+  if (files !== pkg.files) return bootGraph(files, path)   // with overrides: worked out again for this run
   if (!pkg.boots.has(path)) pkg.boots.set(path, bootGraph(pkg.files, path))
   return pkg.boots.get(path)
 }
@@ -246,10 +262,11 @@ function bootFor(path) {
 // o: { item, cmi?, ...launch options } (see options.js). Unknown options throw.
 async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
   if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
-  const o = normaliseOptions(rest)
+  const o = normaliseOptions({ ...rest, files: rest.files ?? pkg?.overrides })   // no files given: the session's overrides
   const m = pkg.analysis.manifest, item = m.items[itemIndex]
   if (!item?.res) throw new Error('That item has nothing to launch.')
   const res = item.res
+  const files = overlayFiles(pkg.files, o.files)
   let url = res.path ? 'lab://run/pkg/' + res.path.split('/').map(encodeURIComponent).join('/') + res.query : res.href
   const params = item.params.replace(/^[?&]/, '')
   if (params) url += (url.includes('?') ? '&' : '?') + params
@@ -260,7 +277,7 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
       launchData: item.launchData, mastery: item.mastery, maxTime: item.maxTime, timeLimitAction: item.timeLimitAction, completionThreshold: item.completionThreshold } }
   const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o }
   await begin({ kind: 'package', label: `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}`,
-    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path) : null, auto: o.auto })
+    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files })
   return true
 }
 
@@ -269,7 +286,7 @@ function readRun(file) {
   if (!d.trace) throw new Error(`${basename(file)} isn’t a SCORM Lab run.`)
   const id = nextId++
   const run = { id, kind: d.kind, label: (d.label ?? basename(file)) + ' (saved)', launch: d.launch, trace: d.trace, file, boot: d.boot, package: d.package,
-    ...withProgress(d.kind, d.trace, d.boot, [...launchFindings(d.trace, d.boot), ...runFindings(d.trace, { kind: d.kind, ...d.launch }), ...(d.boot?.risks ?? [])]) }
+    ...withProgress(d.kind, d.trace, d.boot, [...launchFindings(d.trace, d.boot), ...runFindings(d.trace, { kind: d.kind, ...d.launch }), ...(d.boot?.risks ?? [])], d.launch) }
   runs.set(id, run)
   return summary(run)
 }
@@ -278,6 +295,7 @@ function readRun(file) {
 // Progress goes out as 'experiment' events: { state: 'start', names } · { state: 'result', index, row } · { state: 'done', rows, findings } · { state: 'error', message }.
 let experiment = null
 async function experimentStart({ item, preset = 'standard', variants, ...rest }) {
+  rest = { ...rest, files: rest.files ?? pkg?.overrides }
   if (experiment || active) throw new Error('Something is already running. Stop it first.')
   if (!variants && !Object.hasOwn(PRESETS, preset)) throw new Error(`No preset “${preset}”. Presets: ${Object.keys(PRESETS).join(', ')}.`)
   const plan = planVariants({ base: rest, variants: variants ?? PRESETS[preset], dedupe: !variants }), job = experiment = { stop: false }, results = [], failed = new Map()
@@ -306,6 +324,15 @@ async function experimentStart({ item, preset = 'standard', variants, ...rest })
   return plan.map(p => p.name)
 }
 
+// The override for a path, if there is one of its own (not something inherited like “constructor”).
+const override = path => Object.hasOwn(pkg.overrides, path) ? pkg.overrides[path] : undefined
+// A file of the open package (not an override), after checking the path. Undefined for a new file.
+function ownFile(path) {
+  if (!pkg) throw new Error('Open a package first.')
+  if (!packagePath(path)) throw new Error(`That path isn’t inside the package: ${JSON.stringify(path)}`)
+  return pkg.files.get(path)
+}
+
 // ---- What the interfaces can ask for. The desktop window calls these over IPC, web clients over HTTP. ----
 const handlers = {
   'open-package': async () => {
@@ -316,12 +343,45 @@ const handlers = {
   boot: ({ item }) => { const res = pkg?.analysis.manifest?.items[item]?.res; return res?.path ? bootFor(res.path) : null },
   launch: o => launchItem(o),
   // The normalised options for the current controls, and the CLI line that repeats the launch.
-  options: ({ item, ...o }) => { const options = normaliseOptions(o); return { options, command: cliCommand(options, { zip: pkg?.name, item }) } },
+  options: ({ item, ...o }) => { const options = normaliseOptions({ ...o, files: o.files ?? pkg?.overrides }); return { options, command: cliCommand(options, { zip: pkg?.name, item }) } },
   reference: async o => {
     const u = new URL(o.url)
     if (!/^https?:$/.test(u.protocol)) throw new Error('A reference is a web address (http or https).')
     await begin({ kind: 'reference', label: `Reference · ${u.host}${u.pathname.length > 1 ? u.pathname.slice(0, 40) : ''}`, url: u.href, launch: { url: u.href }, partition: 'persist:reference', caught: o.caught !== false, auto: +o.auto || 0 })
     return true
+  },
+  // Overrides (the Files tab). Paths are checked here, whatever the interface: no traversal, nothing outside the package.
+  files: () => {
+    if (!pkg) return []
+    return [...new Set([...pkg.files.keys(), ...Object.keys(pkg.overrides)])].sort().map(path => { const buf = override(path) ? entryBuffer(override(path)) : pkg.files.get(path)
+      return { path, size: buf.length, text: isText(buf), overridden: !!override(path) } })
+  },
+  file: ({ path }) => {
+    const orig = ownFile(path), ov = override(path), now = ov ? entryBuffer(ov) : orig
+    if (!now) throw new Error(`${path} isn’t in the package.`)
+    const text = isText(now), big = now.length > 1024 ** 2
+    return { path, size: now.length, text, tooBig: text && big, overridden: !!ov, content: text && !big ? now.toString('utf8') : null, crlf: text && now.includes('\r\n'),
+      original: ov && orig && isText(orig) && orig.length <= 1024 ** 2 ? orig.toString('utf8') : null }
+  },
+  'override-set': ({ path, content, base64 }) => {
+    if (!pkg) throw new Error('Open a package first.')
+    if (!packagePath(path)) throw new Error(`That path isn’t inside the package: ${JSON.stringify(path)}`)
+    const entry = normaliseOptions({ files: { [path]: base64 !== undefined ? { base64 } : { content } } }).files[path], orig = pkg.files.get(path)
+    delete pkg.overrides[path]
+    if (!(orig && entryBuffer(entry).equals(orig))) Object.defineProperty(pkg.overrides, path, { value: entry, enumerable: true, writable: true, configurable: true })   // the same as the original is not a change; defineProperty so a path called __proto__ is just a key
+    return overrideList(pkg.files, pkg.overrides)
+  },
+  'override-revert': ({ path }) => {
+    if (!pkg) throw new Error('Open a package first.')
+    if (path === undefined) pkg.overrides = Object.create(null); else delete pkg.overrides[path]
+    return overrideList(pkg.files, pkg.overrides)
+  },
+  'override-diff': ({ path }) => {
+    const orig = ownFile(path), e = override(path)
+    if (!e) throw new Error(`${path} hasn’t been changed.`)
+    const now = entryBuffer(e)
+    if (e.base64 !== undefined || (orig && !isText(orig))) return { binary: true, before: orig?.length ?? null, after: now.length }
+    return { binary: false, diff: unified(orig?.toString('utf8') ?? '', now.toString('utf8')) || '(no differences)', added: !orig }
   },
   'experiment-presets': () => Object.keys(PRESETS),
   'experiment-start': o => experimentStart(o),

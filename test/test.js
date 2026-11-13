@@ -15,6 +15,8 @@ import { bootGraph, resolveRef } from '../src/bootpath.js'
 import { renderReport, verdict } from '../src/report.js'
 import { normaliseOptions, cliCommand } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
+import { diffLines, unified } from '../src/textdiff.js'
+import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
 import { STEPS, milestones, furthest, firstMissing, milestoneFinding, progress, runCounts } from '../src/milestones.js'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
@@ -70,6 +72,11 @@ fetch('data/config.json').then(function (r) { return r.text() }).then(function (
 `)
   writeFileSync(join(d, 'lesson.html'), '<!doctype html><html><head><script src="scorm.js"></script><script src="js/boot.js"></script></head><body><div id="loading" class="spinner" style="width:80px;height:80px;background:#ccc">Loading</div></body></html>')
 })
+
+// gated: the lesson only starts if window.startOK is set, which nothing sets. Overriding lesson.js to drop the test fixes it.
+const gated = fixture('gated', d => sub(d, 'lesson.js', /\nstart\(\)\s*$/, '\nif (window.startOK) start()\n'))
+const gatedFix = join(work, 'lesson-fixed.js')
+writeFileSync(gatedFix, readFileSync(join(work, 'gated', 'lesson.js'), 'utf8').replace('if (window.startOK) start()', 'start()'))
 
 // ---- Unit ----
 const files = unzip(readFileSync(good))
@@ -200,7 +207,9 @@ for (const [o, re] of [[{ nope: 1 }, /Unknown option: nope/], [{ nope: 1, other:
 assert.throws(() => normaliseOptions({ constructor: 1 }), /Unknown option: constructor/)
 assert.throws(() => normaliseOptions(JSON.parse('{"__proto__":1}')), /Unknown option: __proto__/)
 for (const p of ['', '/a.js', '../a.js', 'a/../b.js', 'a\\b.js']) assert.throws(() => normaliseOptions({ files: { [p]: 'x' } }), /files/, 'options: files key ' + p)
-assert.deepEqual(normaliseOptions({ files: { 'js/a.js': 'x' } }).files, { 'js/a.js': 'x' })
+assert.deepEqual(normaliseOptions({ files: { 'js/a.js': 'x', 'b.png': { base64: 'AAEC' }, 'c.js': { content: '' } } }).files, { 'js/a.js': { content: 'x' }, 'b.png': { base64: 'AAEC' }, 'c.js': { content: '' } }, 'options: files shapes')
+for (const f of [{ 'a.js': {} }, { 'a.js': { content: 'x', base64: 'AA==' } }, { 'a.js': { base64: '!!' } }, { 'a.js': { base64: 'AAE' } }, { 'a.js': { content: 1 } }, { 'a//b.js': 'x' }, { 'a/': 'x' }])
+  assert.throws(() => normaliseOptions({ files: f }), /files/, 'options: files value ' + JSON.stringify(f))
 assert.equal(cliCommand(dflt, { zip: 'a b.zip', item: 2 }), "scorm-lab run 'a b.zip' --item 2")
 assert.equal(cliCommand({ expose: 'both', depth: 2, opener: true, caught: false, auto: 20, trace: true }), 'scorm-lab run package.zip --api both --depth 2 --window --no-caught --wait 20 --options options.json')
 // Experiments: planning, summary, findings.
@@ -229,6 +238,41 @@ assert.equal(experimentFindings([exBase, exRes('tie', dflt, 4)])[0].sev, 'info',
 assert.deepEqual(experimentFindings([]), [])
 const exRun = runResult('v', dflt, { milestones: mkSteps(2), trace: trace(), findings: [{ sev: 'error', title: 'bad' }] }, { runId: 3 })
 assert.equal(exRun.errors, 1); assert.equal(exRun.verdict.title, 'bad'); assert.equal(exRun.runId, 3); assert.equal(summarise([exRun])[0].runId, 3)
+// Line diff and overrides.
+const protoFiles = normaliseOptions({ files: JSON.parse('{"__proto__":"x","constructor":{"base64":"AAEC"}}') }).files
+assert.deepEqual(Object.keys(protoFiles), ['__proto__', 'constructor'], 'options: __proto__ and constructor are ordinary paths')
+assert.equal(Object.getPrototypeOf(protoFiles), Object.prototype); assert.deepEqual(protoFiles['__proto__'], { content: 'x' })
+assert.deepEqual([...overlayFiles(new Map(), protoFiles).keys()], ['__proto__', 'constructor'])
+assert.throws(() => normaliseOptions({ files: { 'a.js': { content: 'x'.repeat(50 * 1024 ** 2 + 1) } } }), /over 50 MB/, 'options: per-file cap')
+assert.throws(() => normaliseOptions({ files: Object.fromEntries([1, 2, 3, 4, 5].map(i => ['f' + i, { content: 'x'.repeat(45 * 1024 ** 2) }])) }), /more than 200 MB/, 'options: total cap')
+assert.equal(cliCommand({ files: { 'js/a.js': { content: 'x' }, 'b c.js': { content: 'y' } } }), "scorm-lab run package.zip --override js/a.js=js/a.js --override 'b c.js=b c.js'", 'cliCommand: one --override per changed file')
+assert.deepEqual(diffLines('', 'a\nb').map(r => r.op), ['+', '+']); assert.deepEqual(diffLines('a', '').map(r => r.op), ['-'], 'textdiff: an empty side')
+const dl = (a, b) => diffLines(a, b).map(r => r.op + r.text).join('|')
+assert.equal(dl('a\nb\nc', 'a\nb\nc'), ' a| b| c'); assert.equal(dl('', 'x'), '+x'); assert.equal(dl('x', ''), '-x'); assert.equal(dl('', ''), '')
+assert.equal(dl('a\nb\nc', 'a\nB\nc'), ' a|-b|+B| c', 'textdiff: a changed line'); assert.equal(dl('a\nc', 'a\nb\nc'), ' a|+b| c', 'textdiff: an added line')
+assert.equal(dl('a\r\nb', 'a\nb'), ' a| b', 'textdiff: line endings are not changes')
+assert.equal(unified('a\nb', 'a\nb'), ''); assert.equal(unified('a\nb\nc\nd', 'a\nB\nc\nd\ne'), '@@ -1,4 +1,5 @@\n a\n-b\n+B\n c\n d\n+e')
+const longA = Array.from({ length: 40 }, (_, i) => 'line ' + i).join('\n'), longB = longA.replace('line 20', 'LINE 20')
+assert.equal(unified(longA, longB).split('\n').length, 9, 'textdiff: three lines of context each side'); assert.match(unified(longA, longB), /^@@ -18,7 \+18,7 @@/)
+const big = Array.from({ length: 3000 }, (_, i) => 'x' + i).join('\n'); assert.equal(diffLines(big, big.replace(/x/g, 'y')).filter(r => r.op === '+').length, 3000, 'textdiff: large inputs still diff')
+assert.ok(isText(Buffer.from('héllo')) && !isText(Buffer.from([104, 0, 105])) && !isText(Buffer.from([0xff, 0xfe, 0x41])), 'overlay: text or binary')
+assert.deepEqual(entryFor(Buffer.from('hi')), { content: 'hi' }); assert.deepEqual(entryFor(Buffer.from([0, 1, 2])), { base64: 'AAEC' })
+assert.deepEqual([...entryBuffer({ base64: 'AAEC' })], [0, 1, 2])
+const ofiles = new Map([['a.js', Buffer.from('old')], ['b.css', Buffer.from('body')]])
+assert.equal(overlayFiles(ofiles, {}), ofiles, 'overlay: no overrides, same map')
+const merged = overlayFiles(ofiles, { 'a.js': { content: 'new' }, 'img/x.png': { base64: 'AAEC' } })
+assert.equal(merged.get('a.js').toString(), 'new'); assert.equal(merged.get('b.css').toString(), 'body'); assert.deepEqual([...merged.get('img/x.png')], [0, 1, 2], 'overlay: replace, keep, add')
+assert.equal(ofiles.get('a.js').toString(), 'old', 'overlay: the original map is untouched')
+assert.deepEqual(overrideList(ofiles, { 'a.js': { content: 'new' }, 'n.png': { base64: 'AAEC' } }), [{ path: 'a.js', size: 3, binary: false, added: false }, { path: 'n.png', size: 3, binary: true, added: true }])
+assert.equal(overrideFinding({}), null)
+const of2 = overrideFinding({ 'a.js': { content: 'new' }, 'b.png': { base64: 'AAEC' } })
+assert.match(of2.title, /^This run used 2 changed files: a\.js, b\.png$/); assert.equal(of2.sev, 'info'); assert.equal(of2.evidence.length, 2)
+assert.match(overrideFinding({ 'a.js': { content: '' } }).title, /1 changed file:/)
+const ms = mkSteps
+const pf1 = overrideProgressFinding({ milestones: ms(3), counts: {} }, { milestones: ms(6), counts: {} })
+assert.match(pf1.title, /got further: reached Initialised \(was Content shown\)/); assert.equal(pf1.sev, 'info'); assert.ok(pf1.evidence.length === 3)
+assert.equal(overrideProgressFinding({ milestones: ms(6), counts: {} }, { milestones: ms(3), counts: {} }).sev, 'warn', 'overlay: worse is a warning')
+assert.match(overrideProgressFinding({ milestones: ms(3), counts: {} }, { milestones: ms(3), counts: {} }).title, /no change/)
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -290,6 +334,28 @@ if (!process.argv.includes('--unit')) {
   const rl = titles(run(loader))
   assert.ok(rl.some(t => /stuck on a loading screen/.test(t) && /JSON/.test(t)), 'loader run: ' + rl)
   console.log('runs: ok')
+
+  // Overrides: the gated lesson only starts if window.startOK is set. Overriding lesson.js gets it going (CLI), and the
+  // override survives a saved run and --options-from.
+  const gPlain = run(gated)
+  assert.equal(gPlain.api.length, 0, 'gated: no API calls without the override: ' + calls(gPlain))
+  assert.ok(!gPlain.findings.some(f => /changed file/.test(f.title)), 'gated: no override note without overrides')
+  const gOut = join(work, 'gated-run.json'), gFix = run(gated, '--override', 'lesson.js=' + gatedFix, '--out', gOut)
+  assert.ok(calls(gFix).includes('LMSInitialize '), 'gated: the override makes it start: ' + calls(gFix))
+  assert.ok(idx(gFix.furthest) > idx(gPlain.furthest), `gated: got further (${gPlain.furthest} → ${gFix.furthest})`)
+  assert.match(gFix.findings[1].title, /^This run used 1 changed file: lesson\.js$/, 'gated: the override is listed at the top: ' + titles(gFix))
+  assert.deepEqual(Object.keys(gFix.launch.options.files), ['lesson.js']); assert.match(gFix.launch.options.files['lesson.js'].content, /^start\(\)$/m)
+  const gSaved = JSON.parse(readFileSync(gOut, 'utf8'))
+  assert.equal(gSaved.launch.options.files['lesson.js'].content, readFileSync(gatedFix, 'utf8'), 'overrides round-trip: the saved run keeps the content')
+  assert.match(node(['report', gOut]).stdout, /This run used 1 changed file/, 'report: lists the overrides')
+  const gAgain = JSON.parse(node(['run', gated, '--options-from', gOut, '--wait', '3', '--json']).stdout)
+  assert.deepEqual(gAgain.launch.options.files, gSaved.launch.options.files, 'options-from: the same overrides')
+  assert.ok(calls(gAgain).includes('LMSInitialize '), 'options-from: reproduces the run')
+  assert.equal(node(['run', gated, '--override', '../x.js=' + gatedFix]).status, 2, 'override: path outside the package is refused')
+  assert.equal(node(['run', gated, '--override', 'noequals']).status, 2, 'override: needs path=file')
+  assert.equal(node(['run', gated, '--override', 'a.js=' + join(work, 'nope.js')]).status, 2, 'override: missing local file')
+  assert.equal(node(['run', gated, '--options-from', join(work, 'nope.json')]).status, 2, 'options-from: missing file')
+  console.log('overrides: ok')
 
   // Experiments: the api preset on mismatch shows that offering both APIs, or 1.2, gets further.
   const exDir = join(work, 'experiment')
@@ -366,6 +432,39 @@ if (!process.argv.includes('--unit')) {
     evReader.cancel()
     assert.ok(evText.includes('"state":"start"') && (evText.match(/"state":"result"/g) ?? []).length === 2, 'web: experiment events')
     assert.equal((await invoke('state')).runs.length, 4, 'web: both experiment runs recorded (plus the earlier run and its reloaded copy)')
+    // Overrides over HTTP: confined to the package, text and binary, the progress finding after a rerun.
+    assert.equal((await fetch(base + '/api/upload?name=gated.zip', { method: 'POST', headers: H, body: readFileSync(gated) })).status, 200)
+    assert.ok((await invoke('files')).some(f => f.path === 'lesson.js' && f.text && !f.overridden), 'web: files lists the package')
+    for (const path of ['../x.js', '/etc/passwd', 'a/../../b', 'a\\b', '']) {
+      await assert.rejects(invoke('override-set', { path, content: 'x' }), /isn’t inside the package/, 'web: override path refused: ' + path)
+      await assert.rejects(invoke('file', { path }), /isn’t inside the package/, 'web: file path refused: ' + path)
+    }
+    await assert.rejects(invoke('override-set', { path: 'a.js', base64: '!!' }), /base64/, 'web: bad base64 refused')
+    await assert.rejects(invoke('override-set', { path: 'a.js' }), /content/, 'web: nothing to set')
+    assert.deepEqual((await invoke('override-set', { path: '__proto__', content: 'x' })).map(o => o.path), ['__proto__'], 'web: __proto__ is just a path')
+    await assert.rejects(invoke('file', { path: 'constructor' }), /isn’t in the package/, 'web: constructor is not a file')
+    await invoke('override-revert', {})
+    let ov = await invoke('override-set', { path: 'img/logo.png', base64: 'AAECAw==' })
+    assert.deepEqual(ov, [{ path: 'img/logo.png', size: 4, binary: true, added: true }], 'web: a binary replacement')
+    assert.equal((await invoke('file', { path: 'img/logo.png' })).content, null, 'web: binary files have no text')
+    assert.equal((await invoke('override-diff', { path: 'img/logo.png' })).binary, true)
+    assert.deepEqual(await invoke('override-revert', { path: 'img/logo.png' }), [], 'web: revert one')
+    const lessonJs = (await invoke('file', { path: 'lesson.js' })).content
+    assert.deepEqual(await invoke('override-set', { path: 'lesson.js', content: lessonJs }), [], 'web: a change back to the original is no change')
+    await invoke('launch', { item: 0, auto: 3 })
+    for (let end = Date.now() + 30000; Date.now() < end; await new Promise(r => setTimeout(r, 500))) if (!(await invoke('state')).running && (await invoke('state')).runs.length === 5) break
+    ov = await invoke('override-set', { path: 'lesson.js', content: lessonJs.replace('if (window.startOK) start()', 'start()') })
+    assert.equal(ov.length, 1)
+    assert.match((await invoke('override-diff', { path: 'lesson.js' })).diff, /^@@[\s\S]*-if \(window\.startOK\) start\(\)\n\+start\(\)/, 'web: diff view')
+    assert.equal((await invoke('state')).pkg.overrides.length, 1, 'web: state lists the overrides')
+    assert.ok((await invoke('options', {})).options.files['lesson.js'], 'web: options carry the session overrides')
+    await invoke('launch', { item: 0, auto: 3 })
+    let last
+    for (let end = Date.now() + 30000; Date.now() < end; await new Promise(r => setTimeout(r, 500))) { const s2 = await invoke('state'); if (!s2.running && s2.runs.length === 6) { last = s2.runs[5]; break } }
+    assert.ok(last, 'web: the run with overrides finished')
+    assert.ok(last.findings.some(f => /This run used 1 changed file/.test(f.title)), 'web: override note')
+    assert.ok(last.findings.some(f => /^Compared with the run before the changes: got further/.test(f.title)), 'web: progress finding: ' + last.findings.map(f => f.title))
+    assert.deepEqual(await invoke('override-revert', {}), [], 'web: revert all')
     console.log('web: ok')
   } finally { server.kill() }
 

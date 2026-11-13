@@ -11,6 +11,7 @@ import { analyze } from '../src/analyze.js'
 import { bootGraph } from '../src/bootpath.js'
 import { staticFindings, sortFindings } from '../src/rules.js'
 import { normaliseOptions } from '../src/options.js'
+import { entryFor } from '../src/overlay.js'
 import { furthest, strip } from '../src/milestones.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { renderReport, verdict, counts, screens } from '../src/report.js'
@@ -48,6 +49,8 @@ Options for run (and report --run)
   --resume-from <run.json>  Start with the data a previous run left (to test resuming).
   --wait <seconds>          How long to let it run. Default 10.
   --options <file.json>     Launch options as JSON, for anything a flag can't express. Flags override the file.
+  --options-from <run.json> Use the launch options a saved run recorded (changed files included). Other options and flags override them.
+  --override <path>=<file>  Run with a changed copy of a package file: the file's contents replace <path>. Repeatable.
   --out <run.json>          Keep the full run (open it in the desktop app with Open saved…).
   --live <folder>           Write frames to <folder>/frame.jpg and read clicks and keys from <folder>/input/.
   --no-caught               Don't record errors the content catches itself.
@@ -82,8 +85,9 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'out', 'live', 'port', 'host', 'variants', 'preset']
-    o[k] = v !== undefined ? v : takes.includes(k) ? args[++i] : true
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'out', 'live', 'port', 'host', 'variants', 'preset']
+    const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
+    if (k === 'override') (o.override ??= []).push(val); else o[k] = val
   }
   return o
 }
@@ -153,6 +157,30 @@ function optionsFile(path) {
   if (!j || typeof j !== 'object' || Array.isArray(j)) fail(`${basename(path)} must hold one JSON object of options, like { "depth": 1 }.`)
   return j
 }
+// --options-from run.json: the launch options a saved run recorded.
+function optionsFromRun(path) {
+  if (!path) return {}
+  if (typeof path !== 'string') fail('--options-from needs a saved run file.')
+  if (!existsSync(path)) fail(`No such file: ${path}`)
+  let j
+  try { j = JSON.parse(readFileSync(path, 'utf8')) } catch (e) { fail(`${basename(path)} isn’t valid JSON: ${e.message}`) }
+  if (!j?.launch?.options) fail(`${basename(path)} has no recorded launch options (it is a saved run from before they were kept, or isn’t a saved run).`)
+  return j.launch.options
+}
+// --override path=local file, repeatable: text files are kept as text, anything else as base64.
+function overrideFiles(list = []) {
+  const files = []
+  for (const spec of list) {
+    const at = typeof spec === 'string' ? spec.indexOf('=') : -1
+    if (at < 1) fail('--override needs <path in the package>=<local file>, like --override js/app.js=fixed-app.js')
+    const path = spec.slice(0, at), local = spec.slice(at + 1)
+    if (!existsSync(local)) fail(`No such file: ${local}`)
+    let buf
+    try { buf = readFileSync(local) } catch (e) { fail(`Can’t read ${local}: ${e.code === 'EISDIR' ? 'it is a folder' : e.message}`) }
+    files.push([path, entryFor(buf)])
+  }
+  return Object.fromEntries(files)
+}
 function flagOptions(o) {
   const f = {}
   if (o.api !== undefined) f.expose = o.api
@@ -164,8 +192,10 @@ function flagOptions(o) {
 }
 
 function buildOptions(o) {
-  const f = optionsFile(o.options)
-  try { return normaliseOptions({ ...f, ...flagOptions(o) }) } catch (e) { fail(e.message) }
+  const f = { ...optionsFromRun(o['options-from']), ...optionsFile(o.options) }, flags = flagOptions(o)
+  // --override adds to (and wins over) the files from the options file or saved run.
+  if (o.override) flags.files = { ...(f.files ?? {}), ...overrideFiles(o.override) }
+  try { return normaliseOptions({ ...f, ...flags }) } catch (e) { fail(e.message) }
 }
 
 // Runs one item headless and returns the saved run. Options as for the run command.

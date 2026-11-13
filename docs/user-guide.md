@@ -51,7 +51,7 @@ Only one SCORM Lab window runs at a time. Opening another package sends it to th
   - the status line
 - **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the tabs.
   The **R** and **F** buttons are for comparing.
-- **Tabs:** Findings, Boot path, Package, API, Lookups, Network, Scripts, Errors, Console, Frames, Compare and Experiments. The
+- **Tabs:** Findings, Boot path, Package, Files, API, Lookups, Network, Scripts, Errors, Console, Frames, Compare and Experiments. The
   **Filter** box filters whichever table is showing.
 
 When no run is selected, the tabs show the package as read from its files. When a run is selected, they show that run.
@@ -191,6 +191,27 @@ Change one setting, launch again, and see whether the content gets further.
 Under the toolbar, **More options** shows every option the next launch will use, as JSON (read-only for now).
 **Copy as CLI command** copies the `scorm-lab run …` line that repeats the launch from the command line. Options that
 have no flag are left out of the line; it adds `--options options.json` to say a file is needed.
+
+## Changing files and running again
+
+To test a fix before touching the real course, change the file here and run it.
+
+1. Open the **Files** tab. Click a file in the tree (the filter box narrows it).
+2. Edit the text, then choose **Save as override**. The file is marked **changed**, and the tab shows how many files
+   are changed. Nothing is written to the package or to disk: the changes live in this session.
+3. Choose **Launch**. The run uses the changed files. At the top of its Findings is "This run used *N* changed files",
+   and if an earlier run of the same item used no changes, a second note says whether the change helped (it got
+   further, got less far, or made no difference).
+4. Under **Changed files** you can see each change as a line diff (**Show changes**), **Revert** one file, or
+   **Revert all**.
+
+A file that isn't text (an image, say) can't be edited, but **Replace from a file…** swaps in a file from your
+computer. Saving a file back to exactly what it was removes the override. **Save as override** keeps the changes for the
+session; they go in a saved run's options, so opening that run (or the CLI's `--options-from`) repeats them. Changed
+files are used by experiments too, as part of the default launch.
+
+SCORM Lab works out the boot path again for the changed files, but the checks on the manifest and scripts under
+**Package** still describe the original package.
 
 ## Trying every setting at once: experiments
 
