@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Fire Safety Basics (sample)</title>
+<link rel="stylesheet" href="style.css">
+<script src="scorm.js"></script>
+<script src="lesson.js" defer></script>
+</head>
+<body>
+<main>
+  <p id="status" class="status">Connecting to the LMS…</p>
+  <section data-page="1">
+    <h1>1. Fire needs three things</h1>
+    <p>Heat, fuel and oxygen. Take any one away and the fire goes out.</p>
+  </section>
+  <section data-page="2" hidden>
+    <h1>2. Raise the alarm</h1>
+    <p>If you discover a fire, raise the alarm first, then leave by the nearest safe exit.</p>
+  </section>
+  <section data-page="3" hidden>
+    <h1>3. Extinguishers</h1>
+    <p>Water extinguishers are for paper and wood. Never use water on electrical or fat fires.</p>
+  </section>
+  <section data-page="4" hidden>
+    <h1>Quiz</h1>
+    <form id="quiz">
+      <fieldset><legend>What does a fire need, besides heat and fuel?</legend>
+        <label><input type="radio" name="q1" value="oxygen"> Oxygen</label>
+        <label><input type="radio" name="q1" value="water"> Water</label></fieldset>
+      <fieldset><legend>What do you do first when you discover a fire?</legend>
+        <label><input type="radio" name="q2" value="alarm"> Raise the alarm</label>
+        <label><input type="radio" name="q2" value="fight"> Fight it</label></fieldset>
+      <fieldset><legend>Can you use water on an electrical fire?</legend>
+        <label><input type="radio" name="q3" value="no"> No</label>
+        <label><input type="radio" name="q3" value="yes"> Yes</label></fieldset>
+      <button type="submit">Submit answers</button>
+    </form>
+    <p id="result" role="status"></p>
+  </section>
+  <nav>
+    <button type="button" id="back">Back</button>
+    <span id="where"></span>
+    <button type="button" id="next">Next</button>
+    <button type="button" id="exit">Save and exit</button>
+  </nav>
+</main>
+</body>
+</html>

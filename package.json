@@ -1,0 +1,24 @@
+{
+  "name": "scorm-lab",
+  "version": "0.1.0",
+  "description": "Find out why a SCORM package doesn't work: check its files, run it under the debugger, and get findings with causes and fixes.",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "serve": "electron . --serve --no-window",
+    "test": "node test/test.js",
+    "package": "node scripts/package.js",
+    "install-app": "node scripts/package.js --install",
+    "alfred": "node scripts/alfred.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.4.4",
+    "electron": "^45.3.2"
+  },
+  "productName": "SCORM Lab",
+  "bin": {
+    "scorm-lab": "bin/scorm-lab.js"
+  }
+}

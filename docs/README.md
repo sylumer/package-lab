@@ -1,0 +1,15 @@
+# SCORM Lab documentation
+
+For people using it:
+
+- [User guide](user-guide.md): the desktop app, from opening a package to reading a run, with a method for packages that don't work.
+- [Findings](findings.md): every finding, what it means and what to try.
+- [Command line](cli.md): `scorm-lab analyze`, `run`, `report`, `open`, `serve`; JSON output; live runs.
+- [Web interface](web.md): using SCORM Lab from another device, with the live view; security.
+- [Alfred](alfred.md): the workflow's keywords and File Actions.
+- [Concierge](concierge.md): the Concierge dashboard module.
+
+For people changing it:
+
+- [Developer guide](developer-guide.md): architecture, each part in turn, data formats, adding findings, tests, packaging.
+- [Design](../DESIGN.md): the approach and the roadmap.

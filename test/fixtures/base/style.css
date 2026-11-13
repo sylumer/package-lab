@@ -1,0 +1,8 @@
+body { margin: 0; font: 17px/1.5 system-ui, sans-serif; color: #1d2330; background: #fff; }
+main { max-width: 40rem; margin: 0 auto; padding: 1.5rem; }
+.status { padding: .5rem .75rem; background: #eef3fb; border-radius: 6px; font-size: 15px; }
+fieldset { margin: 0 0 1rem; border: 1px solid #ccd3df; border-radius: 6px; }
+label { display: block; }
+nav { display: flex; gap: .5rem; align-items: center; margin-top: 2rem; }
+#where { flex: 1; text-align: center; color: #5a6475; }
+button { font: inherit; padding: .4rem .9rem; }

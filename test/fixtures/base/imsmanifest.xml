@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A small SCORM 1.2 package for trying the Package Player and Package Inspector: one SCO that tracks, and one
+     asset that doesn't. Made for this site; free to use. -->
+<manifest identifier="com.thoughtasylum.toolbox.sample.scorm12" version="1"
+  xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2">
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>1.2</schemaversion>
+  </metadata>
+  <organizations default="org">
+    <organization identifier="org">
+      <title>Fire Safety Basics (sample)</title>
+      <item identifier="lesson" identifierref="lesson_res">
+        <title>Lesson and quiz</title>
+        <adlcp:masteryscore>80</adlcp:masteryscore>
+        <adlcp:datafromlms>sample=1</adlcp:datafromlms>
+      </item>
+      <item identifier="glossary" identifierref="glossary_res">
+        <title>Glossary</title>
+      </item>
+    </organization>
+  </organizations>
+  <resources>
+    <resource identifier="lesson_res" type="webcontent" adlcp:scormtype="sco" href="lesson.html">
+      <file href="lesson.html"/>
+      <file href="lesson.js"/>
+      <file href="scorm.js"/>
+      <file href="style.css"/>
+    </resource>
+    <resource identifier="glossary_res" type="webcontent" adlcp:scormtype="asset" href="glossary.html">
+      <file href="glossary.html"/>
+      <file href="style.css"/>
+    </resource>
+  </resources>
+</manifest>
