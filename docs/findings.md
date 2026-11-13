@@ -18,6 +18,7 @@ if there are no errors.
 - [From a run: requests and errors](#from-a-run-requests-and-errors)
 - [From a run: milestones](#from-a-run-milestones)
 - [From a run: progress](#from-a-run-progress)
+- [From an experiment](#from-an-experiment)
 - [From a comparison](#from-a-comparison)
 
 ## From the manifest
@@ -123,6 +124,15 @@ These appear only when the content called the API.
 | Suspend data is *N* characters | error if over the limit, warning near it | SCORM 1.2 allows 4,096 characters, 2004 allows 64,000; more is truncated or rejected and resuming breaks | Publish as SCORM 2004, or reduce what is saved |
 | The content never set exit | info | Without `suspend`, many LMSs start a new attempt next time | |
 | The content never reported completion | info | | |
+
+## From an experiment
+
+Only after **Run all** on the Experiments tab, or `scorm-lab experiment`. They compare each variant with the default run.
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| *Variant* gets further than the default: reached *step* | warning | With the default settings the run stopped earlier. Changing the settings listed in the evidence got it further, so those settings matter. This is a fact from a run, not a guess | Check what the real LMS offers for those settings, or what the content assumes about them |
+| Nothing tried made a difference | info | No variant got further than the default | Try your own variants, or look at what stops the default run in its own findings |
 
 ## From a comparison
 

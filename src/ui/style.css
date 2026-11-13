@@ -55,3 +55,4 @@ dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--bg
 dialog ul { list-style: none; padding: 0; max-height: 60vh; overflow: auto; } dialog li { padding: 3px 0; }
 dialog h2 { font-size: 15px; margin: 0 0 4px; }
 @media (max-width: 800px) { .main { flex-direction: column; } aside { width: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 30vh; } }
+tr.click { cursor: pointer; } tr.click:hover { background: var(--code); }

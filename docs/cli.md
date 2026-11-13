@@ -43,6 +43,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `analyze <package.zip>` | Checks the package without running it: manifest, scripts, boot path |
 | `items <package.zip>` | Lists the items that can be launched, numbered |
 | `run <package.zip>` | Launches an item in a hidden browser, records it, and reports what went wrong |
+| `experiment <package.zip>` | Runs the same launch several ways, one after another, and prints how far each got |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
@@ -127,6 +128,55 @@ The options the run used are saved in the run's `launch.options`.
 `furthest` is the id of the last one reached, or `null`. The text output adds a **Milestones** line with a tick or a
 cross for each step, and what the content was showing at the end (visible elements, any loading indicator, and the
 start of its text), the counts (API calls, requests, failures, uncaught errors), and the run's findings.
+
+## experiment
+
+Runs one item several ways, one after another, with the same headless runs as `run`, and prints a table of how far
+each got.
+
+```bash
+scorm-lab experiment course.zip [--item n] [--wait s] [--variants file.json | --preset name] [--json] [--out folder]
+```
+
+The first run is the **default**: the launch options from the other flags (`--api`, `--depth`, `--window`, `--wait`,
+`--options`, `--resume-from`, …), so every variant runs with the same resume data. Then each variant runs with its changes
+applied over those options. With a preset, a variant that ends up with the same options as an earlier one is skipped; with
+your own `--variants` file, every variant runs. Each run lasts `--wait` seconds (default 10), so a full set takes a while;
+progress goes to standard error.
+
+| Option | Default | What it does |
+|---|---|---|
+| `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), or `standard` (both) |
+| `--variants` | none | Your own variants, from a JSON file: a list of `{ "name", "patch" }` or `{ "variants": [...] }`. `patch` is any [launch options](developer-guide.md#launch-options). Not with `--preset` |
+| `--out` | none | A folder; each run is kept in it as a saved run (`01-default.json`, `02-api_both.json`, …) |
+| `--json` | off | Prints JSON (below) instead of a table |
+
+```json
+[{ "name": "deep frames", "patch": { "depth": 3 } }, { "name": "2004 in a window", "patch": { "expose": "2004", "opener": true } }]
+```
+
+The table has one row per variant: furthest [milestone](user-guide.md#milestones), API calls, errors, the verdict, and
+how it compares with the default ("got further: reached *X* (was *Y*)", "no change", …). Below it are the experiment's
+findings (see [From an experiment](findings.md#from-an-experiment)).
+
+`experiment --json`:
+
+```json
+{
+  "package": "course.zip", "item": { "number": 1, "…": "…" },
+  "base": { "expose": "manifest", "depth": 0, "…": "…" },
+  "variants": [
+    { "name": "default", "options": { "…": "…" }, "furthest": "looked", "furthestLabel": "Looked for the API", "apiCalls": 0, "errors": 1,
+      "verdict": { "sev": "error", "title": "…" }, "progress": "the default", "better": 0, "out": "/path/01-default.json" },
+    { "name": "api both", "options": { "…": "…" }, "furthest": "wrote", "furthestLabel": "Wrote data", "apiCalls": 14, "errors": 0,
+      "verdict": { "sev": "ok", "title": "No problems found" }, "progress": "got further: reached Wrote data (was Looked for the API)", "better": 1, "out": null }
+  ],
+  "findings": [{ "sev": "warn", "title": "api both gets further than the default: reached Wrote data", "detail": "…", "evidence": ["expose: \"manifest\" → \"both\""], "fix": "…" }]
+}
+```
+
+`better` is 1 if the variant got further than the default, -1 if less far, 0 if the same. `out` is the saved run's
+path, or `null` without `--out`. Exit status is 0 unless the command fails.
 
 ## report
 

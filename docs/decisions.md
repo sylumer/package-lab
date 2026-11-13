@@ -21,3 +21,12 @@ the choice, and why.
 - 2026-11-13 · P0.2 · `launched` counts any 2xx or 3xx response, and the user guide says so · a redirect still means the launch page was served.
 - 2026-11-13 · P0.2 · `milestoneFinding` lives in `milestones.js`, not `rules.js` · it formats the milestone list, so it sits beside it; `rules.js` stays findings from trace evidence, and `main.js` adds it first.
 - 2026-11-13 · P0.2 · `progress` throws on missing milestone lists, and says "same furthest step (X), more/fewer steps reached" when only the tie-break differs · avoids "reached X (was X)" and silent bad input.
+- 2026-11-13 · P0.3 · The base run is always the first row, named `default`, and (for presets) a variant with the same options as an earlier one is left out · the plan says `standard` is "deduplicated", and a run identical to the default would only repeat it (so `api manifest` and `depth 0` don't appear under the defaults).
+- 2026-11-13 · P0.3 · `experiment` with neither `--preset` nor `--variants` uses `standard`; both together fail · a useful default beats an error; two sources would be ambiguous.
+- 2026-11-13 · P0.3 · The "gets further" warning needs the furthest step to be later, not just more steps reached · the title says "reached X", which a tie on the furthest step would make false.
+- 2026-11-13 · P0.3 · The CLI starts one Electron per variant (the existing `runPackage`), the apps run them in one process · reuses the headless path as the plan says; the apps already hold a long-lived process.
+- 2026-11-13 · P0.3 · In the apps, each variant runs for `wait` (set from "Stop after", or 10 s if "I stop it") through `auto` · a table of runs needs each to end by itself.
+- 2026-11-13 · P0.3 · The Experiments table lives in the page (not the saved state), and a late-joining web client sees only later events · simplest; the runs themselves are all in the runs list.
+- 2026-11-13 · P0.3 · `--variants` accepts a list or `{ variants }`, and `--resume-from` applies to every run, as part of the base · the apps treat resume as a base option, so the CLI matches.
+- 2026-11-13 · P0.3 · Variants equal to an earlier one are dropped only for presets; variants from a user's file all run · the user wrote them on purpose (a repeat of the default shows run-to-run noise), and silent dropping would surprise.
+- 2026-11-13 · P0.3 · In the apps, a variant whose run ends unrecorded is shown as failed and the experiment carries on (a failed default stops it); a run cut short by Stop is left out of results · a truncated run would make misleading comparisons.

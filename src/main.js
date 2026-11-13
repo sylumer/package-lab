@@ -21,6 +21,7 @@ import { bootGraph, bootRun } from './bootpath.js'
 import { milestones, milestoneFinding } from './milestones.js'
 import { startWeb } from './web.js'
 import { normaliseOptions, cliCommand } from './options.js'
+import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
@@ -143,9 +144,13 @@ async function begin({ kind, label, url, launch, partition, caught, boot, auto }
   win.loadURL(url)
 }
 
+// The run is kept on the active object (a.run) and a.ended is set either way, so a waiting experiment can tell.
 async function finish() {
   if (!active) return null
   const a = active
+  try { return await finishActive(a) } finally { a.ended = true }
+}
+async function finishActive(a) {
   active = null
   clearTimeout(a.timer)
   live.restart()
@@ -161,7 +166,7 @@ async function finish() {
   if (a.kind === 'package' && cmi && pkg) pkg.lastCmi = cmi
   for (const w of a.wins) if (!w.isDestroyed()) w.destroy()
   emit('state', { running: null })
-  return addRun(a.kind, a.label, a.launch, trace, a.boot)
+  return (a.run = addRun(a.kind, a.label, a.launch, trace, a.boot))
 }
 
 // ---- Live view: frames of the content window for remote viewers, and their clicks and keys sent back ----
@@ -269,6 +274,38 @@ function readRun(file) {
   return summary(run)
 }
 
+// ---- Experiments: the same launch run several ways, one after another (see src/experiments.js) ----
+// Progress goes out as 'experiment' events: { state: 'start', names } · { state: 'result', index, row } · { state: 'done', rows, findings } · { state: 'error', message }.
+let experiment = null
+async function experimentStart({ item, preset = 'standard', variants, ...rest }) {
+  if (experiment || active) throw new Error('Something is already running. Stop it first.')
+  if (!variants && !Object.hasOwn(PRESETS, preset)) throw new Error(`No preset “${preset}”. Presets: ${Object.keys(PRESETS).join(', ')}.`)
+  const plan = planVariants({ base: rest, variants: variants ?? PRESETS[preset], dedupe: !variants }), job = experiment = { stop: false }, results = [], failed = new Map()
+  emit('experiment', { state: 'start', names: plan.map(p => p.name) })
+  ;(async () => {
+    try {
+      for (const [index, v] of plan.entries()) {
+        if (job.stop) break
+        await launchItem({ ...v.options, auto: v.options.auto || v.options.wait, item })
+        const a = active
+        while (a && !a.ended) await new Promise(r => setTimeout(r, 200))
+        if (job.stop) break   // a run cut short by Stop is left out
+        if (!a?.run) {        // it ended without being recorded: say so and carry on
+          if (!index) throw new Error('The default run didn’t finish, so there is nothing to compare with.')
+          failed.set(v.name, { name: v.name, failed: true, progress: 'the run didn’t finish' })
+          emit('experiment', { state: 'result', index, row: failed.get(v.name) })
+          continue
+        }
+        results.push(runResult(v.name, v.options, a.run, { runId: a.run.id }))
+        emit('experiment', { state: 'result', index, row: summarise(results).at(-1) })
+      }
+      const rows = new Map([...summarise(results), ...failed.values()].map(r => [r.name, r]))
+      emit('experiment', { state: 'done', rows: plan.map(p => rows.get(p.name) ?? null), findings: experimentFindings(results), stopped: job.stop })
+    } catch (e) { emit('experiment', { state: 'error', message: e.message }) } finally { experiment = null }
+  })()
+  return plan.map(p => p.name)
+}
+
 // ---- What the interfaces can ask for. The desktop window calls these over IPC, web clients over HTTP. ----
 const handlers = {
   'open-package': async () => {
@@ -286,6 +323,9 @@ const handlers = {
     await begin({ kind: 'reference', label: `Reference · ${u.host}${u.pathname.length > 1 ? u.pathname.slice(0, 40) : ''}`, url: u.href, launch: { url: u.href }, partition: 'persist:reference', caught: o.caught !== false, auto: +o.auto || 0 })
     return true
   },
+  'experiment-presets': () => Object.keys(PRESETS),
+  'experiment-start': o => experimentStart(o),
+  'experiment-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
   stop: async () => { const r = await finish(); return r ? r.id : null },
   compare: ({ ref, run }) => {
     const a = runs.get(ref), b = runs.get(run)

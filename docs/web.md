@@ -85,6 +85,7 @@ Everything works as in the [user guide](user-guide.md), except:
 - **More options** and **Copy as CLI command** work as in the desktop app. Copying needs the page to be open on
   `localhost` or over https; if the browser refuses, select the command shown next to the button.
 - The Findings tab starts with the **Milestones** strip, as in the desktop app.
+- The **Experiments** tab works as in the desktop app. The runs happen one after another on the Mac, and the table fills in as each finishes. Open another browser and it shows the same events as they arrive; the table itself is not kept, so a page opened mid-experiment shows only the runs that finish after it joined.
 - A **Live** tab shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** tab selected.
 

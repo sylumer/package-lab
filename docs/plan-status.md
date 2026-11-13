@@ -5,15 +5,18 @@ Progress on [plan.md](plan.md). The orchestrator updates this file with each wor
 
 ## Summary
 
-In progress on branch `next`. Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
+In progress on branch `next`.
+
+**Phase 0 (foundations), done.** One options model across every interface, milestones and progress on every run, and an experiment runner (CLI `experiment`, Experiments tab) with the `api`, `frames` and `standard` presets. `npm test` takes about 1.5 minutes.
+ Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
 
 ## Work packages
 
 | # | Work package | Model | State | Commit | Notes |
 |---|---|---|---|---|---|
 | P0.1 | Launch options model | sonnet | done | fb103a3 | One review round |
-| P0.2 | Milestones and progress | sonnet | done | | One review round |
-| P0.3 | Experiment runner | sonnet | todo | | |
+| P0.2 | Milestones and progress | sonnet | done | 7203a43 | One review round |
+| P0.3 | Experiment runner | sonnet | done | | One review round (resume now applies to every variant) |
 | P1.1 | Change files and rerun (overlays) | sonnet | todo | | |
 | P1.2 | Pin variables, answer requests | sonnet | todo | | |
 | P1.3 | What the content wanted from its server | opus | todo | | |

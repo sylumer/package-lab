@@ -14,6 +14,7 @@ import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
 import { bootGraph, resolveRef } from '../src/bootpath.js'
 import { renderReport, verdict } from '../src/report.js'
 import { normaliseOptions, cliCommand } from '../src/options.js'
+import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { STEPS, milestones, furthest, firstMissing, milestoneFinding, progress, runCounts } from '../src/milestones.js'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
@@ -202,6 +203,32 @@ for (const p of ['', '/a.js', '../a.js', 'a/../b.js', 'a\\b.js']) assert.throws(
 assert.deepEqual(normaliseOptions({ files: { 'js/a.js': 'x' } }).files, { 'js/a.js': 'x' })
 assert.equal(cliCommand(dflt, { zip: 'a b.zip', item: 2 }), "scorm-lab run 'a b.zip' --item 2")
 assert.equal(cliCommand({ expose: 'both', depth: 2, opener: true, caught: false, auto: 20, trace: true }), 'scorm-lab run package.zip --api both --depth 2 --window --no-caught --wait 20 --options options.json')
+// Experiments: planning, summary, findings.
+const planned = planVariants({ base: {}, variants: PRESETS.standard })
+assert.deepEqual(planned.map(p => p.name), ['default', 'api both', 'api 1.2', 'api 2004', 'api none', 'depth 1', 'depth 2', 'depth 3', 'new window'], 'experiments: standard drops variants equal to the default')
+assert.equal(planned[1].options.expose, 'both'); assert.deepEqual(planned[0].options, dflt)
+assert.deepEqual(planVariants({ base: { depth: 1 }, variants: [{ name: 'a', patch: { expose: '1.2' } }] })[1].options, normaliseOptions({ depth: 1, expose: '1.2' }), 'experiments: patch merges over the base')
+assert.equal(PRESETS.standard.length, new Set(PRESETS.standard.map(v => JSON.stringify(v.patch))).size, 'experiments: standard has no repeats')
+assert.equal(planVariants({ base: {}, variants: [{ name: 'same', patch: {} }], dedupe: false }).length, 2, 'experiments: user variants are kept')
+assert.throws(() => planVariants({ base: {}, variants: [{ name: 'x', patch: { depth: 9 } }] }), /Variant “x”: .*depth/)
+assert.throws(() => planVariants({ base: {}, variants: [{ name: 'x', patch: { nope: 1 } }] }), /Unknown option/)
+assert.throws(() => planVariants({ base: {}, variants: [{ name: 'x' }, { name: 'x' }] }), /twice/)
+assert.throws(() => planVariants({ base: {}, variants: [{ patch: {} }] }), /needs a name/)
+assert.throws(() => planVariants({ base: {}, variants: {} }), /list/)
+const exRes = (name, options, n, extra = {}) => ({ name, options, milestones: mkSteps(n), counts: { apiCalls: n, uncaught: 0 }, errors: 0, verdict: { sev: 'ok', title: 'No problems found' }, ...extra })
+const exBase = exRes('default', dflt, 4), exBoth = exRes('api both', normaliseOptions({ expose: 'both' }), 6), exNone = exRes('api none', normaliseOptions({ expose: 'none' }), 2)
+const exRows = summarise([exBase, exBoth, exNone])
+assert.deepEqual(exRows.map(r => [r.name, r.furthest, r.better]), [['default', 'looked', 0], ['api both', 'initialised', 1], ['api none', 'scripts', -1]], 'experiments: summary')
+assert.equal(exRows[0].progress, 'the default'); assert.match(exRows[1].progress, /got further/)
+const exF = experimentFindings([exBase, exBoth, exNone])
+assert.equal(exF.length, 1); assert.equal(exF[0].sev, 'warn'); assert.match(exF[0].title, /^api both gets further than the default: reached Initialised/)
+assert.deepEqual(exF[0].evidence, ['expose: "manifest" → "both"'], 'experiments: evidence is the settings difference')
+const exNo = experimentFindings([exBase, exRes('same', dflt, 4), exNone])
+assert.equal(exNo.length, 1); assert.equal(exNo[0].sev, 'info'); assert.match(exNo[0].title, /Nothing tried made a difference/)
+assert.equal(experimentFindings([exBase, exRes('tie', dflt, 4)])[0].sev, 'info', 'experiments: a tie is not further')
+assert.deepEqual(experimentFindings([]), [])
+const exRun = runResult('v', dflt, { milestones: mkSteps(2), trace: trace(), findings: [{ sev: 'error', title: 'bad' }] }, { runId: 3 })
+assert.equal(exRun.errors, 1); assert.equal(exRun.verdict.title, 'bad'); assert.equal(exRun.runId, 3); assert.equal(summarise([exRun])[0].runId, 3)
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -264,6 +291,25 @@ if (!process.argv.includes('--unit')) {
   assert.ok(rl.some(t => /stuck on a loading screen/.test(t) && /JSON/.test(t)), 'loader run: ' + rl)
   console.log('runs: ok')
 
+  // Experiments: the api preset on mismatch shows that offering both APIs, or 1.2, gets further.
+  const exDir = join(work, 'experiment')
+  const ex = JSON.parse(node(['experiment', mismatch, '--preset', 'api', '--wait', '3', '--json', '--out', exDir]).stdout)
+  const exBy = Object.fromEntries(ex.variants.map(v => [v.name, v]))
+  assert.deepEqual(ex.variants.map(v => v.name), ['default', 'api both', 'api 1.2', 'api 2004', 'api none'], 'experiment: variants')
+  assert.equal(exBy.default.furthest, 'looked', 'experiment: default reaches looked')
+  assert.ok(exBy['api both'].better > 0 && exBy['api 1.2'].better > 0, 'experiment: both and 1.2 get further')
+  const exTitles = ex.findings.map(f => f.title)
+  assert.ok(exTitles.some(t => /^api both gets further/.test(t)) && exTitles.some(t => /^api 1\.2 gets further/.test(t)) && !exTitles.some(t => /api none gets further/.test(t)), 'experiment findings: ' + exTitles)
+  assert.ok(existsSync(join(exDir, '02-api_both.json')) && JSON.parse(readFileSync(exBy['api both'].out, 'utf8')).format === 'scorm-lab-run', 'experiment: runs saved in --out')
+  const exText = node(['experiment', mismatch, '--variants', (writeFileSync(join(work, 'variants.json'), JSON.stringify([{ name: 'deep', patch: { depth: 1 } }])), join(work, 'variants.json')), '--wait', '3'])
+  assert.match(exText.stdout, /Variant\s+Furthest[\s\S]*deep[\s\S]*Nothing tried made a difference/, 'experiment: text table and --variants file: ' + exText.stdout)
+  assert.equal(node(['experiment', mismatch, '--preset', 'nope']).status, 2, 'experiment: unknown preset fails')
+  assert.equal(node(['experiment', mismatch, '--preset']).status, 2, 'experiment: --preset needs a value')
+  assert.equal(node(['experiment', mismatch, '--preset', 'constructor']).status, 2, 'experiment: inherited names are not presets')
+  assert.equal(node(['experiment', mismatch, '--variants']).status, 2, 'experiment: --variants needs a value')
+  assert.equal(node(['experiment', mismatch, '--preset', 'api', '--variants', 'x.json']).status, 2, 'experiment: both --preset and --variants fails')
+  console.log('experiment: ok')
+
   // Live: a frame appears, a click on Next reaches the course, stop ends the run early.
   const live = join(work, 'live')
   const child = spawn(process.execPath, [cli, 'run', good, '--wait', '60', '--live', live, '--json'], { stdio: ['ignore', 'pipe', 'ignore'] })
@@ -309,6 +355,17 @@ if (!process.argv.includes('--unit')) {
     assert.equal(list.length, 1, 'web: run saved')
     assert.equal((await invoke('load-run', { file: list[0].file }))[0].kind, 'package', 'web: saved run loads')
     await assert.rejects(invoke('load-run', { file: '../../etc/passwd' }), /No such saved run/, 'web: load-run stays in the runs folder')
+    // An experiment through the handlers: two runs (default and one variant), announced as 'experiment' events.
+    const evs = await fetch(base + '/api/events', { headers: H }), evReader = evs.body.getReader()
+    let evText = ''
+    assert.equal((await invoke('experiment-presets')).join(), 'api,frames,standard', 'web: presets')
+    await assert.rejects(invoke('experiment-start', { item: 0, preset: 'nope' }), /No preset/, 'web: unknown preset')
+    assert.deepEqual(await invoke('experiment-start', { item: 0, wait: 3, variants: [{ name: 'both', patch: { expose: 'both' } }] }), ['default', 'both'], 'web: experiment starts')
+    await assert.rejects(invoke('experiment-start', { item: 0 }), /already running/, 'web: one experiment at a time')
+    while (!evText.includes('"state":"done"')) evText += new TextDecoder().decode((await evReader.read()).value)
+    evReader.cancel()
+    assert.ok(evText.includes('"state":"start"') && (evText.match(/"state":"result"/g) ?? []).length === 2, 'web: experiment events')
+    assert.equal((await invoke('state')).runs.length, 4, 'web: both experiment runs recorded (plus the earlier run and its reloaded copy)')
     console.log('web: ok')
   } finally { server.kill() }
 

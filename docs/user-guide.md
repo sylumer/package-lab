@@ -51,7 +51,7 @@ Only one SCORM Lab window runs at a time. Opening another package sends it to th
   - the status line
 - **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the tabs.
   The **R** and **F** buttons are for comparing.
-- **Tabs:** Findings, Boot path, Package, API, Lookups, Network, Scripts, Errors, Console, Frames and Compare. The
+- **Tabs:** Findings, Boot path, Package, API, Lookups, Network, Scripts, Errors, Console, Frames, Compare and Experiments. The
   **Filter** box filters whichever table is showing.
 
 When no run is selected, the tabs show the package as read from its files. When a run is selected, they show that run.
@@ -191,6 +191,25 @@ Change one setting, launch again, and see whether the content gets further.
 Under the toolbar, **More options** shows every option the next launch will use, as JSON (read-only for now).
 **Copy as CLI command** copies the `scorm-lab run …` line that repeats the launch from the command line. Options that
 have no flag are left out of the line; it adds `--options options.json` to say a file is needed.
+
+## Trying every setting at once: experiments
+
+Instead of changing one setting at a time, let SCORM Lab do it. Open the **Experiments** tab, choose a set of variants,
+and click **Run all**. It runs the item with the settings in the toolbar (the default), then again with each variant,
+one after another. Each run lasts as long as **Stop after** (10 seconds if that says **I stop it**).
+
+| Variants | What is tried |
+|---|---|
+| **api** | The API offered: as the manifest says, both, 1.2, 2004 and none |
+| **frames** | Frame depth 0, 1, 2 and 3, and a new window |
+| **standard** | Both of the above (a variant that matches the default is left out) |
+
+The table fills in as each run finishes: how far it got, API calls, errors, the verdict, and how it compares with the
+default. Click a row to open that run. **Stop** ends the run in progress and skips the rest. The run it cut short is left out of the table and the findings (it is still in the Runs list). A run that fails to finish shows as such and the experiment carries on. Variants you list yourself on the command line are all run, even ones that repeat the default; the built-in sets leave those out.
+
+If a variant got further than the default, a finding says so and lists the settings that changed. That tells you
+which setting matters. If nothing helps, the finding says that too. The same thing runs from the command line:
+see [`experiment`](cli.md#experiment).
 
 ## Testing resume and progress saving
 

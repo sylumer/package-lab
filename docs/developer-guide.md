@@ -147,6 +147,9 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `launch` | `{ item, cmi?, …launch options }` (flat; unknown options throw) | `true` |
 | `options` | `{ item?, …launch options }` | `{ options, command }`: the normalised options and the equivalent `scorm-lab run` line |
 | `reference` | `{ url, caught, auto }` | `true` |
+| `experiment-presets` | — | The preset names |
+| `experiment-start` | `{ item, preset? (default `standard`), variants?, …launch options (the base) }` | The variant names, at once; progress comes as `experiment` events. Throws if a run or experiment is under way |
+| `experiment-stop` | — | `true`: stops the run in progress and the rest of the experiment |
 | `stop` | — | The run's id, or null |
 | `compare` | `{ ref, run }` | `{ cmp, findings }` |
 | `open-run` | — | Run summaries (desktop only: opens a dialog) |
@@ -345,6 +348,24 @@ ids, in order, are `launched`, `scripts`, `shown`, `looked`, `found`, `initialis
 `main.js` adds `milestones` to each package run (the run summary the interfaces get, and the saved run) and puts
 `milestoneFinding` first in its findings. Saved runs from before this have no `milestones`; the report computes them.
 
+## Experiments
+
+`src/experiments.js` is pure. `PRESETS` maps a name to a list of `{ name, patch }` (P2.1, P2.2 and P2.3 add `lms`,
+`storage` and `browsers` here). `planVariants({ base, variants })` returns `[{ name, options }]`: the base first, named
+`default`, then each variant's patch merged over it with `normaliseOptions`; a variant whose options equal an earlier
+one's is dropped (unless `dedupe: false`, used for variants the user wrote), and bad patches throw with the variant's name. `runResult(name, options, savedRun, extra)` keeps what
+a table needs: `{ name, options, milestones, counts (runCounts), errors, verdict, …extra }`. `summarise(results)` makes
+the rows (`results[0]` is the base; each other row has `progress` and `better` from `progress()`), and
+`experimentFindings(results)` returns the "gets further" warnings (only when the furthest step is later, not for a tie
+on step count) or the "Nothing tried" note.
+
+Running is up to the caller. The CLI calls `runPackage` for each plan entry (a fresh Electron each time, saved runs in
+`--out`). `main.js` runs the plan inside one process: `experimentStart` launches each variant with `auto` set to its
+`wait`, waits for the run to be recorded, and emits `experiment` events: `{ state: 'start', names }`,
+`{ state: 'result', index, row }`, `{ state: 'done', rows, findings, stopped }` and `{ state: 'error', message }`. One
+experiment at a time; the runs also appear in the runs list as usual. The UI's Experiments tab keeps its table in
+`st.exp` and fills it from these events; it doesn't survive a page reload in the web interface.
+
 ## Reports
 
 `renderReport({ title, subtitle, findings, boot, run, analysis, fragment })` (`src/report.js`) returns a full HTML
@@ -372,7 +393,7 @@ The page's CSP allows only its own scripts and styles, and `data:` images (for l
 | `GET /`, `GET /<ui file>` | The interface |
 | `POST /api/invoke/<handler>` | JSON body, then `{ value }` or `{ error }` (status 500). `open-package` and `open-run` are refused |
 | `POST /api/upload?name=` | Raw `.zip` body (up to 1 GB), then `{ value: package info }` |
-| `GET /api/events` | Server-sent events: `package`, `run`, `state`, `probe` |
+| `GET /api/events` | Server-sent events: `package`, `run`, `state`, `probe`, `experiment` |
 | `GET /api/live` | Server-sent events: `frame` with `{ w, h, t, jpeg (base64) }`. Open connections count as watchers |
 
 Every request except the token exchange needs the `scormlab` cookie, compared in constant time. Responses carry

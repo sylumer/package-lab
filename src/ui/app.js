@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'API', 'Lookups', 'Network', 'Scripts', 'Errors', 'Console', 'Frames', 'Compare', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'API', 'Lookups', 'Network', 'Scripts', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', ...(lab.web ? ['Live'] : [])]
 
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
@@ -128,6 +128,28 @@ const VIEWS = {
   },
 }
 
+// ---- Experiments: one launch run several ways, with a table that fills as each run finishes ----
+st.exp = { preset: 'standard', presets: null, names: [], rows: [], findings: [], busy: false, note: '' }
+VIEWS.Experiments = () => {
+  const x = st.exp
+  if (!x.presets) { x.presets = []; lab.invoke('experiment-presets').then(p => { x.presets = p; render() }) }
+  const rows = x.names.map((n, i) => x.rows[i] ?? { name: n, pending: true })
+  return [h('p', { class: 'muted small' }, 'Runs the item with the settings above, then again with each variant changed, one after another. Each takes as long as “Stop after” (10 s if that is “I stop it”).'),
+    h('div', { class: 'row' },
+      h('label', {}, 'Variants ', h('select', { onchange: e => { x.preset = e.target.value } }, x.presets.map(p => h('option', { value: p, selected: p === x.preset }, p)))),
+      h('button', { type: 'button', disabled: x.busy || !!st.running || !st.pkg?.items.length, onclick: () => act(async () => {
+        x.names = []; x.rows = []; x.findings = []; x.busy = true; x.note = ''; render()
+        try { await lab.invoke('experiment-start', { item: +$('item').value, preset: x.preset, ...launchOptions(), wait: +$('auto').value || 10 }) } catch (e) { x.busy = false; throw e }
+      }) }, 'Run all'),
+      h('button', { type: 'button', class: 'secondary', disabled: !x.busy, onclick: () => act(() => lab.invoke('experiment-stop')) }, 'Stop'),
+      h('span', { class: 'muted small' }, x.note)),
+    rows.length ? h('table', {}, h('thead', {}, h('tr', {}, ['Variant', 'Furthest', 'API calls', 'Errors', 'Verdict', 'Against the default'].map(c => h('th', {}, c)))),
+      h('tbody', {}, rows.map(r => h('tr', { class: r.runId ? 'click' : null, title: r.runId ? 'Open this run' : null, onclick: r.runId ? () => { st.sel = r.runId; st.tab = 'Findings'; render() } : null },
+        r.pending || r.failed ? [h('td', {}, r.name), h('td', { colspan: 5, class: r.failed ? 'bad' : 'muted' }, r.failed ? r.progress : x.busy ? 'waiting…' : 'not run')]
+          : [r.name, r.furthestLabel, r.apiCalls, r.errors, h('span', { class: r.verdict.sev === 'ok' ? 'ok' : 'bad' }, r.verdict.sev === 'ok' ? 'OK' : r.verdict.title), h('span', { class: r.better > 0 ? 'ok' : r.better < 0 ? 'bad' : null }, r.progress)].map(c => h('td', {}, c)))))) : null,
+    findingsList(x.findings)]
+}
+
 // ---- Live view (web interface only): the running content, with clicks and keys sent back to it ----
 const KEYS = { Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', PageUp: 'PageUp', PageDown: 'PageDown', Home: 'Home', End: 'End' }
 const liveInput = e => lab.invoke('live-input', e).catch(() => {})
@@ -216,8 +238,16 @@ $('filter').oninput = () => render()
 $('item').onchange = () => render()
 let pending = false
 lab.on('probe', p => { st.live.push(p); if (!run() && !pending) { pending = true; setTimeout(() => { pending = false; if (!run()) render() }, 300) } })
-lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; st.runs.push(r); st.sel = r.id; st.tab = 'Findings'; render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
+lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; st.runs.push(r); if (!st.exp.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
 lab.on('state', s => { st.running = s.running ? s : null; if (!s.running && st.tab === 'Live') st.tab = 'Findings'; render(); $('stop').disabled = !s.running; $('launch').disabled = !!s.running || !st.pkg?.items.length; $('ref').disabled = !!s.running; if (s.running) say(`Recording ${s.label}. ${s.auto ? `It stops by itself after ${s.auto} s, or` : 'Use the course, then'} Stop and analyse${lab.web ? '' : ' (or close its window)'}.`) })
+lab.on('experiment', e => {
+  const x = st.exp
+  if (e.state === 'start') { x.names = e.names; x.rows = []; x.findings = []; x.busy = true }
+  else if (e.state === 'result') { x.rows[e.index] = e.row; x.note = `Finished ${e.index + 1} of ${x.names.length}.` }
+  else if (e.state === 'done') { x.rows = e.rows; x.findings = e.findings; x.busy = false; x.note = e.stopped ? 'Stopped.' : 'Done.' }
+  else { x.busy = false; x.note = e.message }
+  render()
+})
 lab.on('package', p => { if (p?.loaded !== st.pkg?.loaded) showPackage(p) })
 render()
 // The web interface may join a session already under way: show its package, runs and any run in progress.

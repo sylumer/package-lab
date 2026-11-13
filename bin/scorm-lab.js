@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // scorm-lab: the command-line interface. Static analysis runs here in Node; runs, the desktop window and the web
 // interface start Electron (this repo's, or the installed SCORM Lab.app). See docs/cli.md.
-import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync, openSync, closeSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, openSync, closeSync } from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { tmpdir, homedir } from 'node:os'
@@ -12,6 +12,7 @@ import { bootGraph } from '../src/bootpath.js'
 import { staticFindings, sortFindings } from '../src/rules.js'
 import { normaliseOptions } from '../src/options.js'
 import { furthest, strip } from '../src/milestones.js'
+import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { renderReport, verdict, counts, screens } from '../src/report.js'
 
 const APP_DIR = new URL('..', import.meta.url).pathname
@@ -27,6 +28,7 @@ Commands
   analyze <package.zip>     Check the package without running it: manifest, scripts, launch path.
   items <package.zip>       List the items that can be launched, with their numbers.
   run <package.zip>         Launch an item in a hidden browser, record it, and report what went wrong.
+  experiment <package.zip>  Run the same launch several ways, one after another, and show how far each got.
   report <package.zip | run.json>
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
@@ -51,6 +53,12 @@ Options for run (and report --run)
   --no-caught               Don't record errors the content catches itself.
   --show                    Show the content window while it runs.
 
+Options for experiment (also the run options above, which set the default launch)
+  --variants <file.json>    Your own variants: [{ "name": "deep", "patch": { "depth": 2 } }, …].
+  --preset <name>           Built-in variants: standard (default), api, frames.
+  --out <folder>            Keep each run in <folder> as a saved run.
+  --json                    Print JSON instead of a table.
+
 Options for report
   --out <file.html>         Where to write it. Default: print to standard output.
   --open                    Open the report in the browser (written to a temporary file if there's no --out).
@@ -74,7 +82,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'out', 'live', 'port', 'host']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'out', 'live', 'port', 'host', 'variants', 'preset']
     o[k] = v !== undefined ? v : takes.includes(k) ? args[++i] : true
   }
   return o
@@ -161,11 +169,10 @@ function buildOptions(o) {
 }
 
 // Runs one item headless and returns the saved run. Options as for the run command.
-function runPackage(pkg, o) {
+function runPackage(pkg, o, options) {
   const item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'scorm-lab-cli-'))
   const out = o.out ? resolve(o.out) : join(dir, 'run.json')
-  let options
-  try { options = buildOptions(o) } catch (e) { rmSync(dir, { recursive: true, force: true }); throw e }
+  try { options ??= buildOptions(o) } catch (e) { rmSync(dir, { recursive: true, force: true }); throw e }
   const wait = options.wait
   const job = { zip: pkg.path, item: item.index, options, resumeFrom: o['resume-from'] ? resolve(o['resume-from']) : null, out, live: o.live ? resolve(o.live) : null }
   writeFileSync(join(dir, 'job.json'), JSON.stringify(job))
@@ -218,6 +225,44 @@ const commands = {
       if (out) console.log(paint('2', `\nRun saved to ${out}`))
     }
     return o.strict && run.findings.some(f => f.sev === 'error') ? 1 : 0
+  },
+  experiment(o) {
+    const pkg = openZip(o._[0]), options = buildOptions(o), item = pickItem(pkg.analysis, o.item)
+    for (const k of ['variants', 'preset']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
+    if (o.variants && o.preset) fail('Use --variants or --preset, not both.')
+    if (o.preset !== undefined && !Object.hasOwn(PRESETS, o.preset)) fail(`No preset “${o.preset}”. Presets: ${Object.keys(PRESETS).join(', ')}.`)
+    let variants = PRESETS[o.preset ?? 'standard']
+    if (o.variants) {
+      if (!existsSync(o.variants)) fail(`No such file: ${o.variants}`)
+      try { variants = JSON.parse(readFileSync(o.variants, 'utf8')) } catch (e) { fail(`${basename(o.variants)} isn’t valid JSON: ${e.message}`) }
+      if (variants?.variants) variants = variants.variants
+    }
+    let plan
+    try { plan = planVariants({ base: options, variants, dedupe: !o.variants }) } catch (e) { fail(e.message) }
+    const dir = o.out ? resolve(o.out) : null
+    if (dir) mkdirSync(dir, { recursive: true })
+    const results = []
+    for (const [i, v] of plan.entries()) {
+      if (!o.json) process.stderr.write(`Variant ${i + 1} of ${plan.length}: ${v.name} (${v.options.wait} s)…\n`)
+      const file = dir ? join(dir, `${String(i + 1).padStart(2, '0')}-${v.name.replace(/[^\w.-]+/g, '_').slice(0, 60)}.json`) : undefined
+      const { run } = runPackage(pkg, { ...o, out: file, live: undefined }, v.options)
+      results.push(runResult(v.name, v.options, run, { out: file ?? null }))
+    }
+    const rows = summarise(results).map((r, i) => ({ ...r, options: results[i].options, out: results[i].out })), findings = experimentFindings(results)
+    if (o.json) console.log(JSON.stringify({ package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), base: options, variants: rows, findings }, null, 1))
+    else {
+      printHeader(pkg, item)
+      const cols = ['Variant', 'Furthest', 'API calls', 'Errors', 'Verdict', 'Against the default'], cell = r => [r.name, r.furthestLabel, r.apiCalls, r.errors, r.verdict.sev === 'ok' ? 'OK' : r.verdict.sev.toUpperCase(), r.progress].map(String)
+      const table = [cols, ...rows.map(cell)], w = cols.map((_, c) => Math.max(...table.map(r => r[c].length)))
+      console.log()
+      for (const [i, r] of table.entries()) {
+        console.log(r.map((c, k) => c.padEnd(w[k])).join('  ').trimEnd())
+        if (i === 0) console.log(paint('2', w.map(n => '─'.repeat(n)).join('  ')))
+      }
+      printFindings(findings)
+      if (dir) console.log(paint('2', `\nRuns saved in ${dir}`))
+    }
+    return 0
   },
   report(o) {
     const input = o._[0]
