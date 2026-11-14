@@ -1,6 +1,6 @@
 {
   "name": "scorm-lab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Find out why a SCORM package doesn't work: check its files, run it under the debugger, and get findings with causes and fixes.",
   "private": true,
   "type": "module",

@@ -774,7 +774,7 @@ itself fails. The checks:
 
 ```json
 {
-  "version": "0.1.0", "ok": true,
+  "version": "0.2.0", "ok": true,
   "checks": [{ "id": "electron", "label": "Electron, to run packages", "ok": true, "detail": "/path/to/Electron" }, "…"],
   "capabilities": { "analyze": true, "run": true, "webkit": false },
   "profiles": ["generic", "moodle", "…"], "tools": ["xyleme", "…"], "viewports": ["iphone", "ipad", "android-phone"],
