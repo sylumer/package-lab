@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { macro: [], cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
@@ -433,7 +433,7 @@ function showPackage(p) {
   $('pkg-name').textContent = p.name
   $('item').replaceChildren(...p.items.map(i => h('option', { value: i.index }, `${'· '.repeat(i.depth)}${i.title} (${i.type || '?'})`)))
   const firstSco = p.items.find(i => i.type === 'sco'); if (firstSco) $('item').value = firstSco.index
-  $('item').disabled = !p.items.length; $('launch').disabled = !p.items.length; $('cycle').disabled = !p.items.length; $('export').disabled = false
+  $('item').disabled = !p.items.length; $('launch').disabled = !p.items.length; $('cycle').disabled = !p.items.length; $('export').disabled = false; $('compare-pkg').disabled = false; st.pdiff = null
   say(`${p.name}: before running, ${p.findings.filter(f => f.sev === 'error').length} errors and ${p.findings.filter(f => f.sev === 'warn').length} warnings.`)
   st.tab = 'Findings'; render()
 }
@@ -444,6 +444,34 @@ $('file').onchange = () => act(async () => {
   showPackage(await lab.upload(f, p => say(`Uploading ${f.name}: ${Math.round(p * 100)}%`)))
   $('file').value = ''
 }, 'Uploading…')
+// ---- Package diff (P3.3): the open package (A) against a second one (B) ----
+const kb = n => n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`
+const showDiff = d => { if (!d) return; st.pdiff = d; st.tab = 'Package diff'; render(); say(`${d.a.name} against ${d.b.name}: ${d.summary}`) }
+$('compare-pkg').onclick = () => lab.web ? $('file2').click() : act(async () => showDiff(await lab.invoke('compare-packages')), 'Comparing…')
+$('file2').onchange = () => act(async () => {
+  const f = $('file2').files[0]
+  if (!f) return
+  showDiff(await lab.upload(f, p => say(`Uploading ${f.name}: ${Math.round(p * 100)}%`), 'compare'))
+  $('file2').value = ''
+}, 'Uploading…')
+VIEWS['Package diff'] = () => {
+  const d = st.pdiff
+  if (!d) return h('p', { class: 'muted' }, st.pkg ? 'Choose Compare packages… to compare the open package (A) with another one (B).' : 'Open a package, then choose Compare packages….')
+  const f = d.files, none = h('span', { class: 'muted' }, 'none'), cell = v => v === null ? none.cloneNode(true) : v
+  const diffPre = text => { const all = text.split('\n'), lines = all.slice(0, 3000); return [h('pre', { class: 'diff' }, lines.map(l => h('div', { class: l[0] === '+' ? 'add' : l[0] === '-' ? 'del' : l[0] === '@' ? 'hunk' : null }, l || ' '))), all.length > 3000 && h('p', { class: 'muted small' }, `First 3000 of ${all.length} lines. scorm-lab diff --out has all of them.`)] }
+  return [h('p', {}, h('b', {}, d.a.name), ' (A) against ', h('b', {}, d.b.name), ` (B): ${d.summary}`),
+    h('p', { class: 'muted small' }, 'From the files alone. To compare how they run, use scorm-lab diff --run.'),
+    h('h3', { class: 'section' }, 'Files'),
+    ...table(['File', 'Size', 'Change'], [...f.added.map(x => [x.path, kb(x.size), 'added in B']), ...f.removed.map(x => [x.path, kb(x.size), 'only in A']), ...f.changed.map(x => [x.path, `${kb(x.before)} → ${kb(x.after)}`, 'changed'])]),
+    f.changed.map(c => h('details', {}, h('summary', {}, h('span', { class: 'mono' }, c.path), h('span', { class: 'muted' }, ` ${kb(c.before)} → ${kb(c.after)}${c.diff === null ? c.tooBig ? ', too large to show line by line' : ', not a text file' : ''}`)), c.diff === null ? null : diffPre(c.diff))),
+    h('h3', { class: 'section' }, 'Manifest'),
+    ...table(['Where', 'Field', 'A', 'B'], d.manifest.map(m => [m.where, m.field, cell(m.a), cell(m.b)])),
+    h('h3', { class: 'section' }, 'Loading path'),
+    h('p', { class: 'muted small' }, `Launch page: ${d.boot.a ?? 'none'} in A, ${d.boot.b ?? 'none'} in B.`),
+    ...table(['File', 'Kind', 'How', 'Change'], [...d.boot.added.map(n => [n.path, n.kind, n.how, `only in B (${n.status})`]), ...d.boot.removed.map(n => [n.path, n.kind, n.how, `only in A (${n.status})`]), ...d.boot.changed.map(c => [c.path, c.kind, '', `${c.a} → ${c.b}`])]),
+    h('h3', { class: 'section' }, 'New findings (in B, not in A)'), findingsList(d.findings.added),
+    h('h3', { class: 'section' }, 'Findings gone (in A, not in B)'), findingsList(d.findings.gone)]
+}
 // ---- LMS profile (P2.1): a preset from the toolbar, with the fields changed in More options going over it ----
 // [field path, label, choices | 'text' | 'number' | 'json']. Empty sandbox, CSP and limits are null (none, the standard's).
 const PF = [['contentOrigin', 'Content origin', ['same', 'other']], ['frames.depth', 'Frames', [0, 1, 2, 3, 4, 5]], ['frames.kind', 'Frame kind', ['iframe', 'frameset']],

@@ -81,6 +81,7 @@ Everything works as in the [user guide](user-guide.md), except:
 - **Open package…** uploads a `.zip` from the device you are on, with progress shown in the status line. It replaces
   the package open on the Mac for everyone.
 - **Export corrected package…** builds the corrected `.zip` on the Mac and your browser downloads it (it can't use a save dialog). It includes your changed files and the fixes; see the [user guide](user-guide.md#exporting-a-corrected-package). The package is built in memory, so it needs room for a second copy of the package on the Mac. The address is `GET /api/export` (`?only=case,http-to-https` limits the fixes; `?only=` with nothing after it means none, so only your changed files). Before downloading, the page shows the checklist of fixes that apply, as the desktop app does; with nothing to change it answers with an error that says so.
+- **Compare packages…** uploads a second `.zip` from the device you are on and shows the **Package diff** tab: files and text diffs, manifest, loading path and findings, from the files alone. The second package is compared and not kept: the one open on the Mac stays as it is. See the [user guide](user-guide.md#comparing-two-packages); to compare how they run, use [`scorm-lab diff --run`](cli.md#diff).
 - **Open saved…** lists the runs saved on the Mac, newest first; click one to open it.
 - **Stop after** is the way to run a course unattended: launch, come back, and read the findings.
 - **More options** and **Copy as CLI command** work as in the desktop app. Copying needs the page to be open on

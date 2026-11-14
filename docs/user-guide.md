@@ -15,6 +15,7 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 - [Why it stopped: drill-down](#why-it-stopped-drill-down)
 - [Testing resume and progress saving](#testing-resume-and-progress-saving)
 - [Comparing with a working copy (optional)](#comparing-with-a-working-copy-optional)
+- [Comparing two packages](#comparing-two-packages)
 - [Saved runs](#saved-runs)
 - [A method for a package that doesn't work](#a-method-for-a-package-that-doesnt-work)
 - [Privacy](#privacy)
@@ -55,7 +56,7 @@ Only one SCORM Lab window runs at a time. Opening another package sends it to th
   - the status line
 - **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the tabs.
   The **R** and **F** buttons are for comparing.
-- **Tabs:** Findings, Boot path, Package, Files, API, Lookups, Network, Scripts, Errors, Console, Frames, Compare, Experiments and Server needs. The
+- **Tabs:** Findings, Boot path, Package, Files, API, Lookups, Network, Scripts, Errors, Console, Frames, Compare, Package diff, Experiments and Server needs. The
   **Filter** box filters whichever table is showing.
 
 When no run is selected, the tabs show the package as read from its files. When a run is selected, they show that run.
@@ -624,6 +625,24 @@ The comparison matches requests and scripts by path, ignoring host and package f
 - requests that failed only in the run;
 - errors only in the run;
 - branches and functions that ran in one and not the other, with their code.
+
+## Comparing two packages
+
+Two exports of the same course, one that works and one that doesn't? **Compare packages…** (next to **Export corrected
+package…**) asks for a second `.zip` and compares it with the open one. The first is **A**, the second **B**. The
+result appears in the **Package diff** tab. It is worked out from the files alone, so nothing runs. It shows:
+
+- **Files:** what B added, what only A has, and what changed, with sizes. Each changed text file (under 1 MB) has a
+  line diff you can open. Binary files and very large ones are listed without one.
+- **Manifest:** what differs, field by field: the SCORM version, resources, items, launch paths and parameters.
+- **Loading path:** the files the launch page loads that only one package has, and files whose state changed (for
+  example "in package" in A, "missing" in B).
+- **New findings and findings gone:** the findings only B has, and the ones only A has. Start with the new ones.
+
+Minified files are compared as they are, so a changed minified script shows as one long changed line.
+
+To see how they behave too, use [`scorm-lab diff --run`](cli.md#diff): it runs the same item with the same options on
+both and says how far each got ("A reached Wrote data; B reached Launch page loaded").
 
 ## Saved runs
 

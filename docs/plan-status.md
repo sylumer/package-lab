@@ -7,6 +7,8 @@ Progress on [plan.md](plan.md). The orchestrator updates this file with each wor
 
 In progress on branch `next`.
 
+**Phase 3 (from diagnosis to fix), done.** Corrected package export with six autofixes and a fix picker (`fix`), rule packs for eleven authoring tools and wrappers with a `--tool` override (research was thin, so most rules are info), and comparing two packages (`diff`, Package diff tab) with a Myers line diff.
+
 **Phase 2 (what a local run can't see yet), done.** LMS profiles with eight approximate presets and content on another origin, blocked storage, WebKit runs and device sizes, input macros and the save-and-resume cycle (`cycle`). Popups are now recorded from their first request. `npm test` takes about 2:48, close to the 3:00 cap; later phases put their end-to-end checks behind `--slow`, which takes about 13 minutes.
 
 **Phase 1 (replacing hand work), done.** Overlays (Files tab, `--override`), pins and answers (`--pin`, `--answer`), server-needs discovery (`discover`), an instrumented execution trace (`--trace`, Execution tab), an automatic drill-down (`drill`) and stall analysis. `npm test` takes about 2:20; `--slow` (with a forced-trace pass) about 7 minutes.
@@ -32,8 +34,8 @@ In progress on branch `next`.
 | P2.3 | WebKit and device sizes | sonnet | done | 12a984b | One review round (network confinement, timeouts). Playwright and WebKit installed; WebKit checks are in --slow. Default suite now ~2:41 |
 | P2.4 | Save-and-resume cycle | sonnet | done | b3de596 | Resumed once after a usage limit. One review round (typed text now kept only with --record-input; passwords never). Macros are Chromium only |
 | P3.1 | Corrected package export | sonnet | done | 2f7c2f0 | One review round (zip names checked, fix picker, UTF-8 only). Run proof uses a new `capitals` fixture: `blank` has a second bug once its capitals are fixed |
-| P3.2 | Authoring tool rule packs | sonnet + haiku research | done | | Research thin for most tools (Xyleme very thin), so most rules are info. One review round: severities lowered to match the notes; added `--tool` to force a pack |
-| P3.3 | Comparing two packages | sonnet | todo | | |
+| P3.2 | Authoring tool rule packs | sonnet + haiku research | done | 8fcfa13 | Research thin for most tools (Xyleme very thin), so most rules are info. One review round: severities lowered to match the notes; added `--tool` to force a pack |
+| P3.3 | Comparing two packages | sonnet | done | | One review round. Behaviour comparison is CLI only (`diff --run`) |
 | P4.1 | Code views | sonnet | todo | | |
 | P4.2 | Timeline | haiku | todo | | |
 | P4.3 | Batch checks | haiku | todo | | |

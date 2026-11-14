@@ -12,7 +12,7 @@ import { join, extname } from 'node:path'
 import { networkInterfaces } from 'node:os'
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' }
-const DESKTOP_ONLY = new Set(['open-package', 'open-run', 'export-fixed']) // they open file dialogs on the Mac
+const DESKTOP_ONLY = new Set(['open-package', 'open-run', 'export-fixed', 'compare-packages']) // they open file dialogs on the Mac
 const MAX_UPLOAD = 1024 ** 3, MAX_JSON = 20 * 1024 ** 2
 
 export function token(dataDir) {
@@ -25,7 +25,7 @@ export function token(dataDir) {
 
 const lanAddress = () => Object.values(networkInterfaces()).flat().find(i => i?.family === 'IPv4' && !i.internal)?.address
 
-export function startWeb({ host = '127.0.0.1', port = 4880, uiDir, dataDir, handlers, upload, download, onLive = () => {} }) {
+export function startWeb({ host = '127.0.0.1', port = 4880, uiDir, dataDir, handlers, upload, accept = () => {}, download, onLive = () => {} }) {
   const secret = token(dataDir), files = new Set(readdirSync(uiDir))
   const events = new Set(), liveClients = new Set()
   const same = (a, b) => typeof a === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b))
@@ -64,7 +64,8 @@ export function startWeb({ host = '127.0.0.1', port = 4880, uiDir, dataDir, hand
       if (req.method === 'GET' && p === '/api/live') return sse(res, liveClients)
       if (req.method === 'POST' && p === '/api/upload') {
         const name = (u.searchParams.get('name') ?? 'package.zip').split(/[\\/]/).pop().slice(0, 200) || 'package.zip'
-        return json(res, 200, { value: await upload(name, await body(req, MAX_UPLOAD)) })
+        accept(u.searchParams.get('role'))
+        return json(res, 200, { value: await upload(name, await body(req, MAX_UPLOAD), u.searchParams.get('role')) })
       }
       if (req.method === 'GET' && p === '/api/export') {   // the corrected package (P3.1), built in memory like uploads are read
         const d = await download({ only: u.searchParams.has('only') ? u.searchParams.get('only').split(',').filter(Boolean) : undefined }), plain = d.name.replace(/[^\w. -]/g, '_')

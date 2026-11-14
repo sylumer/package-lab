@@ -22,6 +22,7 @@ import { drill, watchPins } from '../src/drilldown.js'
 import { overlayFiles } from '../src/overlay.js'
 import { renderReport, verdict, counts, screens } from '../src/report.js'
 import { launchPlan, runAnalysis, savedRun, WEBKIT_ORIGINS } from '../src/launch.js'
+import { comparePackages, compareBehaviour } from '../src/pkgdiff.js'
 import { readMacro, cycleFindings, cycleRows, resumeOptions } from '../src/cycle.js'
 
 const APP_DIR = new URL('..', import.meta.url).pathname
@@ -42,6 +43,7 @@ Commands
   discover <package.zip>    Work out what the content wants from its server: the fields it reads, and a stand-in response.
   drill <package.zip>       Why it stopped: the decisions that led to the dead end, their values, and where each undefined came from.
   cycle <package.zip>       Test saving: leave the way a learner does, then resume, and check the content saved and read its place.
+  diff <a.zip> <b.zip>      What changed between two packages: files (with text diffs), manifest, loading path and findings. --run also runs both.
   report <package.zip | run.json>
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
@@ -114,6 +116,12 @@ Options for cycle (also the run options above; --wait is the length of each of t
   --json                    Print JSON instead of text.
   --strict                  Exit with status 1 if the findings include an error.
 
+Options for diff (with --run, also the run options above, used for both runs)
+  --run                     Run the same item with the same options on both, and compare how far each got.
+  --item <n | id>           The item to compare (as for analyze), in both packages. Default: each one's first SCO.
+  --out <report.html>       Also write the diff as an HTML report, with a collapsible diff per file.
+  --json                    Print JSON instead of text.
+
 Options for report
   --out <file.html>         Where to write it. Default: print to standard output.
   --open                    Open the report in the browser (written to a temporary file if there's no --out).
@@ -146,7 +154,9 @@ function parse(args) {
 class Fail extends Error {}
 const fail = msg => { throw new Fail(msg) }
 const tty = process.stdout.isTTY && !process.env.NO_COLOR
-const paint = (code, s) => tty ? `\x1b[${code}m${s}\x1b[0m` : s
+// Text from a package (file names, diff lines, findings quoting them) may hold control characters: drop them before printing (tab stays).
+const clean = s => String(s ?? '').replace(/[\x00-\x08\x0a-\x1f\x7f]/g, '')
+const paint = (code, s) => { s = String(s).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ''); return tty ? `\x1b[${code}m${s}\x1b[0m` : s }   // keeps the newlines of our own text; names go through clean() first
 const SEV = { error: s => paint('31;1', s), warn: s => paint('33;1', s), info: s => paint('2', s), ok: s => paint('32;1', s) }
 
 // ---- Packages ----
@@ -178,10 +188,10 @@ const itemJson = (i, k) => ({ number: k + 1, id: i.id, title: i.title, type: i.t
 
 function printFindings(findings) {
   for (const f of findings) {
-    console.log(`\n${SEV[f.sev](f.sev === 'warn' ? 'WARNING' : f.sev.toUpperCase())}  ${f.title}`)
-    if (f.detail) console.log(`  ${f.detail}`)
-    for (const e of f.evidence ?? []) console.log(paint('2', `  · ${e}`))
-    if (f.fix) console.log(`  Try: ${f.fix}`)
+    console.log(`\n${SEV[f.sev](f.sev === 'warn' ? 'WARNING' : f.sev.toUpperCase())}  ${clean(f.title)}`)
+    if (f.detail) console.log(`  ${clean(f.detail)}`)
+    for (const e of f.evidence ?? []) console.log(paint('2', `  · ${clean(e)}`))
+    if (f.fix) console.log(`  Try: ${clean(f.fix)}`)
   }
 }
 function printHeader(pkg, item) {
@@ -398,7 +408,7 @@ const commands = {
   items(o) {
     const pkg = openZip(o._[0], o), list = launchable(pkg.analysis)
     if (o.json) console.log(JSON.stringify(list.map(itemJson), null, 1))
-    else for (const [k, i] of list.entries()) console.log(`${String(k + 1).padStart(3)}  ${'  '.repeat(i.depth)}${i.title || i.id}  ${paint('2', `${i.type || '?'} · ${i.id} · ${i.res.path ?? i.res.href}`)}`)
+    else for (const [k, i] of list.entries()) console.log(`${String(k + 1).padStart(3)}  ${'  '.repeat(i.depth)}${clean(i.title || i.id)}  ${paint('2', `${i.type || '?'} · ${i.id} · ${i.res.path ?? i.res.href}`)}`)
     return 0
   },
   run(o) {
@@ -532,6 +542,49 @@ const commands = {
       }
       return o.strict && findings.some(f => f.sev === 'error') ? 1 : 0
     } finally { rmSync(dir, { recursive: true, force: true }) }
+  },
+  // Package against package (P3.3). Files, manifest, loading path and findings come from the files alone; --run adds a
+  // run of each (same item, same options) and compares the milestones and counts.
+  diff(o) {
+    const [pa, pb] = [openZip(o._[0], o), o._[1] ? openZip(o._[1], o) : fail('Name two packages: scorm-lab diff <a.zip> <b.zip>')]
+    for (const k of ['item', 'out']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
+    if (o.item !== undefined) { pickItem(pa.analysis, o.item); pickItem(pb.analysis, o.item) }
+    const d = comparePackages(pa, pb, { item: o.item })
+    if (o.run) {
+      const options = buildOptions(o), runs = [pa, pb].map((pkg, i) => {
+        if (!o.json) process.stderr.write(`Running ${pkg.name} (${i + 1} of 2) for ${options.wait} s…\n`)
+        return runPackage(pkg, { ...o, out: undefined, live: undefined }, options).run
+      })
+      d.behaviour = compareBehaviour(runs[0], runs[1], [pa.name, pb.name])
+    }
+    if (o.out) writeFileSync(resolve(o.out), renderReport({ title: `SCORM Lab: ${pa.name} against ${pb.name}`, subtitle: 'Package diff. A is the first package, B the second; the findings and loading path below are B’s.', findings: d.b.findings, diff: d, analysis: pb.analysis }))
+    if (o.json) { console.log(JSON.stringify(d, null, 1)); return 0 }
+    const f = d.files, kb = n => n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`
+    console.log(paint('1', `SCORM Lab · diff`))
+    console.log(`A: ${clean(pa.name)}   B: ${clean(pb.name)}\n${d.summary}`)
+    if (d.behaviour) { console.log(paint('1', '\nBehaviour')); console.log(clean(d.behaviour.summary)); console.log(`A: ${strip(d.behaviour.a.milestones)}\nB: ${strip(d.behaviour.b.milestones)}`); for (const [k, v] of Object.entries(d.behaviour.counts)) console.log(paint('2', `  ${k}: ${v.a} → ${v.b}`)) }
+    console.log(paint('1', '\nFiles'))
+    for (const x of f.added) console.log(`  + ${clean(x.path)} (${kb(x.size)})`)
+    for (const x of f.removed) console.log(`  - ${clean(x.path)} (${kb(x.size)})`)
+    for (const x of f.changed) console.log(`  ~ ${clean(x.path)} (${kb(x.before)} → ${kb(x.after)}${x.diff === null ? x.tooBig ? ', too large for a line diff' : ', not a text file' : ''})`)
+    if (!f.added.length && !f.removed.length && !f.changed.length) console.log('  Identical.')
+    if (d.manifest.length) { console.log(paint('1', '\nManifest')); for (const m of d.manifest) console.log(`  ${clean(m.where)}${m.field ? ' ' + clean(m.field) : ''}: ${m.a === null ? 'none' : clean(JSON.stringify(m.a))} → ${m.b === null ? 'none' : clean(JSON.stringify(m.b))}`) }
+    const bt = d.boot
+    if (bt.added.length || bt.removed.length || bt.changed.length) {
+      console.log(paint('1', '\nLoading path'))
+      for (const n of bt.added) console.log(`  + ${clean(n.path)} (${n.how}, ${n.status})`)
+      for (const n of bt.removed) console.log(`  - ${clean(n.path)} (${n.how}, ${n.status})`)
+      for (const n of bt.changed) console.log(`  ~ ${clean(n.path)}: ${n.a} → ${n.b}`)
+    }
+    if (d.findings.added.length) { console.log(paint('1', '\nNew findings (in B, not in A)')); printFindings(d.findings.added) }
+    if (d.findings.gone.length) { console.log(paint('1', '\nFindings gone (in A, not in B)')); printFindings(d.findings.gone) }
+    for (const x of f.changed.filter(x => x.diff)) {
+      const lines = x.diff.split('\n')
+      console.log(paint('1', `\n${x.path}`)); console.log(lines.slice(0, 200).map(l => l[0] === '+' ? paint('32', l) : l[0] === '-' ? paint('31', l) : paint('2', l)).join('\n'))
+      if (lines.length > 200) console.log(paint('2', `… ${lines.length - 200} more lines (use --out to see all of them)`))
+    }
+    if (o.out) console.log(paint('2', `\nReport written to ${resolve(o.out)}`))
+    return 0
   },
   report(o) {
     const input = o._[0]

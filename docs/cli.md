@@ -52,6 +52,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `discover <package.zip>` | Works out what the content wants from its server: the fields it reads from each answer, and a stand-in response |
 | `drill <package.zip>` | Why it stopped: the decisions that led to the dead end, their values, and where each `undefined` came from |
 | `cycle <package.zip>` | Tests saving: runs, leaves the way a learner does, then resumes from what it left, and checks the content saved and read its place |
+| `diff <a.zip> <b.zip>` | What changed between two packages: files with text diffs, manifest, loading path and findings; with `--run`, how far each got |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
@@ -541,6 +542,58 @@ checks the result again without running it, and prints which findings are gone (
 and which are new or worded differently (a fix can change a count in a title). What a fix left alone, and why (a file that isn't valid UTF-8, a rename that would replace a file, something it couldn't convert), is printed under **Not done** and listed in `notes`; notes are not changes, so if there are only notes no file is written. An unknown id in `--only` is an error
 (status 2). Check the result with `scorm-lab analyze fixed.zip`, or run it.
 
+## diff
+
+```bash
+scorm-lab diff a.zip b.zip [--item n] [--run [run options]] [--json] [--out report.html]
+```
+
+Compares two packages: **a** is the one that worked (or the older one), **b** the other. Without `--run` it reads the
+files only, and prints:
+- the files added in b, only in a, and changed (with sizes);
+- the manifest, field by field (versions, resources, items, launch paths and parameters);
+- the loading path of the launch page: files only one package loads, and files whose status changed;
+- the findings only b has (new) and only a has (gone);
+- a line diff of each changed text file under 1 MB (the first 200 lines each; `--out` has all of them). Minified
+  files are diffed as they are.
+
+| Option | Meaning |
+|---|---|
+| `--item` | The item to compare in both packages, as for `analyze`. Default: each package's first SCO |
+| `--run` | Runs the same item with the same options on both (one after the other) and compares how far each got and the counts. Takes the [run options](#run), including `--wait` |
+| `--out` | Also writes an HTML report: a diff section with a collapsible line diff for each changed file |
+| `--json` | Prints JSON instead of text (below) |
+
+With `--run`, the output starts with a sentence like "good.zip reached “Wrote data”; blank.zip reached “Launch page
+loaded”. blank.zip got less far.", and lists the milestones and the counts (API calls, requests, failed requests,
+uncaught errors, visible text) for each. `diff` always exits 0 when it finishes; status 2 means it couldn't (a missing file, a
+bad ZIP, an unknown `--item`, a run that didn't finish).
+
+`diff --json`:
+
+```json
+{
+  "a": { "name": "a.zip", "files": 6, "size": 9671, "item": { "id": "lesson", "title": "…", "launch": "lesson.html" }, "findings": ["…"] },
+  "b": { "name": "b.zip", "…": "…" },
+  "files": {
+    "added": [{ "path": "js/App.js", "size": 1 }], "removed": [{ "path": "old.js", "size": 10 }], "same": 4,
+    "changed": [{ "path": "lesson.html", "before": 1939, "after": 160, "text": true, "tooBig": false, "diff": "@@ -1,50 +1,1 @@\n-…\n+…" }]
+  },
+  "manifest": [{ "where": "item i1", "field": "mastery", "a": "", "b": "80" }, { "where": "resource r2", "field": "", "a": null, "b": "webcontent b.html" }],
+  "boot": { "a": "lesson.html", "b": "lesson.html", "added": [{ "path": "vendor/missing.js", "kind": "script", "how": "tag", "status": "missing" }],
+            "removed": ["…"], "changed": [{ "path": "x.js", "kind": "script", "a": "ok", "b": "case" }] },
+  "findings": { "added": ["…"], "gone": ["…"], "same": 0 },
+  "summary": "1 file added, 0 files removed, 1 file changed; …",
+  "behaviour": { "a": { "name": "a.zip", "furthest": "wrote", "furthestLabel": "Wrote data", "milestones": ["…"] }, "b": { "furthest": "launched", "…": "…" },
+                 "better": -1, "steps": [{ "id": "launched", "label": "…", "a": true, "b": true }],
+                 "counts": { "apiCalls": { "a": 9, "b": 0 }, "requests": { "a": 7, "b": 6 }, "…": "…" }, "summary": "…" }
+}
+```
+
+`diff` is `null` for a file with no text diff (`text: false`, or `tooBig`). In `manifest`, `a` or `b` is `null` where that
+side has no such resource or item. `behaviour` is only there with `--run`; `better` is 1 when b got further, -1 when
+it got less far, 0 for no difference. Files and findings are the same lists as `analyze --json`.
+
 ## report
 
 ```bash
@@ -633,7 +686,7 @@ Starts the [web interface](web.md) and prints its address with the access token.
 }
 ```
 
-`items --json` is the `items` array above. The boot graph and saved-run formats are described in the
+`diff --json` is described under [diff](#diff). `items --json` is the `items` array above. The boot graph and saved-run formats are described in the
 [developer guide](developer-guide.md#data-formats).
 
 ## Live runs

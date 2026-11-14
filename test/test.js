@@ -18,6 +18,7 @@ import { renderReport, verdict } from '../src/report.js'
 import { normaliseOptions, cliCommand, VIEWPORTS, viewportName } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
+import { comparePackages, compareFiles, compareManifests, compareBoots, compareFindings, compareBehaviour } from '../src/pkgdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
 import { pinPathProblem, matcher, answerFor, buildAnswer, pinPrefix, userAgentPin, lexicalDeclaration, pinFindings, parsePinFlag, parseAnswerFlag } from '../src/pins.js'
 import { STEPS, milestones, furthest, firstMissing, milestoneFinding, progress, runCounts } from '../src/milestones.js'
@@ -488,6 +489,59 @@ assert.equal(unified('a\nb', 'a\nb'), ''); assert.equal(unified('a\nb\nc\nd', 'a
 const longA = Array.from({ length: 40 }, (_, i) => 'line ' + i).join('\n'), longB = longA.replace('line 20', 'LINE 20')
 assert.equal(unified(longA, longB).split('\n').length, 9, 'textdiff: three lines of context each side'); assert.match(unified(longA, longB), /^@@ -18,7 \+18,7 @@/)
 const big = Array.from({ length: 3000 }, (_, i) => 'x' + i).join('\n'); assert.equal(diffLines(big, big.replace(/x/g, 'y')).filter(r => r.op === '+').length, 3000, 'textdiff: large inputs still diff')
+// Myers diff (P3.3): minimal, bounded, line endings ignored.
+assert.deepEqual(diffLines('', ''), [], 'myers: both empty'); assert.deepEqual(diffLines('a\nb', 'a\nb').map(r => r.op), [' ', ' '], 'myers: identical'); assert.equal(unified('', ''), '')
+assert.deepEqual(diffLines('', 'a').map(r => r.op + r.text), ['+a'], 'myers: empty before'); assert.deepEqual(diffLines('a\nb', '').map(r => r.op + r.text), ['-a', '-b'], 'myers: empty after')
+assert.equal(dl('a\nb\nc', 'x\ny\nz'), '-a|-b|-c|+x|+y|+z', 'myers: all changed')
+assert.equal(dl('a\r\nb\r\nc', 'a\nB\nc'), ' a|-b|+B| c', 'myers: CRLF against LF, like the old diff'); assert.equal(unified('a\r\nb', 'a\nb'), '', 'myers: only line endings differ')
+{ // minimal: the edit script is as short as the LCS says (checked against a table on random small inputs), and rebuilds both sides
+  let seed = 7; const rnd = n => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % n
+  for (let t = 0; t < 400; t++) {
+    const x = Array.from({ length: rnd(9) }, () => 'abc'[rnd(3)]), y = Array.from({ length: rnd(9) }, () => 'abc'[rnd(3)]), d = diffLines(x.join('\n'), y.join('\n'))
+    const lcs = Array.from({ length: x.length + 1 }, () => new Array(y.length + 1).fill(0))
+    for (let i = x.length - 1; i >= 0; i--) for (let j = y.length - 1; j >= 0; j--) lcs[i][j] = x[i] === y[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+    assert.equal(d.filter(r => r.op !== ' ').length, x.length + y.length - 2 * lcs[0][0], 'myers: minimal ' + x + ' / ' + y)
+    assert.deepEqual(d.filter(r => r.op !== '+').map(r => r.text), x); assert.deepEqual(d.filter(r => r.op !== '-').map(r => r.text), y)
+  }
+}
+{ // large inputs stay fast: a few edits in 50,000 lines, and everything changed in 20,000 (past the edit cap: shown as replaced)
+  const A = Array.from({ length: 50000 }, (_, i) => 'line ' + i), B = A.slice(); for (let i = 0; i < 50000; i += 500) B[i] = 'changed ' + i
+  let t0 = Date.now(), d = diffLines(A.join('\n'), B.join('\n')); assert.equal(d.filter(r => r.op === '+').length, 100, 'myers: large, few edits'); assert.ok(Date.now() - t0 < 3000, 'myers: large input is fast: ' + (Date.now() - t0) + ' ms')
+  t0 = Date.now(); d = diffLines(A.slice(0, 20000).join('\n'), A.slice(0, 20000).map(l => 'x' + l).join('\n')); assert.equal(d.filter(r => r.op === '+').length, 20000); assert.ok(Date.now() - t0 < 3000, 'myers: all changed is fast: ' + (Date.now() - t0) + ' ms')
+}
+
+// comparePackages (P3.3), on small packages built in memory.
+{
+  const buf = s => Buffer.from(s), man = (extra = '', href = 'a.html') => `<?xml version="1.0"?><manifest identifier="m" xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2" xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"><metadata><schema>ADL SCORM</schema><schemaversion>1.2</schemaversion></metadata><organizations default="o"><organization identifier="o"><title>T</title><item identifier="i1" identifierref="r1"><title>One</title>${extra}</item></organization></organizations><resources><resource identifier="r1" type="webcontent" adlcp:scormtype="sco" href="${href}"><file href="${href}"/></resource></resources></manifest>`
+  const pa = { name: 'a.zip', files: new Map([['imsmanifest.xml', buf(man())], ['a.html', buf('<p>one</p>\n<p>two</p>\n')], ['x.bin', Buffer.from([0, 1, 2])], ['same.txt', buf('s')], ['gone.js', buf('1')]]) }
+  const pb = { name: 'b.zip', files: new Map([['imsmanifest.xml', buf(man('<adlcp:masteryscore>80</adlcp:masteryscore>', 'b.html'))], ['b.html', buf('<p>one</p>\n<p>2</p>\n')], ['a.html', buf('<p>one</p>\n<p>TWO</p>\n')], ['x.bin', Buffer.from([0, 1, 3, 4])], ['same.txt', buf('s')], ['new.js', buf('2')]]) }
+  const c = comparePackages(pa, pb)
+  assert.deepEqual(c.files.added.map(f => f.path + ':' + f.size), ['b.html:20', 'new.js:1'], 'pkgdiff: added with sizes'); assert.deepEqual(c.files.removed.map(f => f.path), ['gone.js']); assert.equal(c.files.same, 1)
+  assert.deepEqual(c.files.changed.map(f => [f.path, f.before, f.after, f.text]), [['a.html', 22, 22, true], ['imsmanifest.xml', c.files.changed[1].before, c.files.changed[1].after, true], ['x.bin', 3, 4, false]], 'pkgdiff: changed with sizes')
+  assert.equal(c.files.changed[0].diff, '@@ -1,3 +1,3 @@\n <p>one</p>\n-<p>two</p>\n+<p>TWO</p>\n ', 'pkgdiff: unified diff of a text file'); assert.equal(c.files.changed[2].diff, null, 'pkgdiff: no diff for binary files')
+  assert.ok(c.manifest.some(m => m.where === 'item i1' && m.field === 'mastery' && m.a === '' && m.b === '80') && c.manifest.some(m => m.where === 'resource r1' && m.field === 'href' && m.a === 'a.html' && m.b === 'b.html'), 'pkgdiff: manifest field by field: ' + JSON.stringify(c.manifest))
+  assert.deepEqual(c.boot.a, 'a.html'); assert.equal(c.boot.b, 'b.html'); assert.match(c.summary, /2 files added, 1 file removed, 3 files changed/)
+  // text over 1 MB (either side) is listed but not diffed; a change of line endings alone says so.
+  const huge = 'x\n'.repeat(600000), cf = compareFiles(new Map([['h.txt', buf(huge)], ['e.txt', buf('a\r\nb')]]), new Map([['h.txt', buf(huge + 'y')], ['e.txt', buf('a\nb')]]))
+  assert.deepEqual(cf.changed.map(f => [f.path, f.tooBig, f.diff]), [['e.txt', false, '(only the line endings changed)'], ['h.txt', true, null]], 'pkgdiff: over 1 MB is not diffed')
+  const lines = t => Array.from({ length: 30000 }, (_, i) => t + i).join('\n'), bigA = new Map(Array.from({ length: 14 }, (_, n) => ['f' + n + '.txt', buf(lines('a'))])), bigB = new Map(Array.from({ length: 14 }, (_, n) => ['f' + n + '.txt', buf(lines('b'))]))
+  const bud = compareFiles(bigA, bigB).changed; assert.ok(bud[0].diff && bud.some(x => x.diff === null && x.tooBig) && bud.filter(x => x.diff).length < 14, 'pkgdiff: past the total budget a diff is left out: ' + bud.map(x => x.diff?.length))
+  assert.equal(compareFiles(new Map([['x', buf('a\r\nb')]]), new Map([['x', buf('a\nb')]])).changed[0].diff, '(only the line endings changed)')
+  // no manifest on one side
+  assert.ok(compareManifests(null, analyze(pb.files).manifest).some(m => m.field === '(file)' && m.a === 'none'), 'pkgdiff: a missing manifest')
+  assert.deepEqual(compareBoots(null, null), { a: null, b: null, removed: [], added: [], changed: [] })
+  const f1 = { sev: 'error', title: 'T', evidence: ['e'] }, cfx = compareFindings([f1, { sev: 'info', title: 'U', evidence: [] }], [f1, { sev: 'warn', title: 'V', evidence: [] }])
+  assert.deepEqual([cfx.gone.map(f => f.title), cfx.added.map(f => f.title), cfx.same], [['U'], ['V'], 1], 'pkgdiff: findings that differ')
+  // behaviour from two runs' milestones and counts
+  const ms = n => STEPS.map(([id, label], i) => ({ id, label, reached: i < n, t: null, evidence: '' })), run = n => ({ milestones: ms(n), trace: { probe: [], requests: [], exceptions: [] } })
+  const bh = compareBehaviour(run(8), run(1), ['good.zip', 'blank.zip'])
+  assert.deepEqual([bh.a.furthest, bh.b.furthest, bh.better], ['wrote', 'launched', -1]); assert.match(bh.summary, /good\.zip reached “Wrote data”; blank\.zip reached “Launch page loaded”\. blank\.zip got less far/)
+  // the report: a collapsible diff per file, with everything escaped
+  const evil = comparePackages({ name: '<i>a</i>.zip', files: new Map([['<b>.html', buf('<script>1</script>\n')]]) }, { name: 'b.zip', files: new Map([['<b>.html', buf('<script>2</script>\n')]]) }, {})
+  const html = renderReport({ title: 't', diff: { ...evil, behaviour: bh } })
+  assert.ok(html.includes('<details><summary><span class="sl-mono">&lt;b&gt;.html</span>') && html.includes('&lt;script&gt;2&lt;/script&gt;') && !html.includes('<script>2') && !html.includes('<i>a</i>'), 'pkgdiff: the report escapes everything')
+  assert.match(html, /Package diff[\s\S]*Behaviour[\s\S]*good\.zip reached/, 'pkgdiff: the report has a diff section and the behaviour')
+}
 assert.ok(isText(Buffer.from('héllo')) && !isText(Buffer.from([104, 0, 105])) && !isText(Buffer.from([0xff, 0xfe, 0x41])), 'overlay: text or binary')
 assert.deepEqual(entryFor(Buffer.from('hi')), { content: 'hi' }); assert.deepEqual(entryFor(Buffer.from([0, 1, 2])), { base64: 'AAEC' })
 assert.deepEqual([...entryBuffer({ base64: 'AAEC' })], [0, 1, 2])
@@ -1212,6 +1266,25 @@ if (!process.argv.includes('--unit')) {
   assert.match(node(['report', good, '--fragment']).stdout, /class="sl"[\s\S]*Loading path/, 'cli report (static)')
   console.log('cli: ok')
 
+  // scorm-lab diff (P3.3), without Electron: good against blank.
+  const dfRep = join(work, 'diff.html'), df = node(['diff', good, blank, '--json', '--out', dfRep]); assert.equal(df.status, 0, 'cli diff: ' + df.stderr)
+  const dj = JSON.parse(df.stdout)
+  assert.deepEqual(dj.files.added.map(f => f.path), ['js/App.js'], 'cli diff: the added file'); assert.deepEqual(dj.files.changed.map(f => f.path), ['lesson.html'], 'cli diff: the changed file')
+  assert.ok(dj.files.changed[0].diff.includes('-<script src="lesson.js" defer></script>') && dj.files.changed[0].diff.includes('+<!doctype html>'), 'cli diff: the text diff of lesson.html')
+  assert.ok(dj.boot.added.some(n => n.path === 'vendor/missing.js' && n.status === 'missing') && dj.boot.removed.some(n => n.path === 'lesson.js'), 'cli diff: boot graph differences: ' + JSON.stringify(dj.boot))
+  assert.ok(dj.findings.added.some(f => /capitals/.test(f.title)) && dj.findings.added.some(f => /no content of its own/.test(f.title)) && !dj.findings.gone.length, 'cli diff: new findings')
+  assert.equal(dj.behaviour, undefined, 'cli diff: no behaviour without --run')
+  const dfHtml = readFileSync(dfRep, 'utf8'); assert.match(dfHtml, /<h2>Package diff<\/h2>[\s\S]*<details><summary><span class="sl-mono">lesson\.html<\/span>[\s\S]*Loading path/, 'cli diff: --out writes the report')
+  const dtext = node(['diff', good, blank]).stdout; assert.match(dtext, /\+ js\/App\.js[\s\S]*~ lesson\.html[\s\S]*\+ vendor\/missing\.js[\s\S]*New findings/, 'cli diff: text output')
+  assert.match(node(['diff', good, good]).stdout, /Identical\./, 'cli diff: identical packages'); assert.equal(JSON.parse(node(['diff', good, good, '--json']).stdout).findings.added.length, 0)
+  { // control characters in names are not printed
+    const evilZip = join(work, 'evil.zip'), mf = unzip(readFileSync(good)); mf.set('xQ7Z9K2red.txt', Buffer.from('1'))
+    const raw = zip(mf); let at; while ((at = raw.indexOf('Q7Z9K2')) >= 0) { raw.set([0x1b, 0x5b, 0x33, 0x31, 0x6d, 0x07], at) }   // the writer refuses control characters, so patch the name afterwards
+    writeFileSync(evilZip, raw)
+    const ev = node(['diff', good, evilZip]).stdout; assert.ok(ev.includes('x[31mred.txt') && !/[\x00-\x08\x0b-\x1f\x7f]/.test(ev), 'cli diff: control characters stripped')
+  }
+  assert.equal(node(['diff', good]).status, 2, 'cli diff: needs two packages'); assert.equal(node(['diff', good, join(work, 'nope.zip')]).status, 2); assert.equal(node(['diff', good, blank, '--item', '9']).status, 2, 'cli diff: unknown item')
+
   // scorm-lab fix (P3.1), without Electron: the corrected zip is valid (unzip -t), reads back, and analyze no longer finds what was fixed.
   const fixOut = join(work, 'blank-fixed.zip'), fx = node(['fix', blank, '--out', fixOut, '--json'])
   assert.equal(fx.status, 0, 'cli fix: ' + fx.stderr); const fj = JSON.parse(fx.stdout)
@@ -1542,6 +1615,12 @@ if (!process.argv.includes('--unit')) {
     assert.deepEqual(dvHosted.findings.map(f => f.title), ['The content didn’t read what /api/player/config sent'], 'discover: hosted asks but reads nothing')
     const dvGood = JSON.parse(node(['discover', good, '--wait', '3', '--json']).stdout)
     assert.deepEqual(dvGood.findings.map(f => f.title), ['The content made no requests to a server'], 'discover: nothing to discover in good')
+  }
+  if (slow) {   // scorm-lab diff --run (P3.3): good reaches wrote, blank only launched
+    const dr = node(['diff', good, blank, '--run', '--wait', '3', '--json']); assert.equal(dr.status, 0, 'diff --run: ' + dr.stderr)
+    const bj = JSON.parse(dr.stdout).behaviour
+    assert.ok(idx(bj.a.furthest) >= idx('wrote') && bj.b.furthest === 'launched' && bj.better === -1, 'diff --run: how far each got: ' + [bj.a.furthest, bj.b.furthest]); assert.ok(bj.counts.apiCalls.a > bj.counts.apiCalls.b, 'diff --run: counts')
+    assert.match(node(['diff', good, blank, '--run', '--wait', '3']).stdout, /good\.zip reached “[^”]+”; blank\.zip reached “Launch page loaded”[\s\S]*apiCalls: \d+ → 0/, 'diff --run: text output')
   }
   for (const bad of [['--rounds', '0'], ['--rounds', 'x'], ['--request', '/(/'], ['--rounds']]) assert.equal(node(['discover', needs, ...bad]).status, 2, 'discover: bad flags fail: ' + bad)
   console.log('discover: ok')

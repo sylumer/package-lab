@@ -14,10 +14,10 @@ if (!window.lab) {
     },
     on(channel, fn) { events.addEventListener(channel, e => fn(JSON.parse(e.data))) },
     // Sends a .zip to the Mac (XHR rather than fetch, for upload progress).
-    upload(file, progress) {
+    upload(file, progress, role) {
       return new Promise((resolve, reject) => {
         const x = new XMLHttpRequest()
-        x.open('POST', '/api/upload?name=' + encodeURIComponent(file.name))
+        x.open('POST', '/api/upload?name=' + encodeURIComponent(file.name) + (role ? '&role=' + role : ''))
         x.setRequestHeader('Content-Type', 'application/zip')
         x.upload.onprogress = e => e.lengthComputable && progress?.(e.loaded / e.total)
         x.onload = () => { let d; try { d = JSON.parse(x.responseText) } catch { return reject(new Error(`${x.status} ${x.statusText}`)) } d.error ? reject(new Error(d.error)) : resolve(d.value) }

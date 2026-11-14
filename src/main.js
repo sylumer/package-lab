@@ -25,6 +25,7 @@ import { startWeb } from './web.js'
 import { normaliseOptions, cliCommand, packagePath } from './options.js'
 import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
+import { comparePackages } from './pkgdiff.js'
 import { exportFixed, fixedName, applicable } from './fixes.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
 import { cycleFindings, cycleRows, macroFromTrace, resumeOptions } from './cycle.js'
@@ -305,6 +306,12 @@ function loadPackageData(name, buf, path = '') {
   emit('package', info)
   return info
 }
+// Compare packages…: the open package (A) against another (B), from the files alone. The other one isn't opened.
+function comparePackageData(name, buf) {
+  if (!pkg) throw new Error('Open a package first, then choose the one to compare it with.')
+  if (active || experiment) throw new Error('Stop the run first.')
+  return comparePackages(pkg, { name, files: unzip(buf) })
+}
 // The package as the interfaces see it: its analysis, findings before running, and launchable items.
 function pkgInfo() {
   if (!pkg) return null
@@ -557,6 +564,12 @@ const handlers = {
     writeFileSync(r.filePath, zip)
     return { ...summary, file: basename(r.filePath), path: r.filePath }
   },
+  'compare-packages': async () => {
+    if (!pkg) throw new Error('Open a package first, then choose the one to compare it with.')
+    if (active || experiment) throw new Error('Stop the run first.')
+    const r = await dialog.showOpenDialog(ui, { title: `Compare ${pkg.name} with…`, filters: [{ name: 'SCORM package', extensions: ['zip'] }], properties: ['openFile'] })
+    return r.canceled ? null : comparePackageData(basename(r.filePaths[0]), readFileSync(r.filePaths[0]))
+  },
   state: () => ({ pkg: pkgInfo(), runs: [...runs.values()].map(summary), running: active ? { running: active.kind, label: active.label } : null, web: web ? { url: web.url } : null }),
   boot: ({ item }) => { const res = pkg?.analysis.manifest?.items[item]?.res; return res?.path ? bootFor(res.path) : null },
   launch: o => launchItem(o),
@@ -682,8 +695,8 @@ app.whenReady().then(async () => {
   if (JOB) return headless(JOB).catch(e => { console.error(e); app.exit(1) })
   if (SERVE) {
     const port = flagValue('serve', '') === '0' ? 0 : +flagValue('serve', DEFAULT_PORT) || DEFAULT_PORT, host = flagValue('host', '127.0.0.1')
-    web = await startWeb({ host, port, uiDir: join(import.meta.dirname, 'ui'), dataDir: app.getPath('userData'), handlers,
-      upload: (name, buf) => loadPackageData(name, buf),
+    web = await startWeb({ host, port, uiDir: join(import.meta.dirname, 'ui'), dataDir: app.getPath('userData'), handlers, accept: role => { if (role === 'compare') { if (!pkg) throw new Error('Open a package first, then choose the one to compare it with.'); if (active || experiment) throw new Error('Stop the run first.') } },
+      upload: (name, buf, role) => role === 'compare' ? comparePackageData(name, buf) : loadPackageData(name, buf),
       download: o => { const { zip, file, summary } = buildExport(o); if (!zip) throw new Error('Nothing to change: no autofix found anything to correct, and no file has been changed.'); return { name: file, buf: zip, summary } }, onLive: n => { live.watchers = n; live.restart() } })
     console.log(`SCORM Lab web interface: ${web.url}`)
   }

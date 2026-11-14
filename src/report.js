@@ -46,6 +46,8 @@ const CSS = `
 .sl th, .sl td { text-align: left; vertical-align: top; padding: 3px 6px; border-bottom: 1px solid var(--sl-line); }
 .sl td { word-break: break-word; }
 .sl details { margin: 6px 0; } .sl summary { cursor: pointer; }
+.sl pre.sl-diff { margin: 4px 0; padding: 6px 0; overflow-x: auto; background: var(--sl-code); border-radius: 6px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sl .sl-diff div { padding: 0 8px; white-space: pre; } .sl .sl-diff .add { background: color-mix(in srgb, var(--sl-ok) 20%, transparent); } .sl .sl-diff .del { background: color-mix(in srgb, var(--sl-err) 20%, transparent); } .sl .sl-diff .hunk { color: var(--sl-muted); }
 `
 const PAGE_CSS = `
 :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d9d9de; --err: #c4281c; --warn: #a15c00; --ok: #1e7d32; --code: #f0f0f3; color-scheme: light dark; }
@@ -92,6 +94,22 @@ function runHtml(run) {
 <h2>Errors</h2>${table(['s', 'Kind', 'Message', 'Where'], errs, 200)}`
 }
 
+// The package diff (pkgdiff.js comparePackages, with .behaviour when both were run): every changed file's diff is a collapsed <details>.
+const MAX_DIFF_LINES = 3000
+const kb = n => n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`
+export function diffHtml(d) {
+  const f = d.files, bh = d.behaviour, row = (x, c) => [esc(x.path), kb(x.size), c]
+  const diffPre = text => { const lines = text.split('\n'); return `<pre class="sl-diff">${lines.slice(0, MAX_DIFF_LINES).map(l => `<div class="${l[0] === '+' ? 'add' : l[0] === '-' ? 'del' : l[0] === '@' ? 'hunk' : ''}">${esc(l) || ' '}</div>`).join('')}</pre>${lines.length > MAX_DIFF_LINES ? `<p class="sl-muted">First ${MAX_DIFF_LINES} of ${lines.length} lines.</p>` : ''}` }
+  const changed = f.changed.map(c => `<details><summary><span class="sl-mono">${esc(c.path)}</span> <span class="sl-muted">${kb(c.before)} → ${kb(c.after)}${c.diff === null ? (c.tooBig ? ', too large to show line by line' : ', not a text file') : ''}</span></summary>${c.diff === null ? '' : diffPre(c.diff)}</details>`).join('')
+  const bootRow = (n, note) => [`${esc(n.path)} <span class="sl-muted">(${note})</span>`, esc(n.kind), esc(n.how), esc(FILE[n.status] ?? n.status)]
+  return `<h2>Package diff</h2><p>${esc(d.a.name)} (A) against ${esc(d.b.name)} (B): ${esc(d.summary)}</p>
+${bh ? `<h2>Behaviour</h2><p><b>${esc(bh.summary)}</b></p>${milestoneHtml(bh.a.milestones).replace('<h2>Milestones</h2>', `<p class="sl-muted">${esc(d.a.name)}</p>`)}${milestoneHtml(bh.b.milestones).replace('<h2>Milestones</h2>', `<p class="sl-muted">${esc(d.b.name)}</p>`)}${table(['', 'A', 'B'], Object.entries(bh.counts).map(([k, v]) => [esc(k), esc(v.a), esc(v.b)]))}` : ''}
+<h2>Files</h2>${table(['File', 'Size', 'Change'], [...f.added.map(x => row(x, 'added in B')), ...f.removed.map(x => row(x, 'only in A')), ...f.changed.map(x => [esc(x.path), `${kb(x.before)} → ${kb(x.after)}`, 'changed'])])}${changed}
+<h2>Manifest</h2>${table(['Where', 'Field', 'A', 'B'], d.manifest.map(m => [esc(m.where), esc(m.field), m.a === null ? '<span class="sl-muted">none</span>' : esc(m.a), m.b === null ? '<span class="sl-muted">none</span>' : esc(m.b)]))}
+<h2>Loading path</h2><p class="sl-muted">Launch page: ${esc(d.boot.a ?? 'none')} in A, ${esc(d.boot.b ?? 'none')} in B.</p>${table(['File', 'Kind', 'How', 'In the files'], [...d.boot.added.map(n => bootRow(n, 'only in B')), ...d.boot.removed.map(n => bootRow(n, 'only in A')), ...d.boot.changed.map(c => [`${esc(c.path)} <span class="sl-muted">(status changed)</span>`, esc(c.kind), '', `${esc(FILE[c.a] ?? c.a)} → ${esc(FILE[c.b] ?? c.b)}`])])}
+<h2>New findings (in B, not in A)</h2>${findingsHtml(d.findings.added)}<h2>Findings gone (in A, not in B)</h2>${findingsHtml(d.findings.gone)}`
+}
+
 function milestoneHtml(list) {
   return `<h2>Milestones</h2><p class="sl-mono">${list.map(s => `<span class="${s.reached ? '' : 'sl-bad'}" title="${esc(s.evidence)}">${s.reached ? '✓' : '✗'} ${esc(s.label)}</span>`).join(' &nbsp; ')}</p>`
 }
@@ -109,6 +127,7 @@ ${run?.kind === 'package' ? milestoneHtml(Array.isArray(run.milestones) ? run.mi
 ${run ? runHtml(run) : ''}
 ${o.boot ?? run?.boot ? `<h2>Loading path</h2>${bootHtml(o.boot ?? run.boot, run?.trace)}` : ''}
 ${pkgTable}
+${o.diff ? diffHtml(o.diff) : ''}
 <p class="sl-muted">Made by SCORM Lab on ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))}. Everything here was worked out on this computer.</p></div>`
   return o.fragment ? body : `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(o.title ?? 'SCORM Lab report')}</title><style>${PAGE_CSS}</style></head><body><main>${body}</main></body></html>`
 }

@@ -66,7 +66,8 @@ src/
   instrument.js         The execution trace: instrumenting scripts and pages, positions back to the originals, reading events
   drilldown.js          Why it stopped: key decisions, where each undefined came from, the chain and its finding
   overlay.js            Overrides: the file set a run is served from, and the findings about changed files
-  textdiff.js           A small LCS line diff (diffLines, unified)
+  textdiff.js           A Myers line diff (diffLines, unified)
+  pkgdiff.js            Comparing two packages: files, manifest, boot graphs, findings, behaviour (P3.3)
   stall.js              Why it stalled: pollers, unanswered messages, listeners that never ran, and the finding (P1.6)
   milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
   options.js            Launch options: normaliseOptions (the only place defaults live), cliCommand
@@ -185,6 +186,7 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `drill-stop` | — | `true`: stops the run in progress and the rest of the drill-down |
 | `stop` | — | The run's id, or null |
 | `compare` | `{ ref, run }` | `{ cmp, findings }` |
+| `compare-packages` | — | The `comparePackages` result for the open package (A) against a chosen one (B); `null` if cancelled (desktop only: opens a dialog; web clients upload with `role=compare` instead) |
 | `open-run` | — | Run summaries (desktop only: opens a dialog) |
 | `saved-runs` | — | `[{ file, size, mtime }]` from the runs folder |
 | `load-run` | `{ file }` | `[run summary]`. The name is reduced to a base name in the runs folder |
@@ -818,6 +820,28 @@ path segments (at least the file name). It returns:
 range, so an unlisted block takes the innermost enclosing count. Coverage is compared only for scripts with the same
 hash.
 
+## Comparing packages (P3.3)
+
+`src/pkgdiff.js` is pure: it takes `{ name, files (Map from unzip), analysis? }` twice. It is not `diff.js` (two runs).
+`comparePackages(a, b, { item })` returns `{ a, b, files, manifest, boot, findings, summary }` (the shape is under `diff --json` in
+the [CLI guide](cli.md#diff)), built from five small functions that are exported and tested alone:
+
+- `compareFiles`: added, removed, changed (with sizes). A changed file with valid text on both sides and no side over `MAX_TEXT` (1 MB)
+  gets a `unified()` diff; the others get `diff: null` (`tooBig` says which). Minified files are diffed as they are until P4.1's formatter exists.
+- `compareManifests`: rows `{ where, field, a, b }` over the package fields, every resource and every item, matched by identifier.
+- `compareBoots`: nodes keyed by path (or target), first one wins. Added, removed, and status changed.
+- `compareFindings`: static findings plus the boot graph's risks, as `analyze` gives them. Same title and evidence is the same finding.
+- `compareBehaviour(runA, runB, names)`: from two saved runs' milestones and `runCounts`, through `progress()`. The CLI's `--run` runs both
+  with the same options (`runPackage` twice) and attaches it as `.behaviour`. The desktop and web **Package diff** tab shows the file-only result.
+
+`textdiff.js` is a Myers O(ND) diff over lines mapped to integers, with common ends trimmed first. Past 3000 edits it gives up on a
+minimal script and shows the changed middle as removed then added (the same result as before for a file that was rewritten), which bounds
+time and memory (about 3000² integers). Line endings are not changes: CRLF is read as LF.
+
+The desktop window opens a dialog (`compare-packages`); the web interface sends the second file to `POST /api/upload?role=compare`, which
+returns the comparison instead of replacing the package. `renderReport` takes `diff` (the result, with `.behaviour` when there is one) and
+adds `diffHtml`: a collapsible `<details>` per changed file, everything through `esc()`.
+
 ## Milestones
 
 `src/milestones.js` is pure. `milestones(trace, boot)` returns the ten steps in order, each
@@ -903,7 +927,7 @@ The page's CSP allows only its own scripts and styles, and `data:` images (for l
 | `GET /?token=…` | Checks the token and sets the cookie, then redirects to `/` |
 | `GET /`, `GET /<ui file>` | The interface |
 | `POST /api/invoke/<handler>` | JSON body, then `{ value }` or `{ error }` (status 500). `open-package` and `open-run` are refused |
-| `POST /api/upload?name=` | Raw `.zip` body (up to 1 GB), then `{ value: package info }` |
+| `POST /api/upload?name=` | Raw `.zip` body (up to 1 GB), then `{ value: package info }`. With `&role=compare`, the body is compared with the open package and `{ value: comparison }` returned; nothing is opened |
 | `GET /api/events` | Server-sent events: `package`, `run`, `state`, `probe`, `experiment`, `discover` |
 | `GET /api/live` | Server-sent events: `frame` with `{ w, h, t, jpeg (base64) }`. Open connections count as watchers |
 
@@ -912,7 +936,7 @@ Every request except the token exchange needs the `scormlab` cookie, compared in
 with mode 600.
 
 `src/ui/bridge.js` defines `window.lab` over these endpoints when there is no preload, and adds `lab.web`,
-`lab.upload(file, progress)` and `lab.live(fn)`. `app.js` checks `lab.web` for the differences (upload, saved-runs
+`lab.upload(file, progress, role?)` and `lab.live(fn)`. `app.js` checks `lab.web` for the differences (upload, saved-runs
 dialog, Live tab, joining a session in progress).
 
 ### CLI
@@ -1027,6 +1051,7 @@ The end-to-end part covers:
 - **Runs:** all fixtures, including a saved run, resume, and `--api both`. Milestones: `good` reaches at least
   `wrote` (also with the live click), `mismatch` reaches `looked`, `blank` reaches `launched` only.
 - **Pins and answers:** `hosted` with `/api/player/config` answered (no own API, calls reach the LMS, request marked answered, `--options-from` repeats it, `bodyFile` read at the CLI) and with `previewMode` pinned (the change is reported at `boot.js`); `pinned` and `lexical` as above; bad flags exit with status 2.
+- **Package diff (P3.3):** `good` against `blank` (no Electron, in the default suite): the changed `lesson.html` with its text diff, the added `js/App.js`, the boot-graph differences and the new findings, text and `--json` output, `--out` report, identical packages, bad arguments. Behind `--slow`, `diff --run`: `good` reaches `wrote`, `blank` only `launched`. The unit checks cover the Myers diff (minimal against an LCS table, empty sides, CRLF, 50,000-line performance bound) and `pkgdiff.js` on small packages built in memory.
 - **Discovery:** `needs` (fields, types, the stand-in gets further, three runs); bad flags exit with status 2.
 - **Tracing:** `hosted` with `--trace` records `if (!r.ok)` (true, `r.ok = false`), the `startCourse` entry and its
   `window.scorm` test, keeps the original `boot.js` in `trace.sources`, and has the same findings as untraced; over the
