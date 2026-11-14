@@ -263,6 +263,47 @@ The fix is usually to keep the course's state in the LMS (`cmi.suspend_data`) an
 `try/catch`, so the course carries on without it. The label of the run says "storage blocked", and the saved run keeps the
 mode in `launch.options.storage` (and, with the profile's cookies taken into account, in `launch.storage`).
 
+## Other browsers and device sizes
+
+A course can work in Chrome and fail in Safari, or work on a desktop and fail on a phone. Under **More options**, two
+settings let you try both.
+
+**Browser** chooses the engine:
+
+| Browser | What it is |
+|---|---|
+| **Chromium** | The browser inside SCORM Lab. Everything in this guide works. |
+| **WebKit (Safari's engine)** | The engine Safari uses, run through Playwright. The content runs on the same test LMS, with the same files, changed files, pins, answers, profile and storage setting. |
+
+WebKit needs Playwright, which is optional. If it isn't installed, SCORM Lab says so and doesn't start the run. To
+install it, run `npm i -D playwright && npx playwright install webkit` in the SCORM Lab folder.
+
+A WebKit run records what the page does: requests, console messages, errors that stop a script, and the probe's reports
+of API calls, lookups and what the page shows. It can't see everything Chromium can. It has no live view, no script
+coverage, no errors the content catches, and no script sources, so **Trace the code** isn't available and "Code" is
+empty. The findings that need those say nothing rather than guess. The run's label says "webkit", and the saved run
+records `trace.browser` as `webkit`. Each WebKit run starts with empty storage.
+
+A common cause of a course that fails only in WebKit is a script that uses something only Chrome has, like
+`navigator.userAgentData`. The error is in the run's findings, with the line.
+
+**Device size** runs the content at a phone or tablet size. The presets are:
+
+| Preset | Size | Pixel ratio |
+|---|---|---|
+| **iPhone** | 390 × 844 | 3 |
+| **iPad** | 820 × 1180 | 2 |
+| **Android phone** | 412 × 915 | 2.625 |
+
+Each one also turns on touch, tells the content it is on a phone or tablet (the touch and mobile flags, and that
+device's user agent), and makes the content's page take its `<meta name="viewport">` into account. **Custom size…** takes
+a width and height with none of those. A user agent you pin overrides the device's. In the desktop app and the web
+interface, the live view shows the page at that size. The label of the run names the size, and the saved run keeps it in
+`launch.options.viewport`.
+
+To compare, run the **browsers** experiment: it runs the item in Chromium, then in WebKit, and the table shows how far
+each got.
+
 ## Changing files and running again
 
 To test a fix before touching the real course, change the file here and run it.
@@ -331,6 +372,7 @@ one after another. Each run lasts as long as **Stop after** (10 seconds if that 
 | **standard** | Both of the above (a variant that matches the default is left out) |
 | **lms** | Each LMS profile in turn (see [profiles](#running-it-the-way-an-lms-does-profiles)) |
 | **storage** | Storage normal and blocked (see [storage](#storage-blocked-in-the-contents-frames)) |
+| **browsers** | Chromium and WebKit (see [other browsers](#other-browsers-and-device-sizes)) |
 
 The table fills in as each run finishes: how far it got, API calls, errors, the verdict, and how it compares with the
 default. Click a row to open that run. **Stop** ends the run in progress and skips the rest. The run it cut short is left out of the table and the findings (it is still in the Runs list). A run that fails to finish shows as such and the experiment carries on. Variants you list yourself on the command line are all run, even ones that repeat the default; the built-in sets leave those out.
@@ -539,3 +581,4 @@ SCORM Lab never sends package content anywhere:
 - **A course needs a sign-in or licence server.** Its requests show in **Network**. If they fail, that is a finding in
   itself: the package depends on a server.
 - **Electron couldn't be found.** Run `npm install` in the repo.
+- **WebKit says Playwright isn't installed.** Run `npm i -D playwright && npx playwright install webkit` in the SCORM Lab folder.

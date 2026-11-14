@@ -9,7 +9,8 @@
 //   --no-window          no desktop window (with --serve: a server only)
 //   --show-runs          with --no-window: show the content windows anyway
 import { app, BrowserWindow, ipcMain, dialog, protocol, session } from 'electron'
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
+import { spawn } from 'node:child_process'
 import { basename, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
@@ -17,18 +18,18 @@ import { unzip } from './zip.js'
 import { analyze } from './analyze.js'
 import { Recorder, shiftTimes } from './recorder.js'
 import { compare } from './diff.js'
-import { staticFindings, runFindings, launchFindings, compareFindings, sortFindings } from './rules.js'
+import { staticFindings, compareFindings, sortFindings, runFindings, launchFindings } from './rules.js'
 import { bootGraph, bootRun } from './bootpath.js'
-import { milestones, milestoneFinding, runCounts } from './milestones.js'
+import { runCounts } from './milestones.js'
 import { startWeb } from './web.js'
 import { normaliseOptions, cliCommand, packagePath } from './options.js'
-import { overlayFiles, overrideList, overrideFinding, overrideProgressFinding, entryBuffer, isText } from './overlay.js'
+import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
 import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
-import { stall, stallFinding } from './stall.js'
-import { PROFILES, launchProfile, apiAt, fillParams, storageMode } from './profiles.js'
+import { PROFILES, launchProfile } from './profiles.js'
+import { serveRequest, WEBKIT_ORIGINS, launchPlan, withProgress, runAnalysis, savedRun } from './launch.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -48,13 +49,6 @@ if (JOB) app.setPath('userData', join(tmpdir(), `scorm-lab-run-${process.pid}`))
 // SCORM_LAB_DATA moves everything else (saved runs, the web token, sign-ins for references): for tests and side-by-side setups.
 else if (process.env.SCORM_LAB_DATA) app.setPath('userData', process.env.SCORM_LAB_DATA)
 
-const HOST_FILES = new Set(['host.html', 'host.js', 'wrap.html', 'scorm-runtime.js'])
-const MIME = { html: 'text/html', htm: 'text/html', js: 'text/javascript', mjs: 'text/javascript', css: 'text/css', json: 'application/json',
-  xml: 'application/xml', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
-  mp4: 'video/mp4', webm: 'video/webm', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg', vtt: 'text/vtt',
-  woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf', pdf: 'application/pdf', txt: 'text/plain', wasm: 'application/wasm' }
-const mime = name => (MIME[extname(name).slice(1).toLowerCase()] ?? 'application/octet-stream') + (/^(html?|js|mjs|css|json|xml|svg|txt|vtt)$/i.test(extname(name).slice(1)) ? '; charset=utf-8' : '')
-
 let ui = null, web = null, pkg = null, config = {}, active = null, nextId = 1
 let served = null   // the files the running content is served from: the package's, with any overrides on top
 let pkgHeaders = {} // the run's LMS profile's headers on package files: its own, and its CSP
@@ -73,29 +67,9 @@ function serve(req) {
   const u = new URL(req.url)
   let path
   try { path = decodeURIComponent(u.pathname) } catch { path = u.pathname }
-  const headers = { 'Cache-Control': 'no-store' }
   // lab://run/ is the LMS's origin; lab://content/ serves the same package from another origin (a profile's contentOrigin: other).
-  if (path.startsWith('/__lab/') && u.host === 'run') {
-    const name = path.slice(7)
-    if (name === 'config.json') return new Response(JSON.stringify(config), { headers: { ...headers, 'Content-Type': 'application/json' } })
-    if (HOST_FILES.has(name)) return new Response(readFileSync(new URL('./host/' + name, import.meta.url)), { headers: { ...headers, 'Content-Type': mime(name) } })
-  }
-  if (path.startsWith('/pkg/') && pkg) {
-    const p = path.slice(5), files = served ?? pkg.files, file = files.get(p) ?? (p === '' || p.endsWith('/') ? files.get(p + 'index.html') : undefined)
-    const buf = file && tracing ? traceFile(files.has(p) ? p : p + 'index.html', file) : file
-    if (buf) {
-      Object.assign(headers, pkgHeaders)
-      headers['Content-Type'] = mime(p); headers['Accept-Ranges'] = 'bytes'
-      const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('Range') || '')
-      if (range && (range[1] || range[2])) {
-        const size = buf.length, start = range[1] ? +range[1] : Math.max(0, size - +range[2]), end = range[1] && range[2] ? Math.min(+range[2], size - 1) : size - 1
-        if (start >= size || start > end) return new Response('', { status: 416, headers: { ...headers, 'Content-Range': `bytes */${size}` } })
-        return new Response(buf.subarray(start, end + 1), { status: 206, headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}` } })
-      }
-      return new Response(buf, { headers })
-    }
-  }
-  return new Response(`${path} isn’t in the package.`, { status: 404, headers: { ...headers, 'Content-Type': 'text/plain; charset=utf-8' } })
+  const r = serveRequest({ path, lms: u.host === 'run', range: req.headers.get('Range') || '', config, files: served ?? pkg?.files ?? new Map(), headers: pkgHeaders, file: tracing ? traceFile : undefined })
+  return new Response(r.body, { status: r.status, headers: r.headers })
 }
 
 // A traced run gets scripts and pages instrumented (src/instrument.js), worked out once per package and file content.
@@ -131,18 +105,6 @@ const summary = r => ({ id: r.id, label: r.label, kind: r.kind, launch: slim(r.l
   trace: { ...r.trace, sources: undefined, coverage: undefined, exec: undefined, sites: undefined, coveredScripts: r.trace.coverage?.length ?? 0,
     ...(r.trace.sites ? { execEvents: eventCount(r.trace), execTail: r.execTail ??= lastEvents(r.trace, 500) } : {}) } })
 
-// Milestones (package runs only) and the findings with the "Got as far as" note first.
-// A run that used overrides also gets a note saying so, and, if there is an earlier run of the item without them, whether the change helped.
-function withProgress(kind, trace, boot, findings, launch, before) {
-  if (kind !== 'package') return { findings: sortFindings(findings), milestones: null }
-  const ms = milestones(trace, boot), over = overrideFinding(launch?.options?.files)
-  const helped = over && before && overrideProgressFinding(before, { milestones: ms, counts: runCounts(trace) })
-  // "Was waiting for" goes under the blank-page or loading-screen finding when there is one, else it sorts with the warnings.
-  const waiting = stallFinding(stall(trace, ms)), sorted = sortFindings(findings), at = sorted.findLastIndex(f => /blank page|loading screen/.test(f.title))
-  if (waiting && at >= 0) sorted.splice(at + 1, 0, waiting)
-  else if (waiting) { sorted.push(waiting); sortFindings(sorted) }
-  return { findings: [milestoneFinding(ms), ...(over ? [over] : []), ...(helped ? [helped] : []), ...sorted], milestones: ms }
-}
 // The latest earlier run of the same item of this package that used no overrides.
 function runBefore(launch) {
   if (!Object.keys(launch?.options?.files ?? {}).length) return null
@@ -152,8 +114,7 @@ function runBefore(launch) {
 
 function addRun(kind, label, launch, trace, boot) {
   const id = nextId++
-  const { findings, milestones } = withProgress(kind, trace, boot, [...launchFindings(trace, boot), ...runFindings(trace, { kind, ...launch }),
-    ...(kind === 'package' ? [...staticFindings(pkg?.analysis), ...(boot?.risks ?? [])] : [])], launch, runBefore(launch))
+  const { findings, milestones } = runAnalysis({ kind, launch, trace, boot, analysis: pkg?.analysis, before: runBefore(launch) })
   const run = { id, kind, label, launch, trace, findings, milestones, file: '', boot, package: pkg && kind === 'package' ? pkg.name : null }
   if (!JOB) {
     const file = join(runsDir(), `${new Date().toISOString().replace(/[:.]/g, '-')}-${label.replace(/[^\w.-]+/g, '_').slice(0, 60)}.json`)
@@ -163,13 +124,11 @@ function addRun(kind, label, launch, trace, boot) {
   emit('run', summary(run))
   return run
 }
-// A run as saved to disk: what Open saved… and the CLI read back. See docs/developer-guide.md for the format.
-const savedRun = r => ({ format: 'scorm-lab-run', version: 1, kind: r.kind, label: r.label, package: r.package, launch: r.launch, trace: r.trace, boot: r.boot, findings: r.findings, milestones: r.milestones })
-
 // Popups (window-opener profiles, or content that opens itself in a new window) get their own recorder, merged at the end.
 function watchPopups(wc, extra, ropts, wins, top = true) {
   wc.on('did-create-window', child => {
     const rec = new Recorder(child.webContents, ropts)
+    if (ropts.viewport) child.setContentSize(ropts.viewport.width, ropts.viewport.height)
     rec.onProbe = p => emit('probe', p)
     extra.push(rec); wins.push(child)
     // The LMS page opens the content's window blank, and goes on to the content once the recorder is attached: a window
@@ -181,7 +140,7 @@ function watchPopups(wc, extra, ropts, wins, top = true) {
   })
 }
 
-async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace, headers, storage = 'normal' }) {
+async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace, headers, storage = 'normal', viewport = null }) {
   await finish()
   // partitioned: the run's storage starts empty. (Otherwise it lasts from run to run while the app is open: it is one in-memory partition.)
   if (storage === 'partitioned') await session.fromPartition(partition).clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'websql', 'cachestorage', 'serviceworkers', 'filesystem'] })
@@ -190,7 +149,9 @@ async function begin({ kind, label, url, launch, partition, caught, boot, auto, 
   tracing = trace ? { files: new Map(), untraced: new Map(), sites: pkg.sites } : null
   const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
-  const ropts = { caught, pins, responses, trace: !!trace, storage }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
+  // A device size (P2.3): the window is that size too, so the live view shows (and clicks land on) the emulated page.
+  if (viewport) win.setContentSize(viewport.width, viewport.height)
+  const ropts = { caught, pins, responses, trace: !!trace, storage, viewport }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
   rec.onProbe = p => emit('probe', p)
   win.webContents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { show: SHOW_RUNS, webPreferences: { partition, sandbox: true, backgroundThrottling: false } } }))
   watchPopups(win.webContents, extra, ropts, wins)
@@ -215,6 +176,7 @@ async function finishActive(a) {
   active = null
   clearTimeout(a.timer)
   live.restart()
+  if (a.webkit) return (a.run = await finishWebkit(a))
   let cmi = null
   if (a.kind === 'package') cmi = await a.rec.send('Runtime.evaluate', { expression: 'JSON.stringify(window.__labCmi?.() ?? null)', returnByValue: true }).then(r => JSON.parse(r.result.value)).catch(() => null)
   const trace = await a.rec.stop()
@@ -295,7 +257,7 @@ function loadPackage(path) { return loadPackageData(basename(path), readFileSync
 function loadPackageData(name, buf, path = '') {
   const files = unzip(buf), analysis = analyze(files)
   served = null
-  pkg = { name, path, files, analysis, lastCmi: null, boots: new Map(), overrides: Object.create(null), loaded: Date.now(), traced: new Map(), sites: [] }
+  pkg = { name, path, files, zip: buf, analysis, lastCmi: null, boots: new Map(), overrides: Object.create(null), loaded: Date.now(), traced: new Map(), sites: [] }
   const info = pkgInfo()
   emit('package', info)
   return info
@@ -317,27 +279,56 @@ function bootFor(path, files = pkg.files) {
 // o: { item, cmi?, ...launch options } (see options.js). Unknown options throw.
 async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
   if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
-  const o = normaliseOptions({ ...rest, files: rest.files ?? pkg?.overrides })   // no files given: the session's overrides
-  if (process.env.SCORM_LAB_FORCE_TRACE === '1') o.trace = true   // tests: every run traced
-  const m = pkg.analysis.manifest, item = m.items[itemIndex]
-  if (!item?.res) throw new Error('That item has nothing to launch.')
-  const res = item.res
-  const files = overlayFiles(pkg.files, o.files), prof = launchProfile(o)
-  // The package's address on the LMS's origin, or on another one (the profile's contentOrigin).
-  let url = res.path ? `lab://${prof.contentOrigin === 'other' ? 'content' : 'run'}/pkg/` + res.path.split('/').map(encodeURIComponent).join('/') + res.query : res.href
-  const expose = !o.expose || o.expose === 'manifest' ? m.version : o.expose
-  const cmi = givenCmi ?? (o.resume && pkg.lastCmi ? pkg.lastCmi : null), learner = { id: 'learner-1', name: 'Learner, Test' }
-  // The manifest's parameters, then the profile's (placeholders filled in), then the launch option's.
-  const params = [item.params.replace(/^[?&]/, ''), fillParams(prof.launchParams, { scoid: item.id, attempt: cmi ? 2 : 1, learner: learner.id }), o.launchParams]
-  for (const q of params.filter(Boolean)) url += (url.includes('?') ? '&' : '?') + q
-  config = { expose, depth: prof.frames.depth, opener: prof.launch === 'popup', launch: url, cmi, frames: prof.frames, popupDelay: prof.popupDelay, apiDelay: prof.apiDelay, apiAt: apiAt(prof),
-    runtime: { edition: m.edition === '2nd' ? '2nd edition' : '', learner, credit: 'credit', mode: 'normal', limits: prof.limits, commit: prof.commit, slowMs: prof.slowMs,
-      launchData: item.launchData, mastery: item.mastery, maxTime: item.maxTime, timeLimitAction: item.timeLimitAction, completionThreshold: item.completionThreshold } }
-  const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o, profile: prof, storage: storageMode(o) }
-  const headers = { ...prof.headers, ...(prof.csp ? { 'Content-Security-Policy': prof.csp } : {}) }
-  await begin({ kind: 'package', label: `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${prof.name !== 'generic' ? ' · ' + prof.name : ''}${launch.storage !== 'normal' ? ' · storage ' + launch.storage : ''}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}`,
-    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers, storage: launch.storage })
+  const norm = normaliseOptions({ ...rest, files: rest.files ?? pkg?.overrides })
+  const cmi = givenCmi ?? (norm.resume && pkg.lastCmi ? pkg.lastCmi : null)
+  const plan = launchPlan({ pkg, item: itemIndex, cmi, options: { ...norm, ...(process.env.SCORM_LAB_FORCE_TRACE === '1' && norm.browser === 'chromium' ? { trace: true } : {}) },   // tests: every Electron run traced
+    origins: norm.browser === 'webkit' ? WEBKIT_ORIGINS : undefined })
+  const { o, res, files, config: cfg, launch, headers, label } = plan
+  if (o.browser === 'webkit') return beginWebkit({ plan, itemIndex, cmi })
+  config = cfg
+  await begin({ kind: 'package', label, url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers, storage: launch.storage, viewport: o.viewport })
   return true
+}
+
+// ---- WebKit runs (P2.3): the CLI's Node process drives Playwright's WebKit (src/webkit-runner.js); this process waits for it ----
+// ponytail: no live view for WebKit; the Live tab stays empty. Stream Playwright screenshots when it matters.
+async function beginWebkit({ plan, itemIndex, cmi }) {
+  await finish()
+  const { o, label, launch, res, files } = plan, dir = mkdtempSync(join(tmpdir(), 'scorm-lab-webkit-')), zip = join(dir, 'package.zip'), job = join(dir, 'job.json')
+  writeFileSync(zip, pkg.zip)
+  writeFileSync(job, JSON.stringify({ zip, name: pkg.name, item: itemIndex, options: o, cmi, out: join(dir, 'run.json'), stop: join(dir, 'stop'), ready: join(dir, 'ready'), wait: o.auto || 3600 }))
+  // This binary as plain Node: the Electron it is, with ELECTRON_RUN_AS_NODE.
+  const child = spawn(process.execPath, [join(import.meta.dirname, 'webkit-runner.js'), job], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|HOME|TMPDIR|SCORM_LAB_.*|PLAYWRIGHT_.*)$/.test(k))), ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'pipe'] })
+  let err = ''
+  child.stderr.on('data', d => { err = (err + d).slice(-4000) })
+  const exited = new Promise(r => child.on('exit', code => { r(code); a.webkit && (a.webkit.done = true) })), ready = join(dir, 'ready')
+  const a = active = { wins: [], extra: [], kind: 'package', label, launch, boot: res.path ? bootFor(res.path, files) : null, started: Date.now(), webkit: { child, dir, stop: join(dir, 'stop'), exited, err: () => err, out: join(dir, 'run.json') } }
+  // The run is under way once WebKit is up. If the child ends before that (no Playwright, no WebKit), say why.
+  for (let n = 0; !existsSync(ready); n++) {
+    if (a.webkit.done || n > 600) { active = null; try { child.kill() } catch { /* gone */ } const why = err.split('\n').filter(l => l.trim()).slice(-3).join('\n'); try { rmSync(dir, { recursive: true, force: true }) } catch { /* temp */ } throw new Error(why || 'WebKit didn’t start.') }
+    await new Promise(r => setTimeout(r, 100))
+  }
+  exited.then(() => { a.webkit.done = true; if (active === a) finish().catch(() => {}) })   // it stops by itself after its wait
+  emit('state', { running: 'package', label, auto: o.auto || 0 })
+  return true
+}
+// The run once the child has exited: its trace, put through the same findings as any run. A refusal (no Playwright, no WebKit) is the child's message.
+async function finishWebkit(a) {
+  const { dir, stop, exited, err, out, child } = a.webkit
+  try { writeFileSync(stop, '') } catch { /* folder gone */ }
+  const killer = setTimeout(() => { try { child.kill('SIGKILL') } catch { /* gone */ } }, 8000)   // it should end within a few seconds of Stop
+  await exited
+  clearTimeout(killer)
+  try {
+    if (!existsSync(out)) throw new Error(err().split('\n').filter(l => l.trim()).slice(-3).join('\n') || 'The WebKit run didn’t finish.')
+    const { trace } = JSON.parse(readFileSync(out, 'utf8'))
+    if (a.kind === 'package' && trace.cmi && pkg) pkg.lastCmi = trace.cmi
+    emit('state', { running: null })
+    return addRun(a.kind, a.label, a.launch, trace, a.boot)
+  } catch (e) {
+    emit('state', { running: null })
+    throw e
+  } finally { try { rmSync(dir, { recursive: true, force: true }) } catch { /* temp folder */ } }
 }
 
 function readRun(file) {

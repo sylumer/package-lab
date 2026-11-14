@@ -56,7 +56,7 @@ export function runFindings(trace, launch = {}) {
   const pkgReq = trace.requests.filter(r => !isLab(r.url) && !/^(data|blob):/.test(r.url))
   const failed = pkgReq.filter(r => r.failed && !r.canceled || r.status >= 400)
   const firstApi = api[0]?.t ?? Infinity
-  const errors = [...trace.exceptions.map(e => ({ ...e, uncaught: true })), ...trace.caught.filter(c => !c.uncaught)]
+  const errors = [...trace.exceptions.map(e => ({ ...e, uncaught: true })), ...(trace.caught ?? []).filter(c => !c.uncaught)]
   const uncaughtBefore = trace.exceptions.filter(e => e.t < firstApi)
 
   if (launch.kind === 'package' && launch.itemType === 'sco') {
@@ -100,10 +100,10 @@ export function runFindings(trace, launch = {}) {
   if (launch.kind === 'package') out.push(...pinFindings(trace, launch.options), ...traceFindings(trace))
   if (trace.exceptions.length)
     out.push({ sev: 'warn', title: `${trace.exceptions.length} uncaught error${trace.exceptions.length > 1 ? 's' : ''}`, evidence: trace.exceptions.slice(0, 6).map(e => `${e.text}  at ${where(e.at[0]) || short(e.url) + ':' + e.line}`), fix: '' })
-  const csp = trace.log.filter(l => /Content Security Policy|Refused to/i.test(l.text))
+  const csp = (trace.log ?? []).filter(l => /Content Security Policy|Refused to/i.test(l.text))
   if (csp.length) out.push({ sev: 'warn', title: 'The browser refused to load or run something', evidence: csp.slice(0, 5).map(l => l.text), fix: '' })
   if (errors.length > trace.exceptions.length && !trace.exceptions.length && !api.length)
-    out.push({ sev: 'info', title: `${errors.length} errors were thrown and caught`, detail: 'Caught errors can hide the real failure: content that catches its own LMS errors fails silently.', evidence: trace.caught.slice(0, 5).map(c => `${c.text} at ${where(c.at[0])}`), fix: '' })
+    out.push({ sev: 'info', title: `${errors.length} errors were thrown and caught`, detail: 'Caught errors can hide the real failure: content that catches its own LMS errors fails silently.', evidence: (trace.caught ?? []).slice(0, 5).map(c => `${c.text} at ${where(c.at[0])}`), fix: '' })
 
   // Progress: what the content did with the data model.
   if (api.length) {
@@ -190,7 +190,7 @@ export function launchFindings(trace, boot) {
   for (const r of serverFailed.slice(0, 4)) why.push(`Asked the server for ${new URL(r.url).pathname} (outside the package) from ${where(r.from?.[0]) || '?'}`)
   const ex = [...trace.exceptions].sort((a, b) => a.t - b.t)
   ex.slice(0, 3).forEach((e, i) => why.push(`${i ? 'Then' : 'First'} uncaught error at ${(e.t / 1000).toFixed(1)} s: ${e.text} at ${where(e.at[0]) || short(e.url) + ':' + e.line}`))
-  for (const l of trace.log.filter(l => /Refused to|Content Security Policy|MIME type|Failed to load module|Mixed Content|Blocked/i.test(l.text)).slice(0, 4)) why.push(`Browser: ${l.text.slice(0, 220)}`)
+  for (const l of (trace.log ?? []).filter(l => /Refused to|Content Security Policy|MIME type|Failed to load module|Mixed Content|Blocked/i.test(l.text)).slice(0, 4)) why.push(`Browser: ${l.text.slice(0, 220)}`)
   const pending = trace.requests.filter(r => r.status == null && !r.failed && !/^(data|blob):/.test(r.url))
   for (const r of pending.slice(0, 4)) why.push(`Still waiting at the end for ${short(r.url)} (asked at ${(r.t / 1000).toFixed(1)} s)`)
   for (const r of boot.risks.filter(r => r.sev === 'error').slice(0, 4)) why.push(`From the files: ${r.title}`)

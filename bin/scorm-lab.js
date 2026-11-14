@@ -20,6 +20,7 @@ import { discover, checkDiscover } from '../src/shape.js'
 import { drill, watchPins } from '../src/drilldown.js'
 import { overlayFiles } from '../src/overlay.js'
 import { renderReport, verdict, counts, screens } from '../src/report.js'
+import { launchPlan, runAnalysis, savedRun, WEBKIT_ORIGINS } from '../src/launch.js'
 
 const APP_DIR = new URL('..', import.meta.url).pathname
 const VERSION = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')).version
@@ -66,6 +67,9 @@ Options for run (and report --run)
   --profile <name>          Host the content the way an LMS does: generic (default), moodle, scorm-cloud, cornerstone,
                             successfactors, docebo, totara, blackboard or canvas. Presets are approximations.
   --profile-file <x.json>   A custom profile: { "base": "moodle", "contentOrigin": "other", … } (see the user guide).
+  --browser <name>          chromium (default, the app's own Chromium) or webkit (Safari's engine, through Playwright: no coverage, caught
+                            errors or code tracing; needs npm i -D playwright && npx playwright install webkit).
+  --viewport <size>         A device size: iphone, ipad, android-phone, or WIDTHxHEIGHT like 390x844. Default: the window as it is.
   --storage <mode>          Storage in the content's frames: normal (default), blocked (what Safari does for content in another site's
                             page) or partitioned (empty at the start of the run).
   --trace                   Record which functions ran and which way each decision went (the saved run's trace.exec).
@@ -76,7 +80,7 @@ Options for run (and report --run)
 
 Options for experiment (also the run options above, which set the default launch)
   --variants <file.json>    Your own variants: [{ "name": "deep", "patch": { "depth": 2 } }, …].
-  --preset <name>           Built-in variants: standard (default), api, frames, lms (one per LMS profile), storage (normal and blocked).
+  --preset <name>           Built-in variants: standard (default), api, frames, lms (one per LMS profile), storage (normal and blocked), browsers (chromium and webkit).
   --out <folder>            Keep each run in <folder> as a saved run.
   --json                    Print JSON instead of a table.
 
@@ -114,7 +118,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
     if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
@@ -238,6 +242,8 @@ function flagOptions(o) {
   if (o['launch-params'] !== undefined) f.launchParams = o['launch-params']
   if (o.trace) f.trace = true
   if (o.storage !== undefined) f.storage = o.storage
+  if (o.browser !== undefined) f.browser = o.browser
+  if (o.viewport !== undefined) f.viewport = o.viewport
   // --profile-file holds a custom profile: { base?, …fields }. With --profile too, that name is its base unless it names one.
   if (o['profile-file'] !== undefined) {
     const p = jsonFile(o['profile-file'], 'a profile, like { "base": "moodle", "contentOrigin": "other" }')
@@ -266,6 +272,7 @@ function runPackage(pkg, o, options) {
   const out = o.out ? resolve(o.out) : join(dir, 'run.json')
   try { options ??= buildOptions(o) } catch (e) { rmSync(dir, { recursive: true, force: true }); throw e }
   const wait = options.wait
+  if (options.browser === 'webkit') return runWebkit(pkg, item, o, options, dir, out)
   const job = { zip: pkg.path, item: item.index, options, resumeFrom: o['resume-from'] ? resolve(o['resume-from']) : null, out, live: o.live ? resolve(o.live) : null }
   writeFileSync(join(dir, 'job.json'), JSON.stringify(job))
   const [bin, pre] = electron(), log = join(dir, 'electron.log'), fd = openSync(log, 'w')
@@ -278,6 +285,26 @@ function runPackage(pkg, o, options) {
   }
   const run = JSON.parse(readFileSync(out, 'utf8'))
   rmSync(dir, { recursive: true, force: true }) // the job folder; --out is outside it
+  return { run, item, out: o.out ? out : null }
+}
+// A WebKit run (P2.3): Playwright in a plain Node process (src/webkit-runner.js), then the same findings as any run.
+function runWebkit(pkg, item, o, options, dir, out) {
+  if (o.live) { rmSync(dir, { recursive: true, force: true }); fail('--live isn’t available for WebKit runs.') }
+  const cmi = o['resume-from'] ? JSON.parse(readFileSync(resolve(o['resume-from']), 'utf8')).trace?.cmi ?? null : null
+  options = { ...options, resume: options.resume || !!cmi }
+  const traceFile = join(dir, 'webkit-trace.json'), jobFile = join(dir, 'webkit-job.json')
+  writeFileSync(jobFile, JSON.stringify({ zip: pkg.path, item: item.index, options, cmi, out: traceFile, wait: options.wait }))
+  const r = spawnSync(process.execPath, [join(APP_DIR, 'src', 'webkit-runner.js'), jobFile], { encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'], timeout: (options.wait + 20) * 1000, killSignal: 'SIGKILL',   // it ends itself soon after its wait
+    env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|HOME|TMPDIR|SCORM_LAB_.*|PLAYWRIGHT_.*)$/.test(k))) })
+  if (!existsSync(traceFile)) {
+    rmSync(dir, { recursive: true, force: true })
+    fail((r.stderr ?? '').split('\n').filter(l => l.trim()).slice(-3).join('\n') || `The WebKit run didn’t finish${r.error ? `: ${r.error.message}` : r.status ? ` (exit ${r.status})` : ''}.`)
+  }
+  const { trace } = JSON.parse(readFileSync(traceFile, 'utf8'))
+  const plan = launchPlan({ pkg, item: item.index, cmi, options, origins: WEBKIT_ORIGINS }), boot = plan.res.path ? bootGraph(plan.files, plan.res.path) : null
+  const run = savedRun({ kind: 'package', label: plan.label, package: pkg.name, launch: plan.launch, trace, boot, ...runAnalysis({ kind: 'package', launch: plan.launch, trace, boot, analysis: pkg.analysis }) })
+  if (o.out) writeFileSync(out, JSON.stringify(run))
+  rmSync(dir, { recursive: true, force: true })
   return { run, item, out: o.out ? out : null }
 }
 // What the content was waiting for (src/stall.js), without the full evidence lines of the finding.

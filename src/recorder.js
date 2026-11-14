@@ -8,8 +8,8 @@ const PROBE = readFileSync(new URL('./host/probe.js', import.meta.url), 'utf8'),
 const TRACE = readFileSync(new URL('./host/trace-probe.js', import.meta.url), 'utf8')
 const EXEC_CAP = 200000   // execution trace events kept (the newest); see trace-probe.js
 // Sends every frame's pending trace events and timer summary now. silent: a cross-origin frame's refusal mustn't pause or be recorded.
-const FLUSH = '(function f(w){try{w.__labFlush&&w.__labFlush()}catch(e){}try{w.__labFlushT&&w.__labFlushT()}catch(e){}try{for(var i=0;i<w.frames.length;i++)f(w.frames[i])}catch(e){}})(globalThis)'
-const CAP = { scripts: 5000, requests: 10000, console: 5000, caught: 2000, log: 2000, probe: 5000 }
+export const FLUSH = '(function f(w){try{w.__labFlush&&w.__labFlush()}catch(e){}try{w.__labFlushT&&w.__labFlushT()}catch(e){}try{for(var i=0;i<w.frames.length;i++)f(w.frames[i])}catch(e){}})(globalThis)'
+export const CAP = { scripts: 5000, requests: 10000, console: 5000, caught: 2000, log: 2000, probe: 5000 }
 const frames = st => (st?.callFrames ?? []).slice(0, 8).map(f => ({ fn: f.functionName, url: f.url, line: f.lineNumber + 1, col: f.columnNumber + 1 }))
 const argText = a => a.type === 'string' ? a.value : a.unserializableValue ?? (a.value !== undefined ? JSON.stringify(a.value) : a.description ?? a.type)
 
@@ -29,16 +29,22 @@ export const shiftTimes = (list, items, off) => items.map(x => ({ ...x, ...(x.t 
 // What the probe is told about storage (P2.2): only blocking needs anything from here; partitioned is done by the main process.
 export const storagePrefix = mode => mode === 'blocked' ? "globalThis.__labStorage = 'blocked';\n" : ''
 
+// The script put into every frame ahead of the page's own: the run's pins, storage mode and shape/trace probes, then probe.js.
+// The same in every browser (the CDP recorder below, and src/webkit-runner.js).
+export const probeSource = ({ pins = [], responses = [], trace = false, storage = 'normal' } = {}) =>
+  storagePrefix(storage) + pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + (trace ? TRACE + ';\n' : '') + PROBE
+
 export class Recorder {
   // pins and responses are the run's launch options (pins.js): pins go into the probe, responses are served through the Fetch domain.
   // Responses answered with @probe (shape.js) also put shape-probe.js, with their patterns, ahead of the probe.
   // storage: the run's effective mode (profiles.js storageMode); 'blocked' puts a line ahead of the probe that makes it block storage.
   // trace (a traced run, P1.4) puts trace-probe.js ahead of the probe too; its reports go to trace.exec.
-  constructor(wc, { label, caught = true, pins = [], responses = [], trace = false, storage = 'normal' } = {}) {
+  // viewport (P2.3): a device size, applied through Emulation to the page, and its user agent to every frame (a pinned user agent wins).
+  constructor(wc, { label, caught = true, pins = [], responses = [], trace = false, storage = 'normal', viewport = null } = {}) {
     this.wc = wc; this.dbg = wc.debugger; this.caught = caught; this.t0 = Date.now(); this.sessions = new Set([''])
-    this.probe = storagePrefix(storage) + pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + (trace ? TRACE + ';\n' : '') + PROBE; this.userAgent = userAgentPin(pins); this.responses = responses; this.answered = new Map()
+    this.probe = probeSource({ pins, responses, trace, storage }); this.userAgent = userAgentPin(pins) ?? (viewport?.userAgent || undefined); this.viewport = viewport; this.responses = responses; this.answered = new Map()
     this.traced = trace; this.execCount = 0
-    this.trace = { label, started: new Date().toISOString(), targets: [], scripts: [], requests: [], navigations: [], console: [], exceptions: [],
+    this.trace = { label, browser: 'chromium', started: new Date().toISOString(), targets: [], scripts: [], requests: [], navigations: [], console: [], exceptions: [],
       caught: [], log: [], probe: [], exec: [], coverage: [], sources: {}, truncated: {} }
     this.req = new Map(); this.scriptUrl = new Map()   // sid:scriptId → url, for blocked lookups' stacks
   }
@@ -61,6 +67,11 @@ export class Recorder {
     await s('Network.enable'); await s('Log.enable')
     await s('Profiler.enable'); await s('Profiler.startPreciseCoverage', { callCount: true, detailed: true })
     if (this.userAgent) await s('Emulation.setUserAgentOverride', { userAgent: this.userAgent })
+    if (this.viewport && !sid) {
+      const { width, height, deviceScaleFactor, mobile, touch } = this.viewport
+      await s('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor, mobile })
+      await s('Emulation.setTouchEmulationEnabled', { enabled: touch })
+    }
     if (this.responses.length) await s('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] })
     if (type === 'page' || type === 'iframe') { await s('Page.enable'); await s('Page.addScriptToEvaluateOnNewDocument', { source: this.probe }) }
     await s('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true })

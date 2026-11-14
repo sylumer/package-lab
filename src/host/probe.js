@@ -6,7 +6,8 @@
   if (window.__labProbed) return
   window.__labProbed = true
   const report = data => { try { __labReport(JSON.stringify({ frame: location.href, ...data })) } catch (e) { /* binding missing */ } }
-  const stack = (skip = 0) => (new Error().stack || '').split('\n').slice(3 + skip, 9 + skip).map(s => s.trim().replace(/^at /, '')).filter(s => !s.includes('probe.js') && !/^__lab[A-Z]/.test(s))
+  // V8's stack starts with the message line; WebKit's doesn't, so one frame fewer is skipped there.
+  const stack = (skip = 0) => { const lines = (new Error().stack || '').split('\n'); return lines.slice((/^Error\b/.test(lines[0]) ? 3 : 2) + skip, 9 + skip).map(s => s.trim().replace(/^at /, '')).filter(s => !s.includes('probe.js') && !/^__lab[A-Z]/.test(s)) }
   let depth = 0, w = window
   try { while (w !== w.parent && depth < 20) { w = w.parent; depth++ } } catch (e) { depth = -1 }
   let topReachable = true
@@ -16,7 +17,7 @@
   const seen = new Map()
   // On a real LMS or hosted platform (anything but SCORM Lab's own host page, which logs its own calls), the API
   // object's methods are wrapped so that its calls are recorded too.
-  const ownHost = location.href.startsWith('lab://run/__lab/')
+  const ownHost = /^(lab:\/\/run|https:\/\/lab\.invalid)\/__lab\//.test(location.href)   // SCORM Lab's own pages: lab://run/ in Electron, https://lab.invalid/ in WebKit
   const QUIET = /GetLastError|GetErrorString|GetDiagnostic/
   const wrap = (name, v) => {
     if (ownHost || !v || typeof v !== 'object' || v.__labWrapped) return v

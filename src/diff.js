@@ -99,12 +99,12 @@ export function compare(ref, run) {
     else if (!ok(m[i])) requests.failedInRun.push({ ref: r, run: m[i] })
   })
   reqB.forEach((r, i) => { if (!back[i]) requests.onlyRun.push(r) })
-  const scrA = ref.scripts.filter(s => s.url && !ignorable(s.url)), scrB = run.scripts.filter(s => s.url && !ignorable(s.url))
+  const scrA = (ref.scripts ?? []).filter(s => s.url && !ignorable(s.url)), scrB = (run.scripts ?? []).filter(s => s.url && !ignorable(s.url))
   const ms = matchByPath(scrA, scrB), msb = matchByPath(scrB, scrA)
   const scripts = { onlyRef: scrA.filter((s, i) => !ms[i]), onlyRun: scrB.filter((s, i) => !msb[i]) }
   const errKey = e => e.text.replace(/\d+/g, 'N')
-  const refErr = new Set([...ref.exceptions, ...ref.caught].map(errKey))
-  const exceptions = { onlyRun: run.exceptions.filter(e => !refErr.has(errKey(e))), caughtOnlyRun: run.caught.filter(e => !refErr.has(errKey(e))) }
+  const refErr = new Set([...ref.exceptions, ...(ref.caught ?? [])].map(errKey))
+  const exceptions = { onlyRun: run.exceptions.filter(e => !refErr.has(errKey(e))), caughtOnlyRun: (run.caught ?? []).filter(e => !refErr.has(errKey(e))) }
   const api = s => s.probe.filter(p => p.type === 'api'), lookups = s => s.probe.filter(p => p.type === 'lookup')
   const coverage = ref.coverage?.length && run.coverage?.length ? compareCoverage(ref, run) : null
   // The first thing the reference did that the run didn't, in the reference's time order.

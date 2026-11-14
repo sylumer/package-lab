@@ -48,7 +48,9 @@ src/
   main.js               Electron main process: windows, lab:// server, runs, IPC and web handlers, headless runs
   preload.cjs           window.lab for the desktop window (IPC)
   web.js                HTTP server for the web interface (API, events, live frames, auth)
-  recorder.js           CDP recorder: one per run window or popup
+  recorder.js           CDP recorder: one per run window or popup; probeSource (the script put into every frame)
+  launch.js             What every browser's run shares, in plain Node: serveRequest, launchPlan, the findings of a finished run, savedRun (P2.3)
+  webkit-runner.js      WebKit runs through Playwright, in plain Node, not Electron (P2.3)
   host/                 Loaded inside the run window
     host.html, host.js  The test LMS page (host.js also runs in wrap.html)
     wrap.html           An empty LMS frame (for frame depth); may hold the API (a profile's apiWhere)
@@ -144,7 +146,7 @@ and a line in the guides. The shape:
 
 ```
 { expose: 'manifest'|'both'|'1.2'|'2004'|'none', depth: 0–5, opener, resume, caught (bool), auto (s, 0 = until stopped),
-  wait (s, headless runs), profile: 'generic' | preset name | { base?, notes?, …profile fields } (see LMS profiles), browser: 'chromium', viewport: null | { width, height },
+  wait (s, headless runs), profile: 'generic' | preset name | { base?, notes?, …profile fields } (see LMS profiles), browser: 'chromium'|'webkit', viewport: null | { width, height, deviceScaleFactor, mobile, touch, userAgent } (a preset name or 'WxH' is accepted and returned in full),
   files: { path: { content } | { base64 } },
   pins: [{ path, value (JSON), frames: 'content'|'all', mode: 'force' } | { path, frames, mode: 'watch' }],
   responses: [{ match, method?, status, headers, body }], launchParams: 'a=1&b=2', storage: 'normal'|'blocked'|'partitioned' (see Storage), trace: false }
@@ -350,7 +352,7 @@ session it enables:
 | Profiler | Precise block coverage with call counts |
 | Page | Navigations, and adds the probe (ahead of it, the run's pins, `shape-probe.js` with its patterns if a response is `@probe`, and `trace-probe.js` in a traced run) |
 | Fetch | Only when the run has `responses`: every request is paused; those a response matches are fulfilled, the rest continue |
-| Emulation | Only with a `navigator.userAgent` pin: `setUserAgentOverride` |
+| Emulation | With a `navigator.userAgent` pin or a device size: `setUserAgentOverride` (the pin wins). With a device size, on the page only: `setDeviceMetricsOverride` and `setTouchEmulationEnabled` |
 
 **Popups.** A window the test LMS opens (a profile with `launch: popup`, or `--window`) or the content opens gets its
 own `Recorder` (`watchPopups` in `main.js`), merged into the run's trace at the end with its times moved onto the run's
@@ -365,6 +367,60 @@ moment the debugger attaches. (ponytail: a popup the content opens with a URL ca
 of every session to send its pending trace events: `Runtime.evaluate` with `silent`, so a cross-origin frame's refusal
 isn't recorded as a caught error). The lists are capped (5,000 scripts,
 10,000 requests…); `truncated` says which overflowed.
+
+## Other browsers and device sizes (P2.3)
+
+**Shared code.** `src/launch.js` is plain Node, imported by `main.js`, the CLI and the WebKit runner: `serveRequest`
+(what the test LMS and the package serve for a path: config, host files, package files with ranges and the profile's
+headers), `launchPlan` (the item, options and resume data → the test LMS's configuration, the content's address, the
+headers, the label and the `launch` object), `withProgress` and `runAnalysis` (a finished run's findings and milestones),
+and `savedRun`. `launchPlan` takes `origins`: `lab://run` and `lab://content` in Electron, `https://lab.invalid` and
+`https://content.invalid` in WebKit (`WEBKIT_ORIGINS`). Only `config.launch`, the address the browser loads, differs:
+`launch.url` stays `lab://…` so a saved run reads the same in every browser. `recorder.js`'s `probeSource` builds the
+script put into every frame (storage mode, pins, shape and trace probes, then `probe.js`), for both browsers.
+
+**WebKit runner.** `src/webkit-runner.js` (`runWebkit`, `runJob`, and a script mode: `node webkit-runner.js job.json`)
+runs in Node, never Electron. `loadPlaywright()` does `import('playwright')`; if it is missing (or `SCORM_LAB_NO_PLAYWRIGHT=1`),
+it throws "WebKit runs need Playwright, which isn't installed here. Install it with: npm i -D playwright && npx playwright
+install webkit". Playwright is an optional devDependency; nothing else imports it. What a run does:
+
+- Launches WebKit with one context: the viewport (`options.viewport`, else 1100 × 800, the Electron window), device scale
+  factor, `isMobile`, `hasTouch`, and a user agent (a pinned `navigator.userAgent`, else the device's).
+- `ctx.route('**/*')` serves `https://lab.invalid/` and `https://content.invalid/` from memory with `serveRequest`
+  (`/pkg/` is the package with its overrides, `/__lab/` the test LMS), answers a request a response matches
+  (`answerFor`, `buildAnswer`, marking the request `answered`), and lets anything else go to the network.
+- `ctx.exposeBinding('__labReport')` and `ctx.addInitScript(probeSource(…))` give the probe the same channel as in
+  Electron. The probe's own pages are recognised by `https://lab.invalid/__lab/` as well as `lab://run/__lab/`; its
+  `stack()` skips one frame fewer in WebKit, whose stack has no message line. The first blank page of a window is left out of
+  the probe's reports (Electron's recorder attaches after it).
+- Requests come from the context's `request`, `response` and `requestfailed` events; console, uncaught page errors,
+  frame navigations and targets from each page (`ctx.on('page')`, so popups too). A window the host page opens blank
+  (window-opener profiles) is sent on to the content by calling `__labPopupReady` on the opener.
+- Every address in the trace is turned back into `lab://run/…` or `lab://content/…` (`toLab`, also over each probe
+  report), so no finding or reader needs to know the browser. Resource types are mapped to Chromium's names (`Fetch`, `XHR`,
+  `Script`…). Console errors that Chromium would also log (CSP, MIME type, failed loads) are copied to `trace.log`.
+- At the end each frame flushes the probe's timer summary and the test LMS's data model is read (`trace.cmi`).
+
+The trace has `browser: 'webkit'` and `browserVersion`, and **no** coverage, caught errors, script sources, script list,
+execution events or initiator stacks (`from` is empty): those lists are present and empty. Readers cope: `rules.js`,
+`diff.js` and `report.js` read `caught`, `log` and `scripts` with `?? []`; milestones, stall and drill-down read the probe,
+requests and exceptions. `trace: true` (the code trace) is refused in a WebKit run. Storage `normal` and `partitioned` are
+the same there (every run has a new context); `blocked` is the probe's, as in Electron.
+
+**Who starts it.** The CLI's `runPackage` runs the script with `process.execPath` (Node) as a child, then builds the run
+in-process with `launchPlan` and `runAnalysis` and writes the saved run, so `run`, `experiment`, `discover` and `report --run`
+all accept `--browser webkit` (`drill` needs a trace, so it is refused). In the apps, `launchItem` calls `beginWebkit`, which writes the package to a
+temp folder and starts the script with `ELECTRON_RUN_AS_NODE=1` on Electron's own binary. The job is
+`{ zip, name, item, options, cmi, out, stop, ready, wait }`: `ready` is written once WebKit is up (until then a failure
+becomes the launch's error), `stop` ends the run when it appears (Stop), and `out` receives `{ trace }`. `active.webkit`
+stands in for the window and recorder; `finishWebkit` adds the run with `addRun`, so experiments (`runToEnd`), the Runs list
+and saved runs work as for any run. (ponytail: no live view for WebKit; stream Playwright screenshots into `live` when it matters.)
+
+**Device sizes in Electron.** The recorder applies `Emulation.setDeviceMetricsOverride` and
+`setTouchEmulationEnabled` to the page (not to its frames) and the user agent to every session. `begin()` also sets the
+window's content size to the viewport (and a popup's, in `watchPopups`), so `live.capture()` and `live.input()` work in the
+emulated size: `frame.json` is `{ w, h }` of the device. The test LMS pages carry `<meta name="viewport" content="width=device-width, initial-scale=1">`,
+as an LMS player for phones does, so a `mobile` emulation lays the content out at the device's width.
 
 ## Static analysis
 
@@ -691,7 +747,7 @@ gives `waitingFor` (the same result).
 ## Experiments
 
 `src/experiments.js` is pure. `PRESETS` maps a name to a list of `{ name, patch }`: `api`, `frames`, `standard`, and
-`lms` (P2.1: `lms <name>` with `{ profile: name }` for each LMS profile), and `storage` (P2.2: `storage normal` and `storage blocked`; the one equal to the default is dropped; P2.3 adds `browsers`). `planVariants({ base, variants })` returns `[{ name, options }]`: the base first, named
+`lms` (P2.1: `lms <name>` with `{ profile: name }` for each LMS profile), and `storage` (P2.2: `storage normal` and `storage blocked`; the one equal to the default is dropped), and `browsers` (P2.3: `browser chromium` and `browser webkit`, likewise). `planVariants({ base, variants })` returns `[{ name, options }]`: the base first, named
 `default`, then each variant's patch merged over it with `normaliseOptions`; a variant whose options equal an earlier
 one's is dropped (unless `dedupe: false`, used for variants the user wrote), and bad patches throw with the variant's name. `runResult(name, options, savedRun, extra)` keeps what
 a table needs: `{ name, options, milestones, counts (runCounts), errors, verdict, …extra }`. `summarise(results)` makes
@@ -699,7 +755,7 @@ the rows (`results[0]` is the base; each other row has `progress` and `better` f
 `experimentFindings(results)` returns the "gets further" warnings (only when the furthest step is later, not for a tie
 on step count) or the "Nothing tried" note. It also adds "With storage blocked, the content gets less far" for a variant whose `storageMode` is `blocked` when the base's isn't and `progress()` says it got less far.
 
-Running is up to the caller. The CLI calls `runPackage` for each plan entry (a fresh Electron each time, saved runs in
+Running is up to the caller. The CLI calls `runPackage` for each plan entry (a fresh Electron each time, or a Node child for a WebKit variant; saved runs in
 `--out`). `main.js` runs the plan inside one process: `experimentStart` launches each variant with `auto` set to its
 `wait`, waits for the run to be recorded, and emits `experiment` events: `{ state: 'start', names }`,
 `{ state: 'result', index, row }`, `{ state: 'done', rows, findings, stopped }` and `{ state: 'error', message }`. One
@@ -754,7 +810,7 @@ folder:
   "resumeFrom": null, "wait": 10, "out": "/abs/run.json", "live": null }
 ```
 
-It then runs Electron with `--run=<job>` (stdout ignored, stderr to a log), waits for `out`, and reads the run back.
+It then runs Electron with `--run=<job>` (stdout ignored, stderr to a log), waits for `out`, and reads the run back. With `--browser webkit` it runs `src/webkit-runner.js` in Node instead (see Other browsers and device sizes).
 `item` here is the manifest item index; the CLI's `--item` numbers are positions among launchable items. Electron is
 chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Applications/SCORM Lab.app`.
 
@@ -772,6 +828,7 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
   boot: bootGraph | null,
   trace: {
     label, started, ended, duration,                       // ISO times, ms
+    browser:    'chromium' | 'webkit',                     // P2.3 (absent in older runs: chromium); webkit also has browserVersion
     targets:    [{ t, sid, parent, type, url }],
     scripts:    [{ t, sid, id, url, hash, length, module, sourceMap, from: [frame], start? }],   // start: [line, column] (0-based) of an inline script in its page, added in P1.4
     requests:   [{ t, sid, id, url, method, type, initiator, from: [frame], status?, mime?, failed?, canceled?, redirect?, answered?, answeredBy? }],   // answered, answeredBy (index into launch.options.responses): added in P1.2
@@ -847,6 +904,7 @@ npm test
 | `lexical` | `boot.js` declares `let previewMode` | The can't-pin finding, and the content keeps its own value |
 | `needs` | `boot.js` fetches `/api/player/config` and starts the lesson only with it; reads `cfg.lms.enabled` (truthiness), `cfg.lms.version` (`=== '2004'`) and `cfg.assets.base` (joined to text) | Discovery: the three fields with the right types, the stand-in reaches past `looked`. Its `boot.js` also runs in the unit tests, in a `vm` context with `shape-probe.js` and stand-ins for `Response`, `XMLHttpRequest` and `fetch`, to test the Proxy and the loop without Electron |
 | `levels` | The lesson starts only if `window.player && player.ready`; `player` is set by `js/player.js`, which `boot.js` loads only if `config.cdn` is set; `config` comes from `data/config.json`, which has no `cdn` | The drill-down's three levels, explained down to the JSON file (`--slow`: CLI and web handlers). Its `boot.js` also feeds the drill-down unit test with hand-made events and coverage |
+| `chromeonly` | `lesson.js` starts with an unguarded `navigator.userAgentData.brands` | Works in Chromium; an uncaught error in WebKit, which has no `userAgentData` |
 | `loader` | Loading screen; `data/config.json` with a trailing comma; `js/next.js` loaded only after the config parses | Invalid JSON; stuck on loading screen; code that loads next never ran |
 
 The end-to-end part covers:
@@ -876,6 +934,12 @@ The end-to-end part covers:
   `state`, saved runs, and `load-run` refusing paths outside the runs folder, the `options` handler building the pin and answer flags and refusing `bodyFile`.
 - **Concierge module:** run as Concierge would (CGI environment, temp data folder): upload, the static report, a run,
   the report, widget and download. Skipped if `../concierge` isn't there.
+
+- **Browsers and device sizes (P2.3):** unit checks cover the options (presets, `WxH`, the saved `{ width, height }`, bad values), `cliCommand`,
+  the `browsers` preset, `launchPlan` and `serveRequest`, and every reader of a trace with no coverage, caught errors, sources, scripts or log.
+  In the default suite, the CLI refuses WebKit with a how-to-install message when `SCORM_LAB_NO_PLAYWRIGHT=1` makes Playwright fail to load, and `good` at `--viewport iphone` sees a 390 × 844 content frame (the probe's `dom` report).
+  With `--slow` (and Playwright with its WebKit installed; otherwise they are skipped and say so): `good` in WebKit reaches `wrote` with a trace in the same format and `lab://` addresses;
+  `chromeonly` (reads `navigator.userAgentData.brands` unguarded) works in Chromium and fails in WebKit with the error recorded; the iPad preset's size in WebKit; the moodle (framed) and cornerstone (popup) profiles, blocked storage and answers in WebKit; `--trace` is refused; the `browsers` experiment; the live frame's size at `--viewport ipad`; and, over the web handlers, a WebKit run and Stop.
 
 To add a fixture, use `fixture(name, edit)`: it copies the base, calls `edit(dir)`, and zips it.
 

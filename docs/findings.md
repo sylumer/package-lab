@@ -18,6 +18,7 @@ if there are no errors.
 - [From a run: requests and errors](#from-a-run-requests-and-errors)
 - [From a run: milestones](#from-a-run-milestones)
 - [From a run: progress](#from-a-run-progress)
+- [From a run in WebKit](#from-a-run-in-webkit)
 - [From a run: tracing](#from-a-run-tracing)
 - [From an experiment](#from-an-experiment)
 - [From a discovery](#from-a-discovery)
@@ -165,6 +166,17 @@ Added to a package run that used pins or responses. See
 | Pinned value never read | info | The content never looked at the pinned value (the name may be wrong, the code that reads it never ran, or the name is declared with `let` or `const` somewhere other than the start of a line, which SCORM Lab can’t see). `navigator.userAgent` pins aren't checked | Check the spelling, and whether the content got as far as the code that reads it |
 | Answered *N* requests with your responses | info | These requests never reached a server: the content got your response. The evidence lists them | Compare with a run without the answer to see what changed |
 | *A response* matched no request | info | The content never made a request that matches one of your responses | Check the pattern against the Network tab, and whether the content got as far as making the request |
+
+## From a run in WebKit
+
+A run with **Browser: WebKit** (`--browser webkit`) gets the same findings as any run, from what WebKit lets SCORM Lab
+record: requests, console messages, errors that stop a script, and the probe's reports. It has no script coverage, no
+errors the content catches, no script sources and no code trace, so the findings that use them have nothing to say:
+"*N* errors were thrown and caught", "Pinned value never read" explained by a `let` or `const`, the comparison's
+coverage differences, and everything under [tracing](#from-a-run-tracing). A script that uses something only Chrome has
+shows as an uncaught error (for example "undefined is not an object (evaluating 'navigator.userAgentData.brands')"), under
+"The content never looked for the SCORM API" or "*N* uncaught errors", with the file and line. No finding is specific to
+WebKit; to see which ones differ from Chromium, run the **browsers** experiment (below).
 
 ## From a run: tracing
 

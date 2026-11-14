@@ -38,6 +38,11 @@
     <div class="row"><label>Launch parameters <input id="launch-params" type="text" placeholder="a=1&amp;b=2" spellcheck="false" title="Extra query parameters added to the launch address"></label>
       <label>Storage <select id="storage" title="Storage in the content’s frames. Blocked: what Safari does for content inside another site’s page. Partitioned: empty at the start of the run. Normal: the profile’s Cookies field decides.">
         <option value="normal">Normal</option><option value="blocked">Blocked (Safari-like)</option><option value="partitioned">Partitioned (empty)</option></select></label>
+      <label>Browser <select id="browser" title="Chromium is the app’s own browser. WebKit is Safari’s engine, run through Playwright (it needs npm i -D playwright). A WebKit run has no live view, coverage, caught errors or code trace.">
+        <option value="chromium">Chromium</option><option value="webkit">WebKit (Safari’s engine)</option></select></label>
+      <label>Device size <select id="viewport" title="Run at a phone or tablet size, with touch and that device’s user agent.">
+        <option value="">Window as it is</option><option value="iphone">iPhone (390×844)</option><option value="ipad">iPad (820×1180)</option><option value="android-phone">Android phone (412×915)</option><option value="custom">Custom size…</option></select></label>
+      <span id="viewport-custom" hidden><label>Width <input id="viewport-w" type="number" min="100" max="10000" value="390" size="5"></label> <label>Height <input id="viewport-h" type="number" min="100" max="10000" value="844" size="5"></label></span>
       <label class="check" title="Record which functions ran and which way each decision went, with the values. The content runs a little slower."><input type="checkbox" id="trace"> Trace the code</label></div>
     <h3 class="section">Profile fields</h3>
     <p class="muted small" id="profile-notes"></p>

@@ -83,7 +83,7 @@ function runHtml(run) {
     ['API calls', c.apiCalls ? `${c.apiCalls} (first: ${api[0].call})` : 'none'], ['Requests', `${c.requests}${c.failedRequests ? `, ${c.failedRequests} failed` : ''}`], ['Uncaught errors', c.uncaught]]
   const shown = screens(t).map(d => [esc(short(d.frame)), esc(d.readyState), d.visible, d.media, esc(d.loader ?? ''), esc(d.sample ?? '')])
   const errs = [...t.exceptions.map(e => [((e.t ?? 0) / 1000).toFixed(2), 'uncaught', esc(e.text), esc(where(e.at?.[0]) || short(e.url) + ':' + e.line)]),
-    ...t.caught.filter(e => !e.uncaught).map(e => [((e.t ?? 0) / 1000).toFixed(2), 'caught', esc(e.text), esc(where(e.at?.[0]))])].sort((a, b) => a[0] - b[0])
+    ...(t.caught ?? []).filter(e => !e.uncaught).map(e => [((e.t ?? 0) / 1000).toFixed(2), 'caught', esc(e.text), esc(where(e.at?.[0]))])].sort((a, b) => a[0] - b[0])
   const failed = t.requests.filter(r => r.status >= 400 || r.failed && !r.canceled)
   return `<h2>What happened</h2>${table(['', ''], facts.map(([k, v]) => [`<b>${esc(k)}</b>`, esc(v)]))}
 <h2>What the content showed at the end</h2>${table(['Frame', 'State', 'Visible elements', 'Images and media', 'Loading indicator', 'Text'], shown)}

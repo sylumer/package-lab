@@ -99,7 +99,7 @@ scorm-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth
                          [--no-caught] [--show] [--json] [--strict] [--options options.json]
                          [--options-from run.json] [--override path=file …] [--pin name=json …]
                          [--answer pattern=reply …] [--launch-params a=1&b=2] [--trace]
-                         [--storage normal|blocked|partitioned] [--profile name] [--profile-file profile.json]
+                         [--storage normal|blocked|partitioned] [--browser chromium|webkit] [--viewport preset|WxH] [--profile name] [--profile-file profile.json]
 ```
 
 Launches the item in a hidden browser, with SCORM Lab's test LMS. It lets the item run for `--wait` seconds (default
@@ -123,6 +123,8 @@ app.
 | `--profile` | `generic` | Hosts the content the way an LMS does: `generic` (SCORM Lab's own), `moodle`, `scorm-cloud`, `cornerstone`, `successfactors`, `docebo`, `totara`, `blackboard` or `canvas` (see [Profiles](#profiles)) |
 | `--profile-file` | none | A custom profile from a JSON file (see [Profiles](#profiles)). With `--profile` too, that preset is its base unless the file names one |
 | `--storage` | `normal` | Storage in the content's frames: `blocked` makes `localStorage` and `sessionStorage` throw a `SecurityError`, `document.cookie` read empty and `indexedDB.open` fail, as Safari does for content in another site's page; `partitioned` empties the run window's storage first. With `normal`, a profile whose `cookies` is `third-party-blocked` (`scorm-cloud`) blocks it too. See the [user guide](user-guide.md#storage-blocked-in-the-contents-frames). In an options file: `"storage": "blocked"` |
+| `--browser` | `chromium` | `webkit` runs the content in Safari's engine through Playwright (see [WebKit](#webkit)) |
+| `--viewport` | none | A device size: `iphone`, `ipad`, `android-phone`, or a width and height like `390x844`. The preset's touch, pixel ratio and user agent come with it. With no `--viewport` the window is as it is |
 | `--trace` | off | Records which functions of the package ran and which way each decision went, with the values (see [Tracing](#tracing)). Keep the run with `--out` to read it |
 | `--out` | none | Keeps the full run (scripts, requests, coverage, sources). Open it in the desktop app with **Open saved…**, or pass it to `report` or `--resume-from` |
 | `--live` | none | See [Live runs](#live-runs) |
@@ -237,6 +239,22 @@ scorm-lab run course.zip --trace --out run.json
 node -e "import('./src/instrument.js').then(m => { const t = JSON.parse(require('fs').readFileSync('run.json')).trace; for (const e of m.lastEvents(t, 50)) console.log(e.file + ':' + e.line, e.say) })"
 ```
 
+#### WebKit
+
+`--browser webkit` runs the content in Safari's engine through Playwright, in a Node process of the CLI (not Electron),
+with the same test LMS, package files, changed files, pins, answers, profile and storage setting. It is an optional
+extra: install it with `npm i -D playwright && npx playwright install webkit` in the SCORM Lab folder. Without it the
+command exits with status 2 and says so.
+
+```bash
+scorm-lab run course.zip --browser webkit --viewport iphone --out ios.json
+scorm-lab experiment course.zip --preset browsers
+```
+
+The saved run has `trace.browser` set to `webkit`. It has no coverage, no caught errors, no script sources and no script
+list, so findings that need them say nothing. `--trace` and `--live` aren't available, and so `drill` (which traces) isn't
+either. `--viewport` works in both browsers: a preset (`iphone`, `ipad`, `android-phone`) or `WIDTHxHEIGHT`.
+
 `waitingFor` is what the content was still waiting for at the end (see [Why it stalled](user-guide.md#why-it-stalled-what-the-content-was-waiting-for)): `pollers`, `unanswered` messages, `listeners` that never ran, `pending` requests and the `last` code that ran. The same appears as a **The content was waiting for** finding in the text output.
 
 `milestones` lists the ten steps of the SCORM path, each reached or not (see [Milestones](user-guide.md#milestones));
@@ -261,7 +279,7 @@ progress goes to standard error.
 
 | Option | Default | What it does |
 |---|---|---|
-| `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), `standard` (both), `lms` (each [profile](#profiles)), or `storage` (normal and blocked) |
+| `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), `standard` (both), `lms` (each [profile](#profiles)), `storage` (normal and blocked), or `browsers` (Chromium and WebKit) |
 | `--variants` | none | Your own variants, from a JSON file: a list of `{ "name", "patch" }` or `{ "variants": [...] }`. `patch` is any [launch options](developer-guide.md#launch-options). Not with `--preset` |
 | `--out` | none | A folder; each run is kept in it as a saved run (`01-default.json`, `02-api_both.json`, …) |
 | `--json` | off | Prints JSON (below) instead of a table |
@@ -533,6 +551,7 @@ Input goes to the newest open window of the run: a popup the content opened, or 
 | `SCORM_LAB_ELECTRON` | The Electron or SCORM Lab binary to use. A path ending in `electron` is given the repo as its app; anything else (such as `/Applications/SCORM Lab.app/Contents/MacOS/SCORM Lab`) runs on its own |
 | `SCORM_LAB_DATA` | Moves SCORM Lab's data folder (saved runs, web token, reference sign-ins) for `serve` and `open`. Default `~/Library/Application Support/SCORM Lab` |
 | `NO_COLOR` | Plain text output |
+| `SCORM_LAB_NO_PLAYWRIGHT` | `1` makes Playwright fail to load, as it does where it isn't installed, so `--browser webkit` refuses with its how-to-install message. For SCORM Lab's own tests |
 | `SCORM_LAB_FORCE_TRACE` | `1` traces every package run, as `--trace` does. For SCORM Lab's own tests |
 
 ## Examples

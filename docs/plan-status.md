@@ -26,8 +26,8 @@ In progress on branch `next`.
 | P1.5 | Drill-down | opus | done | dba267a | Reviewed by the orchestrator. Resumed once after a usage limit. Adds watch pins; dotted pins share one accessor per object |
 | P1.6 | Why it stalled | sonnet | done | 29708c5 | One review round. Also fixed milestone times being absolute. No new tab: the finding carries it |
 | P2.1 | LMS profiles and other-origin content | sonnet / opus | done | 5634744 | Built by opus in one piece; reviewed by the orchestrator. Presets from thin haiku research (most vendor pages unreadable), marked approximations. Popup bug fixed in P2.2 |
-| P2.2 | Blocked storage and cookies | sonnet | done | | One review round (fixes by the orchestrator: popup timeout, no script in content popups). Fixed popup launches being recorded late |
-| P2.3 | WebKit and device sizes | sonnet | todo | | |
+| P2.2 | Blocked storage and cookies | sonnet | done | 1342563 | One review round (fixes by the orchestrator: popup timeout, no script in content popups). Fixed popup launches being recorded late |
+| P2.3 | WebKit and device sizes | sonnet | done | | One review round (network confinement, timeouts). Playwright and WebKit installed; WebKit checks are in --slow. Default suite now ~2:41 |
 | P2.4 | Save-and-resume cycle | sonnet | todo | | |
 | P3.1 | Corrected package export | sonnet | todo | | |
 | P3.2 | Authoring tool rule packs | sonnet + haiku research | todo | | |

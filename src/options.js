@@ -11,6 +11,18 @@ const MAX_PIN = 1024 ** 2, MAX_BODY = 10 * 1024 ** 2, MAX_BODIES = 20 * 1024 ** 
 const MAX_FILE = 50 * 1024 ** 2, MAX_TOTAL = 200 * 1024 ** 2   // changed files: per file and in all
 const EXPOSE = ['manifest', 'both', '1.2', '2004', 'none']
 export const STORAGE = ['normal', 'blocked', 'partitioned']
+export const BROWSERS = ['chromium', 'webkit']   // webkit (P2.3) runs in Playwright's WebKit, not Electron; see src/webkit-runner.js
+// Device sizes (P2.3). The user agents are the browsers' own, of the versions they are named for.
+export const VIEWPORTS = {
+  iphone: { width: 390, height: 844, deviceScaleFactor: 3, mobile: true, touch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' },
+  ipad: { width: 820, height: 1180, deviceScaleFactor: 2, mobile: true, touch: true, userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' },
+  'android-phone': { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true, touch: true, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36' },
+}
+const PLAIN = { deviceScaleFactor: 1, mobile: false, touch: false, userAgent: '' }
+// A name for a device size: its preset, or WIDTHxHEIGHT. The command line's spelling is the same: --viewport iphone, --viewport 390x844.
+export const viewportName = v => Object.entries(VIEWPORTS).find(([, p]) => JSON.stringify(p) === JSON.stringify(v))?.[0] ?? `${v.width}x${v.height}`
+// '' when the size has settings beyond width and height that a name can't carry (it then goes in the options file).
+const viewportFlag = v => Object.entries(PLAIN).every(([k, d]) => v[k] === d) || Object.values(VIEWPORTS).some(p => JSON.stringify(p) === JSON.stringify(v)) ? viewportName(v) : ''
 const bad = (k, why) => { throw new Error(`Option “${k}” ${why}.`) }
 const num = (k, v, min, max) => {
   const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v
@@ -31,9 +43,27 @@ const check = {
   wait: (k, v) => num(k, v, 1, 3600),
   // A preset name or a custom profile object (profiles.js); 'none', from runs saved before P2.1, is generic.
   profile: (k, v) => checkProfile(v),
-  browser: (k, v) => str(k, v, ['chromium']),    // widened by P2.3
-  viewport: (k, v) => v === null ? null : obj(v) && Object.keys(v).sort().join() === 'height,width' && [v.width, v.height].every(n => Number.isInteger(n) && n > 0)
-    ? { width: v.width, height: v.height } : bad(k, 'must be null or { width, height } in whole pixels'),
+  browser: (k, v) => str(k, v, BROWSERS),
+  // null (the window as it is) · a preset name · 'WIDTHxHEIGHT' · { width, height, deviceScaleFactor?, mobile?, touch?, userAgent? }.
+  // Always returned in full; the object { width, height } saved by earlier versions reads as a plain size.
+  viewport: (k, v) => {
+    if (v === null) return null
+    if (typeof v === 'string') {
+      const m = /^(\d+)x(\d+)$/i.exec(v.trim())
+      if (m) v = { width: +m[1], height: +m[2] }
+      else if (Object.hasOwn(VIEWPORTS, v.trim())) return { ...VIEWPORTS[v.trim()] }
+      else bad(k, `must be null, a preset (${Object.keys(VIEWPORTS).join(', ')}), WIDTHxHEIGHT like 390x844, or { width, height }, not ${JSON.stringify(v)}`)
+    }
+    if (!obj(v)) bad(k, 'must be null, a preset name, WIDTHxHEIGHT, or { width, height } in whole pixels')
+    const extra = Object.keys(v).filter(f => !['width', 'height', ...Object.keys(PLAIN)].includes(f))
+    if (extra.length) bad(k, `has an unknown field: ${extra.join(', ')}`)
+    const out = { ...PLAIN, ...v }
+    if (![out.width, out.height].every(n => Number.isInteger(n) && n >= 100 && n <= 10000)) bad(k, 'needs width and height in whole pixels, from 100 to 10000')
+    if (typeof out.deviceScaleFactor !== 'number' || !(out.deviceScaleFactor >= 0.5 && out.deviceScaleFactor <= 5)) bad(k, 'needs deviceScaleFactor to be a number from 0.5 to 5')
+    if (typeof out.mobile !== 'boolean' || typeof out.touch !== 'boolean') bad(k, 'needs mobile and touch to be true or false')
+    if (typeof out.userAgent !== 'string' || /[\r\n\0]/.test(out.userAgent) || out.userAgent.length > 500) bad(k, 'needs userAgent to be one line of text')
+    return { width: out.width, height: out.height, deviceScaleFactor: out.deviceScaleFactor, mobile: out.mobile, touch: out.touch, userAgent: out.userAgent }
+  },
   // { path: { content (utf8 text) } | { base64 } }. A bare string is shorthand for { content }.
   files: (k, v) => {
     if (!obj(v)) bad(k, 'must be an object of package path → { content } or { base64 }')
@@ -126,7 +156,8 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (wait !== DEFAULTS.wait) a.push('--wait', String(wait))
   // Pins and responses with a flag's worth of settings get one; anything else (frames, headers, a method) goes in the options file.
   const pinFlag = o.pins.every(p => p.frames === 'content' && p.mode === 'force'), answerFlag = o.responses.every(r => !r.method && !Object.keys(r.headers).length)
-  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', 'profile', 'storage', ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
+  const vpFlag = o.viewport ? viewportFlag(o.viewport) : ''
+  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', 'profile', 'storage', 'browser', ...vpFlag || !o.viewport ? ['viewport'] : [], ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
   const rest = Object.keys(DEFAULTS).filter(k => !flagged.includes(k) && JSON.stringify(o[k]) !== JSON.stringify(DEFAULTS[k]))
   // Changed files: --override path=path, which assumes a local copy saved at the same relative path.
   for (const p of Object.keys(o.files)) a.push('--override', quote(`${p}=${p}`))
@@ -135,6 +166,8 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (o.launchParams) a.push('--launch-params', quote(o.launchParams))
   if (o.trace) a.push('--trace')
   if (o.storage !== DEFAULTS.storage) a.push('--storage', o.storage)
+  if (o.browser !== DEFAULTS.browser) a.push('--browser', o.browser)
+  if (vpFlag) a.push('--viewport', vpFlag)
   // A preset by name; a custom profile in a file of its own.
   if (typeof o.profile === 'string' && o.profile !== DEFAULTS.profile) a.push('--profile', o.profile)
   if (typeof o.profile === 'object') a.push('--profile-file', 'profile.json')

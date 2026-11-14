@@ -9,10 +9,11 @@ import { PROFILE_NAMES, storageMode } from './profiles.js'
 const api = ['manifest', 'both', '1.2', '2004', 'none'].map(v => ({ name: `api ${v}`, patch: { expose: v } }))
 const frames = [...[0, 1, 2, 3].map(n => ({ name: `depth ${n}`, patch: { depth: n } })), { name: 'new window', patch: { opener: true } }]
 const union = (...lists) => { const seen = new Set(); return lists.flat().filter(v => { const k = JSON.stringify(v.patch); return !seen.has(k) && seen.add(k) }) }
-// lms: one variant per LMS profile (P2.1). storage: normal and blocked (P2.2; the one the default already is is left out). P2.3 adds browsers.
+// lms: one variant per LMS profile (P2.1). storage: normal and blocked (P2.2; the one the default already is is left out). browsers (P2.3): Chromium and WebKit.
 const lms = PROFILE_NAMES.map(n => ({ name: `lms ${n}`, patch: { profile: n } }))
 const storage = ['normal', 'blocked'].map(v => ({ name: `storage ${v}`, patch: { storage: v } }))
-export const PRESETS = { api, frames, standard: union(api, frames), lms, storage }
+const browsers = ['chromium', 'webkit'].map(v => ({ name: `browser ${v}`, patch: { browser: v } }))
+export const PRESETS = { api, frames, standard: union(api, frames), lms, storage, browsers }
 
 // { base: options, variants: [{ name, patch }] } → [{ name, options }], the base first as “default”. A variant that
 // ends up with the same options as an earlier one is left out, unless dedupe is false (variants the user wrote).

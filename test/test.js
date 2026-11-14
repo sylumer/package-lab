@@ -13,7 +13,7 @@ import { matchByPath, branchDiff, compare, segs } from '../src/diff.js'
 import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
 import { bootGraph, resolveRef } from '../src/bootpath.js'
 import { renderReport, verdict } from '../src/report.js'
-import { normaliseOptions, cliCommand } from '../src/options.js'
+import { normaliseOptions, cliCommand, VIEWPORTS, viewportName } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
@@ -24,6 +24,7 @@ import { servedBody } from '../src/pins.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, show, traceFindings } from '../src/instrument.js'
 import { stall, stallFinding } from '../src/stall.js'
 import { Recorder, shiftTimes, isBlocked, nameAt } from '../src/recorder.js'
+import { launchPlan, serveRequest, WEBKIT_ORIGINS } from '../src/launch.js'
 import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams, storageMode } from '../src/profiles.js'
 import { originFindings, storageFindings } from '../src/rules.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
@@ -87,6 +88,9 @@ fetch('data/config.json').then(function (r) { return r.text() }).then(function (
 const gated = fixture('gated', d => sub(d, 'lesson.js', /\nstart\(\)\s*$/, '\nif (window.startOK) start()\n'))
 const gatedFix = join(work, 'lesson-fixed.js')
 writeFileSync(gatedFix, readFileSync(join(work, 'gated', 'lesson.js'), 'utf8').replace('if (window.startOK) start()', 'start()'))
+
+// chromeonly: reads navigator.userAgentData.brands without a guard, which only Chromium has: it fails in WebKit (Safari).
+const chromeOnly = fixture('chromeonly', d => sub(d, 'lesson.js', /^/, "var brands = navigator.userAgentData.brands.map(function (b) { return b.brand }).join()\n"))
 
 // handshake: tells its parent it is ready and waits for {type: 'launch'}, which no LMS here sends. polling: checks
 // window.API every 250 ms (the LMS offers it on the parent, so it never finds it on its own window).
@@ -301,10 +305,11 @@ const dflt = normaliseOptions()
 assert.deepEqual(dflt, { expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10, profile: 'generic', browser: 'chromium', viewport: null,
   files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false }, 'options: defaults')
 assert.deepEqual(normaliseOptions({}), dflt); assert.notEqual(normaliseOptions().files, normaliseOptions().files, 'options: defaults are not shared')
-assert.deepEqual(normaliseOptions({ depth: '3', auto: '20', expose: '1.2', viewport: { width: 390, height: 844 } }), { ...dflt, depth: 3, auto: 20, expose: '1.2', viewport: { width: 390, height: 844 } })
+assert.deepEqual(normaliseOptions({ depth: '3', auto: '20', expose: '1.2', viewport: { width: 390, height: 844 } }), { ...dflt, depth: 3, auto: 20, expose: '1.2', viewport: { width: 390, height: 844, deviceScaleFactor: 1, mobile: false, touch: false, userAgent: '' } }, 'options: a saved { width, height } viewport reads as a plain size')
 for (const [o, re] of [[{ nope: 1 }, /Unknown option: nope/], [{ nope: 1, other: 2 }, /Unknown options: nope, other/], [{ expose: 'x' }, /expose.*one of/], [{ depth: 6 }, /depth/], [{ depth: 1.5 }, /depth/],
   [{ depth: 'a' }, /depth/], [{ opener: 'yes' }, /opener/], [{ caught: 0 }, /caught/], [{ resume: null }, /resume/], [{ auto: -1 }, /auto/], [{ wait: 0 }, /wait/], [{ trace: 1 }, /trace/],
-  [{ profile: '' }, /profile/], [{ browser: 'webkit' }, /browser/], [{ viewport: { width: 1 } }, /viewport/], [{ viewport: { width: 0, height: 5 } }, /viewport/], [{ files: [] }, /files/],
+  [{ profile: '' }, /profile/], [{ browser: 'firefox' }, /browser.*one of chromium, webkit/], [{ viewport: { width: 1 } }, /viewport/], [{ viewport: { width: 0, height: 5 } }, /viewport/], [{ viewport: 'tv' }, /viewport.*preset/], [{ viewport: '390' }, /viewport/], [{ viewport: '50x50' }, /viewport/],
+  [{ viewport: { width: 400, height: 800, mobile: 'yes' } }, /mobile/], [{ viewport: { width: 400, height: 800, deviceScaleFactor: 9 } }, /deviceScaleFactor/], [{ viewport: { width: 400, height: 800, nope: 1 } }, /unknown field: nope/], [{ viewport: { width: 400, height: 800, userAgent: 'a\nb' } }, /userAgent/], [{ files: [] }, /files/],
   [{ files: { 'a.js': 1 } }, /files/], [{ pins: {} }, /pins/], [{ pins: [1] }, /pins/], [{ responses: 'x' }, /responses/],
   [{ pins: [{ path: 'a b', value: 1 }] }, /pins.*path/], [{ pins: [{ path: 'a' }] }, /pins.*value/], [{ pins: [{ path: 'a', value: undefined }] }, /pins.*value/], [{ pins: [{ path: 'a', value: 1, frames: 'top' }] }, /frames/],
   [{ pins: [{ path: 'a', value: 1, mode: 'nope' }] }, /mode/], [{ pins: [{ path: 'navigator.userAgent', mode: 'watch' }] }, /watch/], [{ pins: [{ path: 'a', value: 1, nope: 1 }] }, /unknown field: nope/], [{ pins: [{ path: 'API', value: 1 }] }, /can’t pin API/],
@@ -321,7 +326,19 @@ for (const f of [{ 'a.js': {} }, { 'a.js': { content: 'x', base64: 'AA==' } }, {
   assert.throws(() => normaliseOptions({ files: f }), /files/, 'options: files value ' + JSON.stringify(f))
 assert.equal(cliCommand(dflt, { zip: 'a b.zip', item: 2 }), "scorm-lab run 'a b.zip' --item 2")
 assert.equal(cliCommand({ expose: 'both', depth: 2, opener: true, caught: false, auto: 20, trace: true }), 'scorm-lab run package.zip --api both --depth 2 --window --no-caught --wait 20 --trace')
-assert.equal(cliCommand({ viewport: { width: 390, height: 844 } }), 'scorm-lab run package.zip --options options.json', 'cliCommand: a field without a flag goes to the options file')
+// Browser and device size (P2.3).
+assert.equal(normaliseOptions({ browser: 'webkit' }).browser, 'webkit', 'browser: webkit')
+for (const [name, v] of Object.entries(VIEWPORTS)) { assert.deepEqual(normaliseOptions({ viewport: name }).viewport, v, 'viewport: preset ' + name); assert.equal(viewportName(v), name) }
+assert.deepEqual(Object.keys(VIEWPORTS), ['iphone', 'ipad', 'android-phone'], 'viewport: the presets')
+assert.ok(Object.values(VIEWPORTS).every(v => v.mobile && v.touch && v.deviceScaleFactor > 1 && /Mozilla/.test(v.userAgent)), 'viewport: presets are mobile, with touch, scale and user agent')
+assert.deepEqual(normaliseOptions({ viewport: '390x844' }).viewport, { width: 390, height: 844, deviceScaleFactor: 1, mobile: false, touch: false, userAgent: '' }, 'viewport: WxH')
+assert.deepEqual(normaliseOptions({ viewport: ' 1024X768 ' }).viewport, normaliseOptions({ viewport: { width: 1024, height: 768 } }).viewport, 'viewport: WxH is a plain size')
+assert.deepEqual(normaliseOptions({ viewport: normaliseOptions({ viewport: 'iphone' }).viewport }).viewport, VIEWPORTS.iphone, 'viewport: normalising twice changes nothing')
+assert.equal(viewportName(normaliseOptions({ viewport: '390x844' }).viewport), '390x844', 'viewportName: a plain size')
+assert.equal(cliCommand({ browser: 'webkit' }), 'scorm-lab run package.zip --browser webkit', 'cliCommand: --browser')
+assert.equal(cliCommand({ viewport: 'iphone', browser: 'webkit' }), 'scorm-lab run package.zip --browser webkit --viewport iphone', 'cliCommand: --viewport preset')
+assert.equal(cliCommand({ viewport: { width: 390, height: 844 } }), 'scorm-lab run package.zip --viewport 390x844', 'cliCommand: --viewport WxH')
+assert.equal(cliCommand({ viewport: { width: 390, height: 844, mobile: true } }), 'scorm-lab run package.zip --options options.json', 'cliCommand: a size with settings no name carries goes to the options file')
 // Storage (P2.2): the three modes, the flag, and the profile's cookies field.
 for (const s of ['normal', 'blocked', 'partitioned']) assert.equal(normaliseOptions({ storage: s }).storage, s, 'storage: ' + s)
 assert.throws(() => normaliseOptions({ storage: 'nope' }), /storage.*one of normal, blocked, partitioned/, 'storage: other words are refused')
@@ -363,6 +380,38 @@ assert.ok(exSt[0].evidence.includes('Not reached with storage blocked: Looked fo
 assert.match(exSt[0].detail, /got less far/)
 assert.equal(experimentFindings([exRes('default', dflt, 4), exRes('storage blocked', normaliseOptions({ storage: 'blocked' }), 4)])[0].sev, 'info', 'experiments: blocked that makes no difference is no finding')
 assert.equal(experimentFindings([exRes('default', normaliseOptions({ storage: 'blocked' }), 8), exBlocked]).some(f => /storage blocked/.test(f.title)), false, 'experiments: not when the default is blocked too')
+// The browsers preset (P2.3): Chromium against WebKit; the one the default already is is left out.
+assert.deepEqual(planVariants({ base: {}, variants: PRESETS.browsers }).map(p => p.name), ['default', 'browser webkit'], 'experiments: browsers preset')
+assert.deepEqual(planVariants({ base: { browser: 'webkit' }, variants: PRESETS.browsers }).map(p => p.name), ['default', 'browser chromium'], 'experiments: browsers preset from a webkit base')
+// WebKit's launch plan and files (P2.3): the same plan as Electron's with the addresses on lab.invalid, and the same served files.
+{
+  const pk = { name: 'good.zip', files: unzip(readFileSync(good)) }; pk.analysis = analyze(pk.files)
+  const e = launchPlan({ pkg: pk, item: 0, options: {} }), w = launchPlan({ pkg: pk, item: 0, options: { browser: 'webkit', viewport: 'iphone' }, origins: WEBKIT_ORIGINS })
+  assert.equal(e.config.launch, 'lab://run/pkg/lesson.html', 'plan: Electron’s address'); assert.equal(w.config.launch, 'https://lab.invalid/pkg/lesson.html', 'plan: WebKit’s address')
+  assert.equal(w.launch.url, 'lab://run/pkg/lesson.html', 'plan: the launch keeps the lab:// address in every browser')
+  assert.equal(w.label, 'good.zip · Lesson and quiz · SCORM 1.2 · webkit · iphone', 'plan: label names the browser and device size'); assert.ok(!/webkit|iphone/.test(e.label), 'plan: Chromium at the window’s size adds nothing')
+  assert.deepEqual({ ...w.config, launch: 0 }, { ...e.config, launch: 0 }, 'plan: the test LMS’s configuration is the same'); assert.deepEqual(w.headers, e.headers)
+  const other = launchPlan({ pkg: pk, item: 0, options: { browser: 'webkit', profile: { contentOrigin: 'other' } }, origins: WEBKIT_ORIGINS })
+  assert.equal(other.config.launch, 'https://content.invalid/pkg/lesson.html', 'plan: content on another origin'); assert.equal(other.launch.url, 'lab://content/pkg/lesson.html')
+  assert.equal(launchPlan({ pkg: pk, item: 0, options: { launchParams: 'a=1' }, origins: WEBKIT_ORIGINS }).config.launch, 'https://lab.invalid/pkg/lesson.html?a=1')
+  assert.throws(() => launchPlan({ pkg: pk, item: 99, options: {} }), /nothing to launch/)
+  const rq = (path, extra = {}) => serveRequest({ path, lms: true, config: { a: 1 }, files: new Map([['a.js', Buffer.from('0123456789')]]), headers: { 'X-Test': '1' }, ...extra })
+  assert.deepEqual([rq('/__lab/config.json').status, rq('/__lab/config.json').body], [200, '{"a":1}'], 'serve: config'); assert.equal(rq('/__lab/host.html').headers['Content-Type'], 'text/html; charset=utf-8')
+  assert.equal(rq('/__lab/host.html', { lms: false }).status, 404, 'serve: the LMS’s files only on the LMS’s origin'); assert.equal(rq('/pkg/a.js').headers['X-Test'], '1', 'serve: the profile’s headers on package files')
+  assert.equal(rq('/pkg/nope.js').status, 404); assert.equal(rq('/pkg/a.js', { range: 'bytes=2-4' }).body.toString(), '234', 'serve: ranges'); assert.equal(rq('/pkg/a.js', { range: 'bytes=20-' }).status, 416)
+}
+// A WebKit trace has no coverage, caught errors, sources, script list or log: every reader copes (P2.3).
+{
+  const wk = { label: 'x', browser: 'webkit', started: '', ended: '', duration: 900, cmi: null, truncated: {}, requests: [{ t: 5, sid: '', id: '1', url: 'lab://run/pkg/lesson.html', method: 'GET', type: 'Document', status: 200, from: [] }],
+    exceptions: [{ t: 40, sid: '', text: 'TypeError: undefined is not an object (evaluating \'navigator.userAgentData.brands\')', url: 'lab://run/pkg/lesson.js', line: 1, at: [{ fn: '', url: 'lab://run/pkg/lesson.js', line: 1, col: 5 }] }],
+    probe: [{ type: 'frame', frame: 'lab://run/pkg/lesson.html', depth: 1, topReachable: true, origin: 'https://lab.invalid', t: 20, sid: '' }, { type: 'dom', frame: 'lab://run/pkg/lesson.html', readyState: 'complete', text: 100, media: 0, visible: 5, hidden: false, t: 30, sid: '' }] }
+  const launch = { kind: 'package', version: '1.2', expose: '1.2', depth: 0, opener: false, itemType: 'sco', profile: PROFILES.generic, options: normaliseOptions({ browser: 'webkit' }) }
+  assert.ok(runFindings(wk, launch).some(f => /error/i.test(f.title) && f.evidence.some(x => /brands/.test(x)) || /brands/.test(JSON.stringify(f))), 'webkit trace: runFindings reports the error')
+  assert.ok(Array.isArray(launchFindings(wk, null)), 'webkit trace: launchFindings')
+  const wms = milestones(wk, null); assert.ok(wms.find(m => m.id === 'shown').reached, 'webkit trace: milestones')
+  assert.equal(typeof stall(wk, wms).stalled, 'boolean', 'webkit trace: stall'); assert.ok(drill({ trace: wk, milestones: wms, files: new Map(), launch }).summary !== undefined, 'webkit trace: drill-down has nothing to say, and doesn’t fail')
+  assert.ok(compare(wk, wk).exceptions, 'webkit trace: compare'); assert.match(renderReport({ title: 'x', run: { trace: wk, findings: [], milestones: wms, launch, label: 'x' }, fragment: true }), /What happened|Milestones/, 'webkit trace: the report')
+}
 const exRun = runResult('v', dflt, { milestones: mkSteps(2), trace: trace(), findings: [{ sev: 'error', title: 'bad' }] }, { runId: 3 })
 assert.equal(exRun.errors, 1); assert.equal(exRun.verdict.title, 'bad'); assert.equal(exRun.runId, 3); assert.equal(summarise([exRun])[0].runId, 3)
 // LMS profiles (P2.1): presets validate, a custom profile goes over its base, fields that don't fit together are refused.
@@ -1079,6 +1128,53 @@ if (!process.argv.includes('--unit')) {
   }
   console.log('storage: ok')
 
+  // Device sizes in Electron, and other browsers (P2.3). Without Playwright WebKit refuses and says how to install it.
+  const noPw = node(['run', good, '--browser', 'webkit', '--wait', '1'], { env: { ...process.env, SCORM_LAB_NO_PLAYWRIGHT: '1' } })
+  assert.equal(noPw.status, 2, 'browser: no Playwright fails'); assert.match(noPw.stderr, /Playwright, which isn’t installed here\. Install it with: npm i -D playwright && npx playwright install webkit/, 'browser: the refusal says how to install: ' + noPw.stderr)
+  assert.equal(node(['run', good, '--browser', 'firefox']).status, 2, 'browser: a bad name fails'); assert.equal(node(['run', good, '--viewport', 'tv']).status, 2, 'viewport: a bad size fails')
+  const vpOut = join(work, 'iphone-run.json'), vpRun = run(good, '--viewport', 'iphone', '--wait', '2', '--out', vpOut), vpSaved = JSON.parse(readFileSync(vpOut, 'utf8'))
+  const vpDom = vpSaved.trace.probe.find(p => p.type === 'dom' && /lesson\.html/.test(p.frame))
+  assert.deepEqual([vpDom.w, vpDom.h], [390, 844], 'viewport: the content sees the iPhone preset’s size: ' + [vpDom.w, vpDom.h])
+  assert.ok(vpSaved.launch.options.viewport.mobile && vpSaved.launch.options.viewport.touch && vpSaved.trace.browser === 'chromium' && / · iphone$/.test(vpSaved.label), 'viewport: kept in the saved run: ' + vpSaved.label)
+  assert.ok(calls(vpRun).includes('LMSInitialize '), 'viewport: good still works at phone size')
+  console.log('browsers and device sizes (quick): ok')
+  let wkReady = false   // Playwright and its WebKit are here (slow checks; not repeated in the forced-trace pass, which only changes Electron runs)
+  if (slow && process.env.SCORM_LAB_FORCE_TRACE !== '1') {
+    const wkProbe = node(['run', good, '--browser', 'webkit', '--wait', '3', '--json'])
+    if (wkProbe.status !== 0 && /Install it with/.test(wkProbe.stderr)) console.log('webkit: skipped (' + wkProbe.stderr.trim().split('\n')[0] + ')')
+    else {
+      wkReady = true
+      assert.equal(wkProbe.status, 0, 'webkit: ' + wkProbe.stderr)
+      const wk = JSON.parse(wkProbe.stdout), wkOut = join(work, 'webkit-run.json'), wkSaved = (run(good, '--browser', 'webkit', '--out', wkOut), JSON.parse(readFileSync(wkOut, 'utf8')))
+      assert.ok(idx(wk.furthest) >= idx('wrote'), 'webkit: good reaches wrote: ' + wk.furthest + ' ' + titles(wk))
+      assert.ok(calls(wk).includes('LMSInitialize ') && !wk.findings.some(f => f.sev === 'error'), 'webkit: good has API calls and no errors: ' + titles(wk))
+      assert.deepEqual([wkSaved.trace.browser, wkSaved.trace.coverage.length, wkSaved.trace.caught.length, Object.keys(wkSaved.trace.sources).length, wkSaved.launch.options.browser], ['webkit', 0, 0, 0, 'webkit'], 'webkit: trace in the same format, with no coverage, caught errors or sources')
+      assert.ok(wkSaved.trace.requests.some(r => r.url === 'lab://run/pkg/lesson.html' && r.status === 200) && wkSaved.trace.probe.some(p => p.type === 'dom' && p.frame === 'lab://run/pkg/lesson.html' && p.text > 20), 'webkit: requests and the probe’s reports use lab:// addresses')
+      assert.ok(wkSaved.trace.browserVersion, 'webkit: the version is recorded')
+      assert.match(node(['report', wkOut]).stdout, /<h2>Milestones<\/h2>/, 'webkit: a saved WebKit run reports like any other')
+      // A Chrome-only API: fine in Chromium, an error recorded in WebKit.
+      const coChrome = run(chromeOnly, '--wait', '2'), coWk = run(chromeOnly, '--browser', 'webkit', '--wait', '2', '--out', wkOut), coSaved = JSON.parse(readFileSync(wkOut, 'utf8'))
+      assert.ok(calls(coChrome).includes('LMSInitialize ') && !coChrome.findings.some(f => /brands/.test(JSON.stringify(f))), 'chromeonly: works in Chromium: ' + titles(coChrome))
+      assert.ok(coSaved.trace.exceptions.some(e => /brands/.test(e.text) && /lesson\.js$/.test(e.url)), 'chromeonly: the error is recorded in WebKit: ' + JSON.stringify(coSaved.trace.exceptions))
+      assert.ok(coWk.findings.some(f => f.sev === 'error' && /brands/.test(JSON.stringify(f))) && !calls(coWk).includes('LMSInitialize '), 'chromeonly: fails only in WebKit, and is explained: ' + titles(coWk))
+      // Device size and the LMS profile in WebKit; an unsupported option is refused.
+      const wkVp = run(good, '--browser', 'webkit', '--viewport', 'ipad', '--wait', '2', '--out', wkOut), wkVpDom = JSON.parse(readFileSync(wkOut, 'utf8')).trace.probe.find(p => p.type === 'dom' && /lesson\.html/.test(p.frame))
+      assert.deepEqual([wkVpDom.w, wkVpDom.h], [820, 1180], 'webkit: the iPad preset’s size: ' + [wkVpDom.w, wkVpDom.h]); assert.ok(calls(wkVp).includes('LMSInitialize '))
+      assert.ok(calls(run(good, '--browser', 'webkit', '--profile', 'moodle', '--wait', '2')).includes('LMSInitialize '), 'webkit: a framed LMS profile works')
+      assert.ok(calls(run(good, '--browser', 'webkit', '--profile', 'cornerstone', '--wait', '3')).includes('LMSInitialize '), 'webkit: a window-opener profile works')
+      assert.ok(titles(run(stored, '--browser', 'webkit', '--storage', 'blocked', '--wait', '2')).some(t => /needs storage the browser can block/.test(t)), 'webkit: blocked storage is explained')
+      assert.ok(run(hosted, '--browser', 'webkit', '--answer', '/api/player/config=200:{}', '--wait', '2').findings.some(f => /Answered 1 request/.test(f.title)), 'webkit: answers')
+      assert.match(node(['run', good, '--browser', 'webkit', '--trace']).stderr, /Tracing the code runs only in Chromium/, 'webkit: tracing is refused')
+      const bx = JSON.parse(node(['experiment', chromeOnly, '--preset', 'browsers', '--wait', '2', '--json']).stdout)
+      assert.deepEqual(bx.variants.map(v => v.name), ['default', 'browser webkit'], 'browsers experiment: the variants')
+      assert.ok(bx.variants[1].furthest !== bx.variants[0].furthest && idx(bx.variants[0].furthest) > idx(bx.variants[1].furthest), 'browsers experiment: webkit gets less far: ' + JSON.stringify(bx.variants.map(v => [v.name, v.furthest])))
+    }
+    // The live view uses the emulated size.
+    const liveDir = join(work, 'vp-live'); run(good, '--viewport', 'ipad', '--wait', '3', '--live', liveDir)
+    assert.deepEqual([JSON.parse(readFileSync(join(liveDir, 'frame.json'), 'utf8')).w, JSON.parse(readFileSync(join(liveDir, 'frame.json'), 'utf8')).h], [820, 1180], 'viewport: the live frame is the emulated size')
+    console.log('webkit: ok')
+  }
+
   // Tracing (P1.4): hosted, traced, records its failed configuration check and startCourse, keeps the original source,
   // and finds what the untraced run found.
   const forced = process.env.SCORM_LAB_FORCE_TRACE === '1'
@@ -1266,7 +1362,7 @@ if (!process.argv.includes('--unit')) {
     // An experiment through the handlers: two runs (default and one variant), announced as 'experiment' events.
     const evs = await fetch(base + '/api/events', { headers: H }), evReader = evs.body.getReader()
     let evText = ''
-    assert.equal((await invoke('experiment-presets')).join(), 'api,frames,standard,lms,storage', 'web: presets')
+    assert.equal((await invoke('experiment-presets')).join(), 'api,frames,standard,lms,storage,browsers', 'web: presets')
     assert.match((await invoke('options', { storage: 'blocked' })).command, / --storage blocked$/, 'web: the storage option in the CLI line')
     assert.deepEqual(Object.keys(await invoke('profiles')), PROFILE_NAMES, 'web: profiles')
     assert.match((await invoke('options', { profile: { base: 'docebo', apiDelay: 100 } })).command, / --profile-file profile\.json$/, 'web: a custom profile in options')
@@ -1355,6 +1451,22 @@ if (!process.argv.includes('--unit')) {
       const dd = JSON.parse(/event: drill\ndata: (\{"state":"done".*)\n/.exec(drText)?.[1] ?? 'null')
       assert.ok(dd?.result.cause?.kind === 'file' && dd.result.chain.at(-1).file === 'data/config.json' && dd.result.traceRun && dd.result.watchRun, 'web: drill-down result: ' + drText.slice(-800))
       assert.equal((drText.match(/"state":"step"/g) ?? []).length, forced ? 1 : 2, 'web: traced again (unless every run is traced), then watched')
+    }
+    // A WebKit run over the handlers (slow, with Playwright): the options line, the run through the CLI's Node path, and Stop.
+    if (slow && !forced && wkReady) {
+      assert.equal((await fetch(base + '/api/upload?name=good.zip', { method: 'POST', headers: H, body: readFileSync(good) })).status, 200)
+      assert.equal((await invoke('options', { browser: 'webkit', viewport: 'iphone' })).command, 'scorm-lab run good.zip --browser webkit --viewport iphone', 'web: browser and device size in the CLI line')
+      assert.equal((await invoke('options', { viewport: 'custom' }).catch(e => e)).message?.match(/viewport/)?.[0], 'viewport', 'web: a bad device size is refused')
+      const nw = (await invoke('state')).runs.length
+      await invoke('launch', { item: 0, auto: 3, browser: 'webkit', viewport: 'iphone' })
+      let wr
+      for (let end = Date.now() + 40000; Date.now() < end; await new Promise(r => setTimeout(r, 500))) { const s5 = await invoke('state'); if (!s5.running && s5.runs.length === nw + 1) { wr = s5.runs[nw]; break } }
+      assert.ok(wr && wr.trace.browser === 'webkit' && / · webkit · iphone$/.test(wr.label) && wr.launch.options.browser === 'webkit' && wr.milestones.find(m => m.id === 'wrote').reached, 'web: a WebKit run is shown like any run: ' + wr?.label)
+      await invoke('launch', { item: 0, browser: 'webkit' })   // no auto-stop: until stopped
+      await new Promise(r => setTimeout(r, 1500))
+      assert.ok((await invoke('state')).running, 'web: the WebKit run goes on until stopped')
+      assert.ok(await invoke('stop'), 'web: Stop ends it with a run')
+      assert.equal((await invoke('state')).runs.length, nw + 2, 'web: the stopped WebKit run is recorded')
     }
     console.log('web: ok')
   } finally { server.kill() }

@@ -94,6 +94,7 @@ Everything works as in the [user guide](user-guide.md), except:
 - **The content was waiting for…** appears in the Findings tab as in the desktop app; nothing extra is needed.
 - The **Profile** list and the **Profile fields** under More options work as in the desktop app. Changed fields are kept in the page, so reloading it clears them; the CLI line then says `--profile-file profile.json` (save the custom profile from the options JSON shown above it).
 - **Storage** (under More options) and the **storage** experiment work as in the desktop app; the CLI line says `--storage blocked`.
+- **Browser** and **Device size** (under More options) work as in the desktop app; the CLI line says `--browser webkit --viewport iphone`. A WebKit run happens on the Mac in a Node process, shows in the Runs list like any run, and has no live view. If Playwright isn't installed, the page shows the message that says how to install it. With a device size, the **Live** view shows the page at that size.
 - A **Live** tab shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** tab selected.
 
