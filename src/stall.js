@@ -10,7 +10,7 @@ import { firstMissing } from './milestones.js'
 
 export const REPLY = 2000, HEARD = 1000   // ms after a message in which a reply, or a listener running, counts
 const norm = u => String(u ?? '').split('#')[0]
-const short = u => String(u ?? '').replace(/^lab:\/\/run\/pkg\//, '')
+const short = u => String(u ?? '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
 const code = s => '`' + s + '`'
 // A stack line, "fn (url:line:col)" or "url:line:col".
 const parse = s => { const m = /^(?:(.*?) \()?(.*?):(\d+):(\d+)\)?$/.exec(s ?? ''); return m ? { fn: m[1] ?? '', url: m[2], line: +m[3] } : { fn: '', url: String(s ?? ''), line: 0 } }

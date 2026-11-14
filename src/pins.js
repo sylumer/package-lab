@@ -1,7 +1,7 @@
 // Pins and answers (P1.2). Pure: no Electron, no files. A pin forces a value the content reads; an answer is a response
 // SCORM Lab gives to a request instead of the network. This file holds what both the recorder (to apply them) and the
 // rules (to explain what happened) need: matching, the probe's prefix, the findings, and the command-line spellings.
-const short = u => String(u ?? '').replace(/lab:\/\/run\/pkg\//g, '')
+const short = u => String(u ?? '').replace(/lab:\/\/(?:run|content)\/pkg\//g, '')
 
 // ---- Pins ----
 // A path is a name (previewMode) or a dotted path (config.mode). navigator.userAgent is the one navigator name that

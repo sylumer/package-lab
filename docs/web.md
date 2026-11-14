@@ -92,6 +92,7 @@ Everything works as in the [user guide](user-guide.md), except:
 - **Trace the code** (under More options) and the **Execution** tab work as in the desktop app. The page gets the last 500 events of a traced run, not the whole trace; **Code** shows a script as the run recorded it, and a page's code from the package open on the Mac (so open the run's package to see it).
 - The **Drill-down** tab works as in the desktop app: its runs (traced again if needed, then the watch run) happen on the Mac, in the same slot as experiments and discoveries, and the chain shows when they finish. It needs the run's package to be the one open on the Mac. Like the Experiments table, the result isn't kept in the page.
 - **The content was waiting for…** appears in the Findings tab as in the desktop app; nothing extra is needed.
+- The **Profile** list and the **Profile fields** under More options work as in the desktop app. Changed fields are kept in the page, so reloading it clears them; the CLI line then says `--profile-file profile.json` (save the custom profile from the options JSON shown above it).
 - A **Live** tab shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** tab selected.
 

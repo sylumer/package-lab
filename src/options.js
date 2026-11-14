@@ -2,9 +2,10 @@
 // launch handler, the CLI (flags and --options file) and the saved run's launch.options all use it. Pure; no Electron.
 // Later work packages add fields here and nowhere else. Defaults live here and only here.
 import { pinPathProblem, PIN_MODES, matcher, USER_AGENT } from './pins.js'
+import { checkProfile, launchProfile } from './profiles.js'
 const DEFAULTS = Object.freeze({
   expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10,
-  profile: 'none', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false,
+  profile: 'generic', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false,
 })
 const MAX_PIN = 1024 ** 2, MAX_BODY = 10 * 1024 ** 2, MAX_BODIES = 20 * 1024 ** 2, MAX_LIST = 100   // a pin's value, a response's body, entries in pins or responses
 const MAX_FILE = 50 * 1024 ** 2, MAX_TOTAL = 200 * 1024 ** 2   // changed files: per file and in all
@@ -27,7 +28,8 @@ const check = {
   opener: bool, resume: bool, caught: bool, trace: bool,
   auto: (k, v) => num(k, v, 0, 3600),
   wait: (k, v) => num(k, v, 1, 3600),
-  profile: str,                                  // narrowed by the work package that adds profiles
+  // A preset name or a custom profile object (profiles.js); 'none', from runs saved before P2.1, is generic.
+  profile: (k, v) => checkProfile(v),
   browser: (k, v) => str(k, v, ['chromium']),    // widened by P2.3
   viewport: (k, v) => v === null ? null : obj(v) && Object.keys(v).sort().join() === 'height,width' && [v.width, v.height].every(n => Number.isInteger(n) && n > 0)
     ? { width: v.width, height: v.height } : bad(k, 'must be null or { width, height } in whole pixels'),
@@ -102,6 +104,7 @@ export function normaliseOptions(o = {}) {
   if (unknown.length) throw new Error(`Unknown option${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Known options: ${Object.keys(DEFAULTS).join(', ')}.`)
   const out = {}
   for (const [k, d] of Object.entries(DEFAULTS)) out[k] = o[k] === undefined ? structuredClone(d) : check[k](k, o[k])
+  launchProfile(out)   // the profile's fields must fit together, with depth and opener on top
   return out
 }
 
@@ -120,7 +123,7 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (wait !== DEFAULTS.wait) a.push('--wait', String(wait))
   // Pins and responses with a flag's worth of settings get one; anything else (frames, headers, a method) goes in the options file.
   const pinFlag = o.pins.every(p => p.frames === 'content' && p.mode === 'force'), answerFlag = o.responses.every(r => !r.method && !Object.keys(r.headers).length)
-  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
+  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', 'profile', ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
   const rest = Object.keys(DEFAULTS).filter(k => !flagged.includes(k) && JSON.stringify(o[k]) !== JSON.stringify(DEFAULTS[k]))
   // Changed files: --override path=path, which assumes a local copy saved at the same relative path.
   for (const p of Object.keys(o.files)) a.push('--override', quote(`${p}=${p}`))
@@ -128,6 +131,9 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (answerFlag) for (const r of o.responses) a.push('--answer', quote(`${r.match}=${r.status}:${r.body}`))
   if (o.launchParams) a.push('--launch-params', quote(o.launchParams))
   if (o.trace) a.push('--trace')
+  // A preset by name; a custom profile in a file of its own.
+  if (typeof o.profile === 'string' && o.profile !== DEFAULTS.profile) a.push('--profile', o.profile)
+  if (typeof o.profile === 'object') a.push('--profile-file', 'profile.json')
   if (rest.length) a.push('--options', 'options.json')
   return a.join(' ')
 }

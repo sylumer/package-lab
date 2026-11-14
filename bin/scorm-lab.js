@@ -63,6 +63,9 @@ Options for run (and report --run)
   --answer <pattern>=<reply>  Answer matching requests yourself: --answer '/api/player/config=@config.json' (a file) or
                             --answer '/api/player/config=200:{}' (status:body). The pattern is a glob or a /regex/. Repeatable.
   --launch-params <a=1&b=2> Extra query parameters on the launch address.
+  --profile <name>          Host the content the way an LMS does: generic (default), moodle, scorm-cloud, cornerstone,
+                            successfactors, docebo, totara, blackboard or canvas. Presets are approximations.
+  --profile-file <x.json>   A custom profile: { "base": "moodle", "contentOrigin": "other", … } (see the user guide).
   --trace                   Record which functions ran and which way each decision went (the saved run's trace.exec).
   --out <run.json>          Keep the full run (open it in the desktop app with Open saved…).
   --live <folder>           Write frames to <folder>/frame.jpg and read clicks and keys from <folder>/input/.
@@ -71,7 +74,7 @@ Options for run (and report --run)
 
 Options for experiment (also the run options above, which set the default launch)
   --variants <file.json>    Your own variants: [{ "name": "deep", "patch": { "depth": 2 } }, …].
-  --preset <name>           Built-in variants: standard (default), api, frames.
+  --preset <name>           Built-in variants: standard (default), api, frames, lms (one per LMS profile).
   --out <folder>            Keep each run in <folder> as a saved run.
   --json                    Print JSON instead of a table.
 
@@ -109,7 +112,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
     if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
@@ -173,12 +176,17 @@ function electron() {
 }
 
 // Launch options from --options <file.json>, and from the flags that were given (flags win).
-function optionsFile(path) {
-  if (!path) return {}
+function jsonFile(path, what) {
+  if (typeof path !== 'string' || !path) fail('Name a JSON file.')
   if (!existsSync(path)) fail(`No such file: ${path}`)
   let j
   try { j = JSON.parse(readFileSync(path, 'utf8')) } catch (e) { fail(`${basename(path)} isn’t valid JSON: ${e.message}`) }
-  if (!j || typeof j !== 'object' || Array.isArray(j)) fail(`${basename(path)} must hold one JSON object of options, like { "depth": 1 }.`)
+  if (!j || typeof j !== 'object' || Array.isArray(j)) fail(`${basename(path)} must hold one JSON object of ${what}.`)
+  return j
+}
+function optionsFile(path) {
+  if (!path) return {}
+  const j = jsonFile(path, 'options, like { "depth": 1 }')
   // A response's bodyFile is read here, relative to the options file, and its content goes into body: the options never carry paths.
   if (Array.isArray(j.responses)) j.responses = j.responses.map(r => {
     if (!r || typeof r !== 'object' || r.bodyFile === undefined) return r
@@ -227,6 +235,11 @@ function flagOptions(o) {
   if (o.wait !== undefined) f.wait = o.wait
   if (o['launch-params'] !== undefined) f.launchParams = o['launch-params']
   if (o.trace) f.trace = true
+  // --profile-file holds a custom profile: { base?, …fields }. With --profile too, that name is its base unless it names one.
+  if (o['profile-file'] !== undefined) {
+    const p = jsonFile(o['profile-file'], 'a profile, like { "base": "moodle", "contentOrigin": "other" }')
+    f.profile = o.profile !== undefined && p.base === undefined ? { base: o.profile, ...p } : p
+  } else if (o.profile !== undefined) f.profile = o.profile
   return f
 }
 
@@ -308,7 +321,7 @@ const commands = {
       const c = counts(run.findings, run.trace)
       printHeader(pkg, item)
       console.log(`Ran for ${c.seconds} s · offered ${run.launch.expose === 'both' ? 'both APIs' : run.launch.expose === 'none' ? 'no API' : 'SCORM ' + run.launch.expose} · ${c.apiCalls} API calls · ${c.requests} requests (${c.failedRequests} failed) · ${c.uncaught} uncaught errors`)
-      for (const d of screens(run.trace)) console.log(paint('2', `Showing in ${d.frame.replace(/^lab:\/\/run\/pkg\//, '')}: ${d.visible} visible elements${d.loader ? ', loading indicator ' + d.loader : ''}, text “${(d.sample ?? '').slice(0, 80)}”`))
+      for (const d of screens(run.trace)) console.log(paint('2', `Showing in ${d.frame.replace(/^lab:\/\/(?:run|content)\/pkg\//, '')}: ${d.visible} visible elements${d.loader ? ', loading indicator ' + d.loader : ''}, text “${(d.sample ?? '').slice(0, 80)}”`))
       if (run.milestones) console.log(`Milestones: ${strip(run.milestones)}`)
       printFindings(run.findings); printVerdict(run.findings)
       if (out) console.log(paint('2', `\nRun saved to ${out}`))
@@ -367,7 +380,7 @@ const commands = {
     printHeader(pkg, item)
     printRows(result.rows, 'Run', 'no answer')
     for (const r of result.requests) {
-      console.log(`\n${paint('1', `${r.method} ${r.url.replace(/^lab:\/\/run(?=\/)/, '')}`)}${r.from ? paint('2', ` from ${r.from}`) : ''}`)
+      console.log(`\n${paint('1', `${r.method} ${r.url.replace(/^lab:\/\/(?:run|content)(?=\/)/, '')}`)}${r.from ? paint('2', ` from ${r.from}`) : ''}`)
       if (!r.fields.length) { console.log(paint('2', '  Nothing read from the response.')); continue }
       for (const f of r.fields) console.log(`  ${f.path}: ${f.type}${paint('2', ` (${f.how}${f.at.length ? ', ' + f.at.join(', ') : ''})`)}`)
       console.log(`  Stand-in response: ${JSON.stringify(r.skeleton)}`)

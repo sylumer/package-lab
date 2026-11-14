@@ -32,7 +32,7 @@ export function milestones(trace, boot) {
   const hit = {
     launched: boot ? ok(root) && { t: root.t, evidence: `${boot.start} responded ${root.status}` } : (r => r && { t: r.t, evidence: 'the first request succeeded' })(pkgReq.find(ok)),
     scripts: !scriptsBad && { t: scripts.length ? lastT(scripts) : null, evidence: `${scripts.length} script${scripts.length === 1 ? '' : 's'} requested, none failed` },
-    shown: dom && { t: dom.t, evidence: `${dom.text} characters of text, ${dom.media} media in ${dom.frame.replace(/^lab:\/\/run\/pkg\//, '')}` },
+    shown: dom && { t: dom.t, evidence: `${dom.text} characters of text, ${dom.media} media in ${dom.frame.replace(/^lab:\/\/(?:run|content)\/pkg\//, '')}` },
     looked: lookups[0] ? { t: lookups[0].t, evidence: `${lookups[0].name} looked up` } : api[0] && { t: api[0].t, evidence: `${api[0].call} called` },
     found: found ? { t: found.t, evidence: `${found.name} was there` } : api[0] && { t: api[0].t, evidence: 'the API was called' },
     initialised: returned(/^(LMSInitialize|Initialize)$/),

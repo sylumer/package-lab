@@ -23,7 +23,9 @@ import { probeBody, shapePrefix, requestPattern, serverRequests, sourceHint, sha
 import { servedBody } from '../src/pins.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, show, traceFindings } from '../src/instrument.js'
 import { stall, stallFinding } from '../src/stall.js'
-import { Recorder, shiftTimes } from '../src/recorder.js'
+import { Recorder, shiftTimes, isBlocked, nameAt } from '../src/recorder.js'
+import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams } from '../src/profiles.js'
+import { originFindings } from '../src/rules.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import vm from 'node:vm'
 
@@ -283,7 +285,7 @@ assert.deepEqual(verdict([{ sev: 'warn', title: 'w' }, { sev: 'error', title: 'e
 assert.deepEqual(verdict([]).sev, 'ok')
 // Launch options: defaults, validation, unknown fields, the CLI line.
 const dflt = normaliseOptions()
-assert.deepEqual(dflt, { expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10, profile: 'none', browser: 'chromium', viewport: null,
+assert.deepEqual(dflt, { expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10, profile: 'generic', browser: 'chromium', viewport: null,
   files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false }, 'options: defaults')
 assert.deepEqual(normaliseOptions({}), dflt); assert.notEqual(normaliseOptions().files, normaliseOptions().files, 'options: defaults are not shared')
 assert.deepEqual(normaliseOptions({ depth: '3', auto: '20', expose: '1.2', viewport: { width: 390, height: 844 } }), { ...dflt, depth: 3, auto: 20, expose: '1.2', viewport: { width: 390, height: 844 } })
@@ -333,6 +335,53 @@ assert.equal(experimentFindings([exBase, exRes('tie', dflt, 4)])[0].sev, 'info',
 assert.deepEqual(experimentFindings([]), [])
 const exRun = runResult('v', dflt, { milestones: mkSteps(2), trace: trace(), findings: [{ sev: 'error', title: 'bad' }] }, { runId: 3 })
 assert.equal(exRun.errors, 1); assert.equal(exRun.verdict.title, 'bad'); assert.equal(exRun.runId, 3); assert.equal(summarise([exRun])[0].runId, 3)
+// LMS profiles (P2.1): presets validate, a custom profile goes over its base, fields that don't fit together are refused.
+// PRESET_SOURCES_PENDING: the presets' researched values and sources come separately; flip this when they are in.
+const PRESET_SOURCES_PENDING = false
+assert.deepEqual(PROFILE_NAMES, ['generic', 'moodle', 'scorm-cloud', 'cornerstone', 'successfactors', 'docebo', 'totara', 'blackboard', 'canvas'], 'profiles: the presets')
+for (const [n, p] of Object.entries(PROFILES)) {
+  const { notes, sources, approximation, ...fields } = p
+  assert.deepEqual(checkProfile(fields), fields, `profiles: ${n} validates as a custom profile`)
+  assert.ok(typeof notes === 'string' && notes && Array.isArray(sources) && approximation === (n !== 'generic'), `profiles: ${n} has notes, sources and is marked approximation`)
+  assert.doesNotThrow(() => launchProfile({ profile: n }), `profiles: ${n} fits together`)
+  if (!PRESET_SOURCES_PENDING) assert.ok(sources.length >= 1 && sources.every(u => /^https:\/\//.test(u)), `profiles: ${n} has sources`)
+}
+if (PRESET_SOURCES_PENDING) console.log('profiles: TODO the presets’ sources are pending research (PRESET_SOURCES_PENDING)')
+assert.equal(normaliseOptions({ profile: 'none' }).profile, 'generic', 'profiles: none (runs saved before P2.1) is generic')
+assert.deepEqual(normaliseOptions({ profile: { base: 'moodle', frames: { sandbox: ' allow-scripts  allow-same-origin ' } } }).profile, { base: 'moodle', frames: { sandbox: 'allow-scripts allow-same-origin' } }, 'profiles: custom kept as given, normalised')
+const rp = resolveProfile({ frames: { depth: 2 }, contentOrigin: 'other', headers: { 'X-A': '1' } })
+assert.deepEqual([rp.name, rp.frames, rp.contentOrigin, rp.apiWhere, rp.headers], ['custom', { depth: 2, kind: 'iframe', sandbox: null, allow: 'fullscreen; autoplay' }, 'other', 'top', { 'X-A': '1' }], 'profiles: partial fields go over generic')
+assert.equal(resolveProfile({ base: 'canvas' }).name, 'canvas (changed)')
+assert.deepEqual(resolveProfile('generic'), { name: 'generic', ...Object.fromEntries(Object.entries(PROFILES.generic).filter(([k]) => !['notes', 'sources', 'approximation'].includes(k))) })
+for (const [p, re] of [['nope', /must be one of generic/], [3, /profile name or an object/], [{ contentOrigin: 'x' }, /contentOrigin/], [{ frames: { depth: 6 } }, /frames\.depth/], [{ frames: { nope: 1 } }, /frames.*unknown field: nope/],
+  [{ frames: { kind: 'div' } }, /frames\.kind/], [{ frames: { sandbox: 'allow-scripts allow-everything' } }, /sandbox flag: allow-everything/], [{ frames: { allow: 'a\nb' } }, /frames\.allow/], [{ launch: 'tab' }, /launch/],
+  [{ popupDelay: -1 }, /popupDelay/], [{ apiDelay: 1.5 }, /apiDelay/], [{ launchParams: 'a b' }, /launchParams/], [{ apiWhere: 'window' }, /apiWhere/], [{ csp: 1 }, /csp/], [{ headers: { 'a b': 'x' } }, /header name/],
+  [{ headers: { a: 'x\r\ny' } }, /headers\.a/], [{ commit: 'maybe' }, /commit/], [{ slowMs: 'x' }, /slowMs/], [{ limits: { suspend12: 0 } }, /limits\.suspend12/], [{ cookies: 'none' }, /cookies/], [{ base: 'x' }, /base/], [{ nope: 1 }, /isn’t a profile field/]])
+  assert.throws(() => normaliseOptions({ profile: p }), re, 'profiles: refused ' + JSON.stringify(p))
+assert.throws(() => normaliseOptions({ profile: { apiWhere: 'opener' } }), /opener only when launch is popup/, 'profiles: opener needs a popup')
+assert.throws(() => normaliseOptions({ profile: { launch: 'popup' } }), /frames\.depth of 1 or more/, 'profiles: a popup with the API on its top needs an LMS frame')
+assert.throws(() => normaliseOptions({ profile: { frames: { kind: 'frameset', sandbox: 'allow-scripts' } } }), /frameset can’t have a sandbox/)
+assert.deepEqual([launchProfile({ depth: 2 }).frames.depth, launchProfile({ opener: true }).launch, launchProfile({ opener: true }).apiWhere], [2, 'popup', 'opener'], 'profiles: depth and the new window go on top')
+assert.deepEqual([{}, { apiWhere: 'parent' }, { apiWhere: 'parent', frames: { depth: 3 } }, { launch: 'popup', apiWhere: 'opener', frames: { depth: 2 } }, { launch: 'popup', frames: { depth: 2 } }, { launch: 'popup', apiWhere: 'parent', frames: { depth: 2 } }].map(p => apiAt(resolveProfile(p))),
+  [0, 0, 1, 0, 2, 1], 'profiles: where the API goes')
+assert.equal(fillParams('id={scoid}&a={attempt}&l={learner}&x={other}', { scoid: 'sco 1', attempt: 1, learner: 'l-1' }), 'id=sco%201&a=1&l=l-1&x={other}', 'profiles: placeholders')
+assert.equal(cliCommand({ profile: 'moodle' }), 'scorm-lab run package.zip --profile moodle'); assert.equal(cliCommand({ profile: { contentOrigin: 'other' } }), 'scorm-lab run package.zip --profile-file profile.json')
+assert.deepEqual(PRESETS.lms.map(v => v.patch.profile), PROFILE_NAMES, 'experiments: lms has one variant per profile')
+assert.equal(planVariants({ base: {}, variants: PRESETS.lms }).length, PROFILE_NAMES.length, 'experiments: lms keeps every profile but generic (the default)')
+// Content on another origin: blocked lookups (named from the code) and an opaque origin.
+assert.ok(isBlocked('SecurityError: Blocked a frame with origin "lab://content" from accessing a cross-origin frame.') && !isBlocked('TypeError: x'))
+assert.deepEqual([nameAt('  if (w.API) x', 0, 7), nameAt('a\nw["API_1484_11"]', 1, 1), nameAt('w.  API', 0, 1), nameAt('', 3, 0)], ['API', 'API_1484_11', 'API', ''], 'recorder: the blocked name is read from the code')
+const blockedTrace = trace({ probe: [{ type: 'lookup', name: 'API', found: false, frame: 'lab://content/pkg/a.html' }, { type: 'lookup-blocked', name: 'API', frame: 'lab://content/pkg/a.html', stack: ['find (lab://content/pkg/scorm.js:6:47)'], uncaught: true }] })
+const bf = runFindings(blockedTrace, { kind: 'package', itemType: 'sco', expose: '1.2', profile: resolveProfile({ contentOrigin: 'other' }) })
+assert.ok(bf.some(f => f.title === 'The content can’t reach the LMS from another origin' && f.sev === 'error' && /lab:\/\/content/.test(f.detail) && f.evidence[0] === 'API blocked (uncaught) in a.html at find (lab://content/pkg/scorm.js:6:47)' && /share an origin/.test(f.fix) && /cross-domain wrapper/.test(f.fix)), 'origin: the finding: ' + JSON.stringify(bf))
+assert.ok(!bf.some(f => /found nothing/.test(f.title)), 'origin: no “found nothing” as well')
+assert.deepEqual(originFindings([{ type: 'lookup-blocked', name: 'href', frame: 'lab://content/pkg/a.html' }], resolveProfile()), [], 'origin: only API lookups count')
+const sbf = originFindings([{ type: 'frame', frame: 'lab://run/pkg/a.html', origin: 'null' }], resolveProfile({ frames: { sandbox: 'allow-scripts' } }))
+assert.ok(sbf.length === 1 && /sandbox has no allow-same-origin/.test(sbf[0].title) && sbf[0].evidence.join() === 'sandbox="allow-scripts",a.html has origin null', 'sandbox: detected: ' + JSON.stringify(sbf))
+assert.match(originFindings([], resolveProfile({ frames: { sandbox: 'allow-forms' } }))[0].detail, /Without allow-scripts/, 'sandbox: from the profile alone, and no scripts')
+assert.deepEqual(originFindings([], resolveProfile({ frames: { sandbox: 'allow-scripts allow-same-origin' } })), [], 'sandbox: allow-same-origin is fine')
+const sdCall = { type: 'api', version: '1.2', call: 'LMSSetValue', el: 'cmi.suspend_data', value: 'x'.repeat(1500), result: 'true', err: 0 }
+assert.ok(runFindings(trace({ probe: [sdCall] }), { kind: 'package', profile: resolveProfile({ limits: { suspend12: 1024 } }) }).some(f => /Suspend data is 1,500/.test(f.title) && f.sev === 'error' && /This LMS profile \(custom\) allows 1,024/.test(f.detail)), 'limits: the profile’s suspend data limit')
 // Line diff and overrides.
 const protoFiles = normaliseOptions({ files: JSON.parse('{"__proto__":"x","constructor":{"base64":"AAEC"}}') }).files
 assert.deepEqual(Object.keys(protoFiles), ['__proto__', 'constructor'], 'options: __proto__ and constructor are ordinary paths')
@@ -907,6 +956,40 @@ if (!process.argv.includes('--unit')) {
   }
   console.log('runs: ok')
 
+  // LMS profiles (P2.1). good searches window.parent.API (scorm.js): it works on the same origin (the good run above),
+  // and on another origin the lookup is blocked and explained, with the content frame still recorded (an OOPIF).
+  const profFile = (name, p) => { const f = join(work, name + '.json'); writeFileSync(f, JSON.stringify(p)); return f }
+  const oOut = join(work, 'other-run.json'), oRun = run(good, '--profile-file', profFile('other', { contentOrigin: 'other' }), '--out', oOut), oSaved = JSON.parse(readFileSync(oOut, 'utf8'))
+  const oF = oRun.findings.find(f => f.title === 'The content can’t reach the LMS from another origin')
+  assert.ok(oF && oF.sev === 'error' && oF.evidence.some(e => /^API blocked \(uncaught\) in lesson\.html at find \(lab:\/\/content\/pkg\/scorm\.js:\d+:\d+\)$/.test(e)), 'other origin: the finding: ' + titles(oRun))
+  assert.ok(oRun.api.length === 0 && /^lab:\/\/content\/pkg\/lesson\.html/.test(oSaved.launch.url) && oSaved.launch.profile.contentOrigin === 'other' && oSaved.launch.options.profile.contentOrigin === 'other', 'other origin: served from lab://content, profile saved')
+  assert.ok(oSaved.trace.probe.some(p => p.type === 'dom' && p.frame.startsWith('lab://content/pkg/')) && oSaved.trace.probe.some(p => p.type === 'frame' && p.frame.startsWith('lab://content/') && !p.topReachable), 'other origin: the recorder attached to the content frame')
+  const sbRun = run(good, '--profile-file', profFile('sandbox', { frames: { sandbox: 'allow-scripts' } }))
+  assert.ok(sbRun.findings.some(f => /sandbox has no allow-same-origin/.test(f.title) && f.evidence.includes('sandbox="allow-scripts"') && f.evidence.some(e => /lesson\.html has origin null/.test(e))), 'sandbox: detected: ' + titles(sbRun))
+  // The API on the content's parent, two LMS frames down, with the profile's parameters and failing commits; --profile is the base.
+  const pOut2 = join(work, 'parent-run.json'), pr = run(good, '--profile', 'moodle', '--profile-file', profFile('parent', { frames: { depth: 2 }, apiWhere: 'parent', commit: 'fail', launchParams: 'id={scoid}&attempt={attempt}' }), '--out', pOut2)
+  const prSaved = JSON.parse(readFileSync(pOut2, 'utf8'))
+  assert.ok(calls(pr).includes('LMSInitialize ') && prSaved.trace.probe.some(p => p.type === 'lookup' && p.found && p.frame === 'lab://run/__lab/wrap.html#1'), 'profile: the API is on the content’s parent: ' + calls(pr))
+  assert.ok(pr.api.some(a => a.call === 'LMSCommit' && a.result === 'false' && a.err === 101) && /[?&]id=lesson&attempt=1$/.test(prSaved.launch.url), 'profile: commits fail, parameters filled in: ' + prSaved.launch.url)
+  assert.deepEqual(prSaved.launch.options.profile, { base: 'moodle', frames: { depth: 2 }, apiWhere: 'parent', commit: 'fail', launchParams: 'id={scoid}&attempt={attempt}' }, 'profile: saved as given')
+  assert.equal(node(['run', good, '--profile', 'nope']).status, 2, 'profile: an unknown preset fails')
+  assert.equal(node(['run', good, '--profile-file', profFile('bad', { apiWhere: 'opener' })]).status, 2, 'profile: fields that don’t fit together fail')
+  if (slow) {
+    // A popup after a delay, with an LMS frame in it holding the API (its top); frames in a frameset; a delayed API that
+    // content looking once misses; a CSP and headers on package files.
+    const pop = run(good, '--profile-file', profFile('popup', { launch: 'popup', popupDelay: 500, frames: { depth: 1 }, apiWhere: 'top' }), '--wait', '4')
+    assert.ok(calls(pop).includes('LMSInitialize '), 'profile: popup with the API on its top: ' + calls(pop))
+    const fs = run(good, '--profile-file', profFile('frameset', { frames: { depth: 1, kind: 'frameset' } }))
+    assert.ok(calls(fs).includes('LMSInitialize '), 'profile: frameset: ' + calls(fs))
+    const late = run(good, '--profile-file', profFile('late', { apiDelay: 1500 }))
+    assert.ok(late.api.length === 0 && titles(late).some(t => /looked for API and found nothing/.test(t)), 'profile: a late API is missed: ' + titles(late))
+    const cspRun = run(good, '--profile-file', profFile('csp', { csp: "script-src 'none'", headers: { 'X-Lab': '1' } }))
+    assert.ok(titles(cspRun).some(t => /refused to load or run something/.test(t) && /script-src 'none'/.test(t)), 'profile: the CSP header applies: ' + titles(cspRun))
+    const lx = JSON.parse(node(['experiment', good, '--preset', 'lms', '--wait', '2', '--json']).stdout)
+    assert.deepEqual(lx.variants.map(v => v.name), ['default', ...PROFILE_NAMES.slice(1).map(n => 'lms ' + n)], 'experiment: the lms preset')
+  }
+  console.log('profiles: ok')
+
   // Tracing (P1.4): hosted, traced, records its failed configuration check and startCourse, keeps the original source,
   // and finds what the untraced run found.
   const forced = process.env.SCORM_LAB_FORCE_TRACE === '1'
@@ -1094,7 +1177,9 @@ if (!process.argv.includes('--unit')) {
     // An experiment through the handlers: two runs (default and one variant), announced as 'experiment' events.
     const evs = await fetch(base + '/api/events', { headers: H }), evReader = evs.body.getReader()
     let evText = ''
-    assert.equal((await invoke('experiment-presets')).join(), 'api,frames,standard', 'web: presets')
+    assert.equal((await invoke('experiment-presets')).join(), 'api,frames,standard,lms', 'web: presets')
+    assert.deepEqual(Object.keys(await invoke('profiles')), PROFILE_NAMES, 'web: profiles')
+    assert.match((await invoke('options', { profile: { base: 'docebo', apiDelay: 100 } })).command, / --profile-file profile\.json$/, 'web: a custom profile in options')
     await assert.rejects(invoke('experiment-start', { item: 0, preset: 'nope' }), /No preset/, 'web: unknown preset')
     assert.deepEqual(await invoke('experiment-start', { item: 0, wait: 3, variants: [{ name: 'both', patch: { expose: 'both' } }] }), ['default', 'both'], 'web: experiment starts')
     await assert.rejects(invoke('experiment-start', { item: 0 }), /already running/, 'web: one experiment at a time')

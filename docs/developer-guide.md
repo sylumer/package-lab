@@ -8,6 +8,7 @@ How SCORM Lab is built, the formats it reads and writes, and how to change it.
 - [The main process](#the-main-process)
 - [Serving the package: lab://](#serving-the-package-lab)
 - [The test LMS](#the-test-lms)
+- [LMS profiles](#lms-profiles)
 - [The probe](#the-probe)
 - [The recorder](#the-recorder)
 - [Static analysis](#static-analysis)
@@ -49,8 +50,8 @@ src/
   web.js                HTTP server for the web interface (API, events, live frames, auth)
   recorder.js           CDP recorder: one per run window or popup
   host/                 Loaded inside the run window
-    host.html, host.js  The test LMS page
-    wrap.html           An empty LMS frame (for frame depth)
+    host.html, host.js  The test LMS page (host.js also runs in wrap.html)
+    wrap.html           An empty LMS frame (for frame depth); may hold the API (a profile's apiWhere)
     scorm-runtime.js    SCORM 1.2 and 2004 run-time (from toolbox)
     probe.js            Injected into every frame: API lookups, assignments, wrapped calls, DOM snapshots
     shape-probe.js      Injected ahead of probe.js when a run answers with @probe: the recording Proxy (P1.3)
@@ -67,6 +68,7 @@ src/
   stall.js              Why it stalled: pollers, unanswered messages, listeners that never ran, and the finding (P1.6)
   milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
   options.js            Launch options: normaliseOptions (the only place defaults live), cliCommand
+  profiles.js           LMS profiles: the presets, checkProfile, resolveProfile, launchProfile (P2.1)
   analyze.js            Manifest and script scan
   bootpath.js           Boot graph (how the launch should load) and bootRun (against a run)
   rules.js              Findings: static, run, launch, comparison
@@ -142,7 +144,7 @@ and a line in the guides. The shape:
 
 ```
 { expose: 'manifest'|'both'|'1.2'|'2004'|'none', depth: 0–5, opener, resume, caught (bool), auto (s, 0 = until stopped),
-  wait (s, headless runs), profile: 'none', browser: 'chromium', viewport: null | { width, height },
+  wait (s, headless runs), profile: 'generic' | preset name | { base?, notes?, …profile fields } (see LMS profiles), browser: 'chromium', viewport: null | { width, height },
   files: { path: { content } | { base64 } },
   pins: [{ path, value (JSON), frames: 'content'|'all', mode: 'force' } | { path, frames, mode: 'watch' }],
   responses: [{ match, method?, status, headers, body }], launchParams: 'a=1&b=2', storage: 'normal', trace: false }
@@ -169,6 +171,7 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `override-revert` | `{ path? }` | The overrides list; no path reverts all |
 | `override-diff` | `{ path }` | `{ binary: false, diff (unified), added }` or `{ binary: true, before, after }` |
 | `experiment-presets` | — | The preset names |
+| `profiles` | — | The LMS profile presets: `{ name: { …fields, notes, sources, approximation } }` |
 | `experiment-start` | `{ item, preset? (default `standard`), variants?, …launch options (the base) }` | The variant names, at once; progress comes as `experiment` events. Throws if a run or experiment is under way |
 | `experiment-stop` | — | `true`: stops the run in progress and the rest of the experiment (or discovery) |
 | `discover-start` | `{ item, request?, rounds? (1–10, default 5), …launch options (every run's) }` | `true`, at once; progress comes as `discover` events. Throws on bad rounds or pattern, or if a run, experiment or discovery is under way |
@@ -194,6 +197,11 @@ partition only.
 - `lab://run/pkg/<path>`: a file from the ZIP in memory, with its MIME type and `Range` support (for media). A
   missing file is a plain-text 404, so failed requests are visible.
 - `lab://run/__lab/<file>`: the host files, and `config.json` (the launch settings).
+- `lab://content/pkg/<path>`: the same package files on another origin, for a profile with `contentOrigin: 'other'`
+  (P2.1). `__lab/` is served only on `run`, the LMS's origin. Requests from content there to its server root are
+  `lab://content/…`; the rules treat both hosts alike.
+- Package files (`pkg/` on either host) carry the run's profile's `headers`, and its `csp` as
+  `Content-Security-Policy`.
 - In a traced run (`options.trace`), `.js`, `.mjs`, `.html` and `.htm` files under `pkg/` are served instrumented: see
   [The execution trace](#the-execution-trace).
 - Any other path, such as `lab://run/api/…`, is a 404. This is how content asking for server-root paths shows up:
@@ -206,14 +214,71 @@ Content runs sandboxed with context isolation, without Node.
 `host.js` reads `config.json`:
 
 ```
-{ expose: '1.2' | '2004' | 'both' | 'none', depth, opener, launch (URL), cmi, runtime: { … from the manifest item } }
+{ expose: '1.2' | '2004' | 'both' | 'none', depth, opener (the profile's launch is popup), launch (URL), cmi,
+  frames: { depth, kind, sandbox, allow }, popupDelay, apiDelay, apiAt,
+  runtime: { … from the manifest item, limits, commit, slowMs } }
 ```
 
-It makes the API objects with `scormRuntime` (`scorm-runtime.js`, copied from toolbox: full data models, error codes
-and validation for 1.2 and 2004), and puts them on its window as `API` and `API_1484_11`. Then it frames the content,
-through `wrap.html#<n>|<url>` for depth, or opens it with `window.open` for the opener setting. Every call is reported
+On `host.html` it makes the API objects with `scormRuntime` (`scorm-runtime.js`, copied from toolbox: full data models,
+error codes and validation for 1.2 and 2004; SCORM Lab added the profile's `limits`, `commit` and `slowMs`). It puts
+them, after `apiDelay` ms, on the window `apiAt` names, as `API` and `API_1484_11`: 0 is `host.html` itself, n is the
+LMS frame `wrap.html#n`, n frames above the content (`wrap.html#1` is its parent). The objects stay `host.html`'s, so
+its log reports every call wherever they are; `wrap.html#n` asks for them with `__labPlace(window)` on `host.html` (its
+`top`, or its `top.opener` in a popup). Then it frames the content through `wrap.html#<depth>` (each `wrap.html#n`,
+which runs `host.js` too, frames `wrap.html#<n-1>`, and `wrap.html#1` the content), or after `popupDelay` opens the
+first of those (or the content) with `window.open`. With `frames.kind: 'frameset'` each level is a `frame` in a
+`frameset` that replaces the page's body; otherwise an `iframe` with `allow`, and the content's own iframe gets
+`sandbox` when there is one. Every call is reported
 through `__labReport` as `{ type: 'api', version, call, el, value, result, err, diag }`. `window.__labCmi()` returns
 the stored values; `finish()` reads it.
+
+## LMS profiles
+
+`src/profiles.js` (P2.1) is pure. A profile has these fields (the values are the `generic` preset, SCORM Lab's own test
+LMS):
+
+```js
+{ contentOrigin: 'same' | 'other',                 // lab://run/pkg/ or lab://content/pkg/
+  frames: { depth: 0–5, kind: 'iframe' | 'frameset', sandbox: null | 'allow-scripts …', allow: 'fullscreen; autoplay' },
+  launch: 'frame' | 'popup', popupDelay: 0,        // ms, 0–60000 like every delay
+  launchParams: '',                                // query text; {scoid}, {attempt}, {learner} filled in (fillParams)
+  apiDelay: 0, apiWhere: 'top' | 'parent' | 'opener',
+  csp: null | text, headers: { name: text },       // on package responses
+  commit: 'ok' | 'fail' | 'slow', slowMs: 0,
+  limits: { suspend12: null | n, suspend2004: null | n },   // null: the standard's (4,096; 64,000, or 4,000 in 2004 2nd edition)
+  cookies: 'normal' | 'third-party-blocked' }      // validated and saved; P2.2 implements it
+```
+
+A preset adds `notes`, `sources` (URLs of the public documents used) and `approximation` (true for every preset but
+`generic`). The launch option `profile` is a preset name or a custom object `{ base?, notes?, …fields }` whose fields
+go over the base's (default `generic`); `frames` and `limits` may be partial. `checkProfile(v)` validates and
+normalises the option (unknown fields throw; `'none'`, the option's value before P2.1, becomes `'generic'`).
+`resolveProfile(v)` gives every field, with `name` (the preset, `<base> (changed)` or `custom`). `launchProfile(options)`
+resolves it with the older options on top (`depth` when not 0; `opener` makes it a popup with the API on the opener)
+and throws when fields don't fit together (opener without popup; a popup with the API on its top or parent but no
+frame; a frameset with sandbox or allow); `normaliseOptions` calls it, so a bad combination never reaches a run.
+`apiAt(profile)` is where the test LMS puts the API (see [The test LMS](#the-test-lms)).
+
+`launchItem` (main.js) uses the resolved profile for the content's address, the launch parameters (the manifest's, the
+profile's, then `launchParams`), `config.json`, and the headers; it saves it as `launch.profile`, and its name goes in
+the run's label when it isn't generic.
+
+**Content on another origin.** `lab://content` is another origin (and site) than `lab://run`, so Chromium puts the
+content in an out-of-process frame; the recorder auto-attaches to it like any frame, so its probe, scripts and
+requests are recorded. The content's lookups of `parent.API` (or `top`, `opener`) throw a `SecurityError` before any
+accessor on the LMS window runs, so the probe there can't see them: the recorder does (see [The recorder](#the-recorder))
+and records `lookup-blocked`. The probe's API accessor on the LMS window is therefore never reached by a blocked lookup;
+it behaves as before for same-origin frames, and `host.html` still logs every call it gets. A sandbox without
+`allow-same-origin` gives the content the origin `null` (the probe's `frame` report has `origin`), with the same
+refusals. `originFindings(probe, profile)` in `rules.js` makes the two findings.
+
+**Adding a profile.** Add an entry to `PROFILES` in `profiles.js` with `preset(notes, sources, fields)`: `fields` are
+only the ones that differ from generic; `notes` say what the values are based on and which were left at generic
+because the documents don't say; `sources` are the public URLs used. The `lms` experiment preset, the UI list and the
+CLI pick it up by themselves. The unit tests check that every preset validates, fits together and has sources (while
+the presets' research is pending, `PRESET_SOURCES_PENDING` in `test/test.js` skips the sources check). A new field
+needs: its value in `GENERIC`, a check in `check`, its use in `launchItem` or `host.js`, a line in the UI's `PF`
+list (`app.js`), and the user guide's table.
 
 ## The probe
 
@@ -222,9 +287,10 @@ auto-attached target too). It reports through the `__labReport` binding:
 
 | Report | When |
 |---|---|
-| `{ type: 'frame', depth, topReachable, opener, referrer }` | Once per frame |
+| `{ type: 'frame', depth, topReachable, opener, referrer, origin }` | Once per frame. `origin` is `'null'` in a frame sandboxed without `allow-same-origin` |
 | `{ type: 'lookup', name, found, n, stack }` | Each read of `window.API` or `window.API_1484_11` (an accessor property). Throttled to the first three per call site, then every hundredth, because content polls |
 | `{ type: 'assign', name, kind, keys, stack }` | Each assignment to those names |
+| `{ type: 'lookup-blocked', name, frame, stack, uncaught }` | Made by the recorder, not the probe (P2.1): a read of a property of another origin's window that the browser refused. `name` is read from the code at the throwing position (`w.API`, `w["API"]`; `''` if it can't be), `frame` is the address of the frame that tried, `stack` lines are `fn (url:line:col)` |
 | `{ type: 'api', …, host: true }` | Calls to an API object the probe wrapped: one on a real LMS (references), or content's own object in a package run |
 | `{ type: 'pin-read', path, n, stack }` | Each read of a pinned value (an accessor property). Throttled like lookups |
 | `{ type: 'pin-write', path, value, n, stack }` | Each assignment to a pinned name; the pin ignores it. `value` is a short text preview |
@@ -257,7 +323,7 @@ session it enables:
 | Domain | Records |
 |---|---|
 | Runtime | The `__labReport` binding, console output, uncaught exceptions |
-| Debugger | Every parsed script, with the stack that loaded it. Pauses on all exceptions and resumes at once, to record caught errors |
+| Debugger | Every parsed script, with the stack that loaded it. Pauses on all exceptions (only uncaught ones with `caught: false`) and resumes at once, to record caught errors and blocked lookups: a `SecurityError` "Blocked a frame…" in a script with an address becomes a `lookup-blocked` probe report, with the frame's address read with `evaluateOnCallFrame` and the property's name from the script's source (`nameAt`). The exception's message at that point doesn't name the property; the "Failed to read a named property" text is only added when it is reported as uncaught |
 | Network | Requests with their initiator and outcome |
 | Log | Browser messages (CSP, mixed content, MIME type) |
 | Profiler | Precise block coverage with call counts |
@@ -594,8 +660,8 @@ gives `waitingFor` (the same result).
 
 ## Experiments
 
-`src/experiments.js` is pure. `PRESETS` maps a name to a list of `{ name, patch }` (P2.1, P2.2 and P2.3 add `lms`,
-`storage` and `browsers` here). `planVariants({ base, variants })` returns `[{ name, options }]`: the base first, named
+`src/experiments.js` is pure. `PRESETS` maps a name to a list of `{ name, patch }`: `api`, `frames`, `standard`, and
+`lms` (P2.1: `lms <name>` with `{ profile: name }` for each LMS profile; P2.2 and P2.3 add `storage` and `browsers` here). `planVariants({ base, variants })` returns `[{ name, options }]`: the base first, named
 `default`, then each variant's patch merged over it with `normaliseOptions`; a variant whose options equal an earlier
 one's is dropped (unless `dedupe: false`, used for variants the user wrote), and bad patches throw with the variant's name. `runResult(name, options, savedRun, extra)` keeps what
 a table needs: `{ name, options, milestones, counts (runCounts), errors, verdict, …extra }`. `summarise(results)` makes
@@ -670,7 +736,7 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
 {
   format: 'scorm-lab-run', version: 1,
   kind: 'package' | 'reference', label, package,          // package file name
-  launch: { version, expose, depth, opener, item, itemIndex, itemType, url, resume, options },  // reference: { url }; options (added in P0.1) is the normalised launch options
+  launch: { version, expose, depth, opener, item, itemIndex, itemType, url, resume, options, profile },  // reference: { url }; options (added in P0.1) is the normalised launch options; profile (P2.1) the resolved LMS profile, every field
   findings: [finding],                                     // as computed when saved; readers recompute
   milestones: [milestone] | null,                          // added in P0.2: see Milestones; null for a reference run
   boot: bootGraph | null,
@@ -736,7 +802,7 @@ A frame is `{ fn, url, line, col }`. Older runs without `format` (from before ve
 npm test
 ```
 
-`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `SCORM_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
+`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `SCORM_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers; P2.1: profiles with a delayed popup, a frameset, a late API and a CSP, and the `lms` experiment). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
 `test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
 
 | Fixture | Change | Tests |
@@ -765,6 +831,12 @@ The end-to-end part covers:
   snippets (short-circuits, getters, optional chaining, `await`, generators, classes and `super`, labelled loops,
   `switch`, comma expressions, arrow bodies, default parameters, directives, ASI, `with`, Proxies…) under `node:vm` as
   they are, instrumented with `trace-probe.js`, and instrumented with only the prelude, and compare results and logs.
+- **Profiles (P2.1):** `good` (whose `scorm.js` searches `window.parent.API`) works with the generic profile and, with
+  `contentOrigin: other`, gets "can't reach the LMS from another origin" from a recorded `lookup-blocked`, with its
+  content frame recorded; a sandbox without `allow-same-origin` is detected; `--profile moodle` with a profile file puts
+  the API on the content's parent two frames down, fails commits and fills in the launch parameters; bad profiles exit
+  with status 2. The unit checks validate every preset (and their sources, once `PRESET_SOURCES_PENDING` is false), the
+  checks and combinations, `apiAt`, placeholders, `nameAt`, and the findings over hand-made probes.
 - **Drill-down:** `drill hosted --json` names the failed `/api/player/config` request, with one run (the operand is a local).
   The unit checks cover operand paths, the branch not taken, the dead end, static assignments, the probe's watch pins
   under `vm`, and the whole chain for `levels` and `hosted` over hand-made traces.

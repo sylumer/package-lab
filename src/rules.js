@@ -5,8 +5,8 @@ import { bootRun } from './bootpath.js'
 import { pinFindings } from './pins.js'
 import { traceFindings } from './instrument.js'
 
-const where = f => f ? `${f.fn || '(anonymous)'} ${f.url ? f.url.replace(/^lab:\/\/run\/pkg\//, '') : ''}:${f.line}` : ''
-const short = u => (u || '').replace(/^lab:\/\/run\/pkg\//, '')
+const where = f => f ? `${f.fn || '(anonymous)'} ${f.url ? f.url.replace(/^lab:\/\/(?:run|content)\/pkg\//, '') : ''}:${f.line}` : ''
+const short = u => (u || '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
 const API_NAME = { '1.2': 'API', '2004': 'API_1484_11' }
 const SUSPEND_MAX = { '1.2': 4096, '2004': 64000 }
 
@@ -66,7 +66,8 @@ export function runFindings(trace, launch = {}) {
         evidence: [...uncaughtBefore.slice(0, 3).map(e => `Uncaught: ${e.text} at ${where(e.at[0]) || short(e.url) + ':' + e.line}`),
           ...failed.slice(0, 5).map(r => `Failed: ${r.method} ${short(r.url)} (${r.status ?? r.failed})`)],
         fix: 'Check the uncaught errors and failed requests listed here first, then the Boot path tab for the first file the content never asked for.' })
-    else if (!api.length && !shim.length) {
+    // Lookups another origin refused have their own finding (originFindings), which says why nothing was found.
+    else if (!api.length && !shim.length && !probe.some(p => p.type === 'lookup-blocked' && /^API(_1484_11)?$/.test(p.name))) {
       const names = [...new Set(lookups.map(l => l.name))], found = lookups.some(l => l.found)
       out.push({ sev: 'error', title: found ? 'The content found the API but never called it' : `The content looked for ${names.join(' and ')} and found nothing`,
         detail: found ? 'Something after the lookup stopped it: see the errors after the first lookup.'
@@ -83,11 +84,12 @@ export function runFindings(trace, launch = {}) {
       evidence: [...contentAssigns.slice(0, 4).map(a => `${a.name} = ${a.kind} {${a.keys.join(', ')}} in ${short(a.frame)} from ${a.stack?.[0] ?? '?'}`),
         ...shim.slice(0, 4).map(c => `${c.call}(${c.el}) → ${c.result} on the content’s own object`)],
       fix: 'Find the setting that makes the content create it (often a preview, offline or standalone flag) and turn it off in the export.' })
+  if (launch.kind === 'package') out.push(...originFindings(probe, launch.profile))
   for (const f of probe.filter(p => p.type === 'frame' && !isLab(p.frame)).slice(0, 3))
     if (!f.topReachable) out.push({ sev: 'info', title: 'The content’s top window is on another site', detail: 'Wrappers that search window.top fail here.', evidence: [short(f.frame)], fix: '' })
 
   if (failed.length) {
-    const server = failed.filter(r => /^lab:\/\/run\/(?!pkg\/)/.test(r.url))
+    const server = failed.filter(r => /^lab:\/\/(?:run|content)\/(?!pkg\/)/.test(r.url))
     if (server.length) out.push({ sev: 'error', title: 'The content asked the host for files outside the package',
       detail: 'These paths start at the root of the server, so they only work on the platform the content was made for.',
       evidence: server.slice(0, 8).map(r => `${r.method} ${new URL(r.url).pathname} from ${where(r.from?.[0])}`),
@@ -112,12 +114,31 @@ export function runFindings(trace, launch = {}) {
     if (init.length && !fin.length) out.push({ sev: 'warn', title: `The content never called ${v === '1.2' ? 'LMSFinish' : 'Terminate'}`, detail: 'Many LMSs only save the session when it ends properly. (It may have been closed before it got the chance: close it with the Stop button after leaving the course the normal way.)', evidence: [], fix: '' })
     if (init.length && !calls(v === '1.2' ? 'LMSCommit' : 'Commit').length) out.push({ sev: 'info', title: 'The content never committed', detail: 'Without commits, progress is lost if the browser closes before the session ends.', evidence: [], fix: '' })
     const sd = sets('cmi.suspend_data').at(-1)
-    if (sd && String(sd.value).length > SUSPEND_MAX[v] * 0.8) out.push({ sev: String(sd.value).length > SUSPEND_MAX[v] ? 'error' : 'warn', title: `Suspend data is ${String(sd.value).length.toLocaleString()} characters`, detail: `SCORM ${v} allows ${SUSPEND_MAX[v].toLocaleString()}; LMSs truncate or reject more, and the course then can’t resume.`, evidence: [], fix: v === '1.2' ? 'Publish as SCORM 2004 (64,000 characters), or reduce what the content saves.' : 'Reduce what the content saves.' })
+    const max = launch.profile?.limits?.[v === '1.2' ? 'suspend12' : 'suspend2004'] || SUSPEND_MAX[v]   // an LMS profile's own limit (P2.1)
+    if (sd && String(sd.value).length > max * 0.8) out.push({ sev: String(sd.value).length > max ? 'error' : 'warn', title: `Suspend data is ${String(sd.value).length.toLocaleString()} characters`, detail: `${max === SUSPEND_MAX[v] ? `SCORM ${v}` : `This LMS profile (${launch.profile.name})`} allows ${max.toLocaleString()}; LMSs truncate or reject more, and the course then can’t resume.`, evidence: [], fix: v === '1.2' ? 'Publish as SCORM 2004 (64,000 characters), or reduce what the content saves.' : 'Reduce what the content saves.' })
     if (init.length && !sets(v === '1.2' ? 'cmi.core.exit' : 'cmi.exit').length) out.push({ sev: 'info', title: 'The content never set exit', detail: 'Without exit set to suspend, many LMSs start a new attempt next time instead of resuming.', evidence: [], fix: '' })
     if (init.length && !sets(v === '1.2' ? 'cmi.core.lesson_status' : 'cmi.completion_status').length) out.push({ sev: 'info', title: 'The content never reported completion', evidence: [], fix: '' })
   }
   return out
 }
+
+// Content on another origin than the LMS (P2.1): lookups of the API the browser refused, and a sandbox without
+// allow-same-origin (an opaque origin, so the same refusals). profile is the run's resolved LMS profile (launch.profile).
+export function originFindings(probe, profile) {
+  const out = [], blocked = probe.filter(p => p.type === 'lookup-blocked' && /^API(_1484_11)?$/.test(p.name))
+  const sandbox = profile?.frames?.sandbox ?? null, words = sandbox === null ? [] : sandbox.split(/\s+/)
+  const opaque = probe.filter(p => p.type === 'frame' && !isLab(p.frame) && p.origin === 'null')
+  if (blocked.length) out.push({ sev: 'error', title: 'The content can’t reach the LMS from another origin',
+    detail: `The content runs on ${opaque.length ? 'an opaque origin of its own (a sandbox)' : `another origin (${originOf(blocked[0].frame)})`} than the LMS window that holds the API. The browser refused its lookups of the API through parent, top or opener with a SecurityError, so it can’t find the LMS. Some LMSs serve content from a separate domain or CDN, which does this.`,
+    evidence: blocked.slice(0, 6).map(b => `${b.name} blocked${b.uncaught ? ' (uncaught)' : ''} in ${short(b.frame)} at ${b.stack?.[0] ?? '?'}`),
+    fix: 'The LMS and the content must share an origin: have the LMS serve the package from its own domain. Otherwise the content needs a cross-domain wrapper that talks to the LMS with postMessage (some LMSs offer one for content on another domain).' })
+  if (sandbox !== null && !words.includes('allow-same-origin') || opaque.length) out.push({ sev: 'error', title: 'The LMS frame’s sandbox has no allow-same-origin',
+    detail: `The frame holding the content has a sandbox attribute without allow-same-origin, so the content gets an opaque origin of its own: it can’t reach the LMS’s API on its parent, top or opener, and can’t keep cookies or storage.${sandbox !== null && !words.includes('allow-scripts') ? ' Without allow-scripts, none of its scripts run at all.' : ''}`,
+    evidence: [...sandbox !== null ? [`sandbox="${sandbox}"`] : [], ...opaque.slice(0, 3).map(f => `${short(f.frame)} has origin null`)],
+    fix: 'Add allow-same-origin and allow-scripts to the sandbox in the LMS’s settings or player template, or remove the sandbox.' })
+  return out
+}
+const originOf = u => /^[a-z][\w+.-]*:\/\/[^/]*/i.exec(u ?? '')?.[0] ?? 'unknown'
 
 export function compareFindings(cmp) {
   const out = []
@@ -151,9 +172,9 @@ export function launchFindings(trace, boot) {
 
   // Why, in loading order: each candidate cause found in the run.
   const why = []
-  const pkgFailed = trace.requests.filter(r => /^lab:\/\/run\/pkg\//.test(r.url) && (r.status >= 400 || r.failed && !r.canceled))
+  const pkgFailed = trace.requests.filter(r => /^lab:\/\/(?:run|content)\/pkg\//.test(r.url) && (r.status >= 400 || r.failed && !r.canceled))
   for (const r of pkgFailed.slice(0, 6)) why.push(`Not found: ${short(r.url)} (${r.status ?? r.failed}) from ${where(r.from?.[0]) || '?'}`)
-  const serverFailed = trace.requests.filter(r => /^lab:\/\/run\/(?!pkg\/|__lab\/)/.test(r.url))
+  const serverFailed = trace.requests.filter(r => /^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(r.url))
   for (const r of serverFailed.slice(0, 4)) why.push(`Asked the server for ${new URL(r.url).pathname} (outside the package) from ${where(r.from?.[0]) || '?'}`)
   const ex = [...trace.exceptions].sort((a, b) => a.t - b.t)
   ex.slice(0, 3).forEach((e, i) => why.push(`${i ? 'Then' : 'First'} uncaught error at ${(e.t / 1000).toFixed(1)} s: ${e.text} at ${where(e.at[0]) || short(e.url) + ':' + e.line}`))

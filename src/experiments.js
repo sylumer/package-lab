@@ -4,12 +4,14 @@
 import { normaliseOptions } from './options.js'
 import { furthest, progress, runCounts } from './milestones.js'
 import { verdict } from './report.js'
+import { PROFILE_NAMES } from './profiles.js'
 
 const api = ['manifest', 'both', '1.2', '2004', 'none'].map(v => ({ name: `api ${v}`, patch: { expose: v } }))
 const frames = [...[0, 1, 2, 3].map(n => ({ name: `depth ${n}`, patch: { depth: n } })), { name: 'new window', patch: { opener: true } }]
 const union = (...lists) => { const seen = new Set(); return lists.flat().filter(v => { const k = JSON.stringify(v.patch); return !seen.has(k) && seen.add(k) }) }
-// P2.1 adds lms; P2.2 adds storage; P2.3 adds browsers.
-export const PRESETS = { api, frames, standard: union(api, frames) }
+// lms: one variant per LMS profile (P2.1). P2.2 adds storage; P2.3 adds browsers.
+const lms = PROFILE_NAMES.map(n => ({ name: `lms ${n}`, patch: { profile: n } }))
+export const PRESETS = { api, frames, standard: union(api, frames), lms }
 
 // { base: options, variants: [{ name, patch }] } → [{ name, options }], the base first as “default”. A variant that
 // ends up with the same options as an earlier one is left out, unless dedupe is false (variants the user wrote).

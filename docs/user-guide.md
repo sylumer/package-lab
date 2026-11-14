@@ -9,6 +9,7 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 - [Launching an item](#launching-an-item)
 - [Reading a run](#reading-a-run)
 - [Testing a theory: launch settings](#testing-a-theory-launch-settings)
+- [Running it the way an LMS does: profiles](#running-it-the-way-an-lms-does-profiles)
 - [What the content wants from its server](#what-the-content-wants-from-its-server)
 - [Tracing the code](#tracing-the-code)
 - [Why it stopped: drill-down](#why-it-stopped-drill-down)
@@ -192,9 +193,52 @@ Change one setting, launch again, and see whether the content gets further.
 | **In a new window** | The content opens with `window.open`, and finds the API through `window.opener` | Content that only searches parents fails in LMSs that launch in a new window |
 | **Resume last run's data** | The data model starts with the values the last run stored | Whether the content reads back and uses its bookmark and suspend data |
 
-Under the toolbar, **More options** shows every option the next launch will use, as JSON (read-only for now).
+**Frame depth** and **In a new window** go on top of the profile (see below): a depth other than 0 replaces the
+profile's, and a new window puts the API on the opener.
+
+Under the toolbar, **More options** shows every option the next launch will use, as JSON, and the profile's fields,
+which you can change (see below).
 **Copy as CLI command** copies the `scorm-lab run …` line that repeats the launch from the command line. Options that
 have no flag are left out of the line; it adds `--options options.json` to say a file is needed.
+
+## Running it the way an LMS does: profiles
+
+LMSs host content differently: some serve it from another domain, frame it several levels deep or in a sandbox,
+open it in a new window, put the API somewhere other than the top window, or only after a moment. A package that works
+in SCORM Lab can fail in one of them for those reasons. A **profile** reproduces one LMS's way of hosting.
+
+Choose it in the toolbar's **Profile** list:
+- **generic** is SCORM Lab's own test LMS, as it always was: the default.
+- **moodle**, **scorm-cloud**, **cornerstone**, **successfactors**, **docebo**, **totara**, **blackboard** and
+  **canvas** are approximations of what each LMS does by default, from its public documentation. Under **More
+  options** each shows its notes and the documents used. Where the documents don't say, a preset keeps the generic
+  value and says so. An LMS's administrator can change most of these, so treat a preset as a likely setup, not a fact.
+
+Under **More options**, **Profile fields** shows the chosen profile's values. Change any of them to try a variation;
+the launch then uses the preset with your changes (and **Copy as CLI command** adds `--profile-file profile.json`).
+Choosing another profile clears your changes.
+
+| Field | What it does |
+|---|---|
+| **Content origin** | **same**: the content is served from the LMS's origin (`lab://run/`). **other**: from another origin (`lab://content/`), as when an LMS serves packages from a separate domain or CDN. The content then can't read anything on the LMS's windows, the API included |
+| **Frames**, **Frame kind** | How many empty LMS frames are between the LMS page and the content (0–5), and whether they are `iframe`s or a `frameset` with `frame`s |
+| **Sandbox**, **Allow** | The `sandbox` and `allow` attributes of the content's own frame (iframes only). An empty sandbox means none. A sandbox without `allow-same-origin` gives the content an opaque origin |
+| **Launch**, **Popup delay** | **frame**, or **popup**: the LMS opens the content with `window.open`, after the delay |
+| **Profile parameters** | Query text the LMS adds to the launch address. `{scoid}` (the item's identifier), `{attempt}` (1, or 2 when resuming) and `{learner}` (`learner-1`) are filled in. **Launch parameters** above are added after these |
+| **API delay** | How long after the launch the API objects appear. Content that looks only once, at once, misses them |
+| **API on** | Which window holds the API: **top** (the LMS page; in a popup, the new window's top LMS frame), **parent** (the content's parent frame) or **opener** (the window that opened the content: needs **popup**). With **popup**, **top** and **parent** need at least one frame |
+| **CSP**, **Headers** | A `Content-Security-Policy` header, and other headers (a JSON object), on every package file |
+| **Commit**, **Slow commit** | **ok**; **fail**: `LMSCommit`/`Commit` returns false with error 101 (1.2) or 391 (2004); **slow**: each commit blocks for the given time, like a slow synchronous save |
+| **Suspend data 1.2**, **2004** | The LMS's own limit on `cmi.suspend_data`, in characters. Empty means the standard's (4,096 and 64,000) |
+| **Cookies** | **normal** or **third-party-blocked**. Accepted and saved with the run; it has no effect yet |
+
+The findings explain what a profile breaks. Content on another origin that looks for the API through its parents gets
+"The content can't reach the LMS from another origin", with each refused lookup and the line that made it. A sandbox
+without `allow-same-origin` gets "The LMS frame's sandbox has no allow-same-origin". Failing commits show under the
+API calls that failed. The run's label names the profile when it isn't generic, and the saved run keeps it (as given,
+in `launch.options.profile`, and with every field filled in, in `launch.profile`).
+
+To try every preset at once, run the **lms** experiment (see below).
 
 ## Changing files and running again
 
@@ -262,6 +306,7 @@ one after another. Each run lasts as long as **Stop after** (10 seconds if that 
 | **api** | The API offered: as the manifest says, both, 1.2, 2004 and none |
 | **frames** | Frame depth 0, 1, 2 and 3, and a new window |
 | **standard** | Both of the above (a variant that matches the default is left out) |
+| **lms** | Each LMS profile in turn (see [profiles](#running-it-the-way-an-lms-does-profiles)) |
 
 The table fills in as each run finishes: how far it got, API calls, errors, the verdict, and how it compares with the
 default. Click a row to open that run. **Stop** ends the run in progress and skips the rest. The run it cut short is left out of the table and the findings (it is still in the Runs list). A run that fails to finish shows as such and the experiment carries on. Variants you list yourself on the command line are all run, even ones that repeat the default; the built-in sets leave those out.

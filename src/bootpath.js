@@ -270,7 +270,7 @@ export function bootRun(boot, trace) {
   for (const r of trace.requests) {
     const p = pathOfUrl(r.url)
     if (p != null) req.set(p, r)
-    else if (/^lab:\/\/run\/(?!pkg\/|__lab\/)/.test(r.url)) server.set(new URL(r.url).pathname, r)
+    else if (/^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(r.url)) server.set(new URL(r.url).pathname, r)
   }
   const result = r => !r ? null : { status: r.status ?? null, failed: r.failed && !r.canceled ? r.failed : null, pending: r.status == null && !r.failed, t: r.t }
   return boot.nodes.map(n => ({ ...n, run: result(n.path != null ? req.get(n.path) : n.status === 'server' ? server.get(n.target) : null) }))

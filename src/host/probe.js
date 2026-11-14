@@ -11,7 +11,8 @@
   try { while (w !== w.parent && depth < 20) { w = w.parent; depth++ } } catch (e) { depth = -1 }
   let topReachable = true
   try { void window.top.location.href } catch (e) { topReachable = false }
-  report({ type: 'frame', depth, topReachable, opener: !!window.opener, referrer: document.referrer })
+  // origin is 'null' in a frame sandboxed without allow-same-origin (P2.1).
+  report({ type: 'frame', depth, topReachable, opener: !!window.opener, referrer: document.referrer, origin: window.origin })
   const seen = new Map()
   // On a real LMS or hosted platform (anything but SCORM Lab's own host page, which logs its own calls), the API
   // object's methods are wrapped so that its calls are recorded too.

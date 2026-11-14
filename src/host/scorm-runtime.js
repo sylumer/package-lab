@@ -81,13 +81,17 @@ function scormTypeOk(type, v) {
 const scormRangeOnly = (type, v) => /^[di][-\d:]*$/.test(type) && /^-?\d+(\.\d+)?$/.test(v) && !scormTypeOk(type, v)
 
 // A SCORM run-time for one launch. o: { version '1.2' | '2004', edition, cmi: Map (kept between launches), learner:
-// { id, name }, credit, mode, launchData, mastery, maxTime, timeLimitAction, completionThreshold, log(entry) }.
+// { id, name }, credit, mode, launchData, mastery, maxTime, timeLimitAction, completionThreshold, log(entry), and from an LMS profile
+// limits { suspend12, suspend2004 }, commit ('ok' | 'fail' | 'slow') and slowMs }.
 // Returns { api, cmi, state () }: api has the version's eight functions, cmi the values, state 'new' | 'running' | 'ended'.
 function scormRuntime(o) {
   const v12 = o.version === '1.2', model = { ...(v12 ? SCORM12_MODEL : SCORM04_MODEL) }, kids = v12 ? SCORM12_CHILDREN : SCORM04_CHILDREN
   const cmi = o.cmi || new Map(), errs = SCORM_ERRORS[v12 ? '1.2' : '2004']
   let state = 'new', last = 0, diag = ''
   if (o.edition === '2nd edition' && !v12) model['cmi.suspend_data'] = ['rw', 's4000']
+  // An LMS profile's own limit (SCORM Lab, P2.1); null keeps the standard's.
+  const limit = o.limits?.[v12 ? 'suspend12' : 'suspend2004']
+  if (limit) model['cmi.suspend_data'] = ['rw', 's' + limit]
   // Values the LMS sets at each launch.
   const prevExit = cmi.get(v12 ? 'cmi.core.exit' : 'cmi.exit')
   const fixed = v12 ? {
@@ -179,6 +183,9 @@ function scormRuntime(o) {
   function commit(arg) {
     if (String(arg ?? '') !== '') return fail(201, 'The argument must be "".')
     if (state !== 'running') return fail(v12 ? 301 : state === 'new' ? 142 : 143)
+    // An LMS profile's commit (SCORM Lab, P2.1): slow blocks like a synchronous save to a slow server; fail is a save that failed.
+    if (o.commit === 'slow') { const end = Date.now() + (o.slowMs || 0); while (Date.now() < end) { /* waiting for the server */ } }
+    if (o.commit === 'fail') return fail(v12 ? 101 : 391, 'The LMS couldn’t save the data (the profile’s commit is set to fail).')
     return 'true'
   }
   const lastError = () => String(last), errorString = c => errs[+c] ?? '', diagnostic = c => (c === '' || c == null || +c === last) ? diag : ''

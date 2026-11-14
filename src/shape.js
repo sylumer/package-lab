@@ -9,7 +9,7 @@ import { normaliseOptions } from './options.js'
 import { furthest, progress } from './milestones.js'
 import { runResult, summarise } from './experiments.js'
 
-const short = u => String(u ?? '').replace(/^lab:\/\/run\/pkg\//, '').replace(/^lab:\/\/run(?=\/)/, '')
+const short = u => String(u ?? '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '').replace(/^lab:\/\/(?:run|content)(?=\/)/, '')
 const where = f => f ? `${short(f.url)}:${f.line}` : ''
 
 // ---- What the recorder needs ----
@@ -22,7 +22,7 @@ export const shapePrefix = responses => {
 
 // ---- Which requests went to a server ----
 // fetch and XHR requests to the host's root (lab://run/ outside the package and SCORM Lab's pages) or another site.
-const isServer = r => /^(XHR|Fetch)$/.test(r.type) && (/^lab:\/\/run\/(?!pkg\/|__lab\/)/.test(r.url) || /^https?:/.test(r.url))
+const isServer = r => /^(XHR|Fetch)$/.test(r.type) && (/^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(r.url) || /^https?:/.test(r.url))
 // The pattern that answers a request: its path on the host's root (any query), or its address on another site.
 export function requestPattern(url) {
   const u = new URL(url)

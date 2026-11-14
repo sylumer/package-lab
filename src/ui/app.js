@@ -7,7 +7,7 @@ function h(tag, props = {}, ...kids) {
   return e
 }
 const say = t => { $('status').textContent = t }
-const short = u => (u || '').replace(/^lab:\/\/run\/pkg\//, '')
+const short = u => (u || '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
 const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
@@ -90,7 +90,7 @@ const VIEWS = {
   Network() {
     const r = run(); if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
     // Any failed request, or one for the server's root or another site, can be answered with a response of your own.
-    const answerable = q => !/^lab:\/\/run\/(pkg|__lab)\//.test(q.url) && !/^(data|blob):/.test(q.url) || q.failed && !q.canceled || q.status >= 400
+    const answerable = q => !/^lab:\/\/(?:run|content)\/(pkg|__lab)\//.test(q.url) && !/^(data|blob):/.test(q.url) || q.failed && !q.canceled || q.status >= 400
     return [answerForm(), ...table(['s', 'Method', 'URL', 'Type', 'Status', 'From', ''], r.trace.requests.map(q => [secs(q.t), q.method, short(q.url), q.type,
       q.answered ? h('span', { class: 'ok' }, `answered ${q.status ?? ''}`) : q.failed || q.status >= 400 ? h('span', { class: 'bad' }, String(q.status ?? q.failed) + (q.failed && q.status ? ' ' + q.failed : '')) : q.status ?? '…', h('code', {}, (q.from || []).slice(0, 3).map(at).join('\n')),
       answerable(q) ? h('button', { type: 'button', class: 'secondary', onclick: () => { st.answer = answerDraft(q); render() } }, 'Answer this request…') : '']))]
@@ -289,9 +289,9 @@ function runRows(rows, busy, first = 'Variant', against = 'the default') {
 
 // ---- Server needs: what the content wants from its server, found by answering its requests and watching what it reads ----
 st.disc = { rounds: 5, rows: [], result: null, busy: false, note: '' }
-const host = u => (u || '').replace(/^lab:\/\/run(?=\/)/, '')
+const host = u => (u || '').replace(/^lab:\/\/(?:run|content)(?=\/)/, '')
 // fetch and XHR requests to the server's root or another site, one per pattern (as src/shape.js serverRequests).
-const serverReqs = r => { const seen = new Set(); return (r?.trace.requests ?? []).filter(q => /^(XHR|Fetch)$/.test(q.type) && (/^lab:\/\/run\/(?!pkg\/|__lab\/)/.test(q.url) || /^https?:/.test(q.url)) && !seen.has(answerDraft(q).match) && seen.add(answerDraft(q).match)) }
+const serverReqs = r => { const seen = new Set(); return (r?.trace.requests ?? []).filter(q => /^(XHR|Fetch)$/.test(q.type) && (/^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(q.url) || /^https?:/.test(q.url)) && !seen.has(answerDraft(q).match) && seen.add(answerDraft(q).match)) }
 const saveResponse = resp => { const i = st.responses.findIndex(x => x.match === resp.match); if (i >= 0) st.responses[i] = resp; else st.responses.push(resp); afterChange(); say(`Added an answer for ${resp.match}. It applies to the next launch (see More options).`) }
 VIEWS['Server needs'] = () => {
   const x = st.disc, r = run(), reqs = serverReqs(r), off = x.busy || !!st.running || !st.pkg?.items.length
@@ -418,7 +418,48 @@ $('file').onchange = () => act(async () => {
   showPackage(await lab.upload(f, p => say(`Uploading ${f.name}: ${Math.round(p * 100)}%`)))
   $('file').value = ''
 }, 'Uploading…')
-const launchOptions = () => ({ expose: $('expose').value, depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
+// ---- LMS profile (P2.1): a preset from the toolbar, with the fields changed in More options going over it ----
+// [field path, label, choices | 'text' | 'number' | 'json']. Empty sandbox, CSP and limits are null (none, the standard's).
+const PF = [['contentOrigin', 'Content origin', ['same', 'other']], ['frames.depth', 'Frames', [0, 1, 2, 3, 4, 5]], ['frames.kind', 'Frame kind', ['iframe', 'frameset']],
+  ['frames.sandbox', 'Sandbox', 'text'], ['frames.allow', 'Allow', 'text'], ['launch', 'Launch', ['frame', 'popup']], ['popupDelay', 'Popup delay (ms)', 'number'],
+  ['launchParams', 'Profile parameters', 'text'], ['apiDelay', 'API delay (ms)', 'number'], ['apiWhere', 'API on', ['top', 'parent', 'opener']], ['csp', 'CSP', 'text'],
+  ['headers', 'Headers (JSON)', 'json'], ['commit', 'Commit', ['ok', 'fail', 'slow']], ['slowMs', 'Slow commit (ms)', 'number'],
+  ['limits.suspend12', 'Suspend data 1.2', 'number'], ['limits.suspend2004', 'Suspend data 2004', 'number'], ['cookies', 'Cookies', ['normal', 'third-party-blocked']]]
+st.profiles = null; st.profileEdits = {}
+const getPath = (o, p) => p.split('.').reduce((x, k) => x?.[k], o)
+const toText = (kind, v) => v === null ? '' : kind === 'json' ? JSON.stringify(v) : String(v)
+const fromText = (path, kind, t) => kind === 'json' ? JSON.parse(t || '{}') : t === '' && /sandbox|csp|limits/.test(path) ? null : kind === 'number' || typeof kind[0] === 'number' ? Number(t) : t
+// The option: the preset's name, or { base, …changed fields } when any were changed.
+function profileOption() {
+  const e = Object.entries(st.profileEdits)
+  if (!e.length) return $('profile').value
+  const o = { base: $('profile').value }
+  for (const [p, v] of e) { const [a, b] = p.split('.'); if (b) (o[a] ??= {})[b] = v; else o[a] = v }
+  return o
+}
+function showProfile() {
+  const pr = st.profiles?.[$('profile').value]
+  if (!pr) return
+  $('profile-notes').textContent = `${pr.notes}${pr.sources.length ? ' Sources: ' + pr.sources.join(', ') : ''}`
+  $('profile-fields').replaceChildren(...PF.map(([p, label, kind]) => {
+    const el = Array.isArray(kind) ? h('select', {}, kind.map(c => h('option', { value: c }, c))) : h('input', { type: kind === 'number' ? 'number' : 'text', min: kind === 'number' ? 0 : null, spellcheck: 'false', size: kind === 'number' ? 6 : 18 })
+    el.value = toText(kind, Object.hasOwn(st.profileEdits, p) ? st.profileEdits[p] : getPath(pr, p))
+    el.onchange = () => {
+      let v
+      try { v = fromText(p, kind, el.value.trim()) } catch { return say('Headers must be a JSON object, like {"X-Frame-Options": "DENY"}.') }
+      if (JSON.stringify(v) === JSON.stringify(getPath(pr, p))) delete st.profileEdits[p]; else st.profileEdits[p] = v
+      showOptions()
+    }
+    return h('label', {}, label, el)
+  }))
+}
+lab.invoke('profiles').then(p => {
+  st.profiles = p
+  $('profile').replaceChildren(...Object.entries(p).map(([n, x]) => h('option', { value: n }, n + (x.approximation ? ' (approximation)' : ''))))
+  showProfile()
+}).catch(() => {})
+$('profile').addEventListener('change', () => { st.profileEdits = {}; showProfile() })
+const launchOptions = () => ({ expose: $('expose').value, profile: profileOption(), depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
   pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim(), trace: $('trace').checked })
 async function showOptions() {
   try {
@@ -427,7 +468,7 @@ async function showOptions() {
     $('options-json').textContent = JSON.stringify(r.options, null, 2); $('cli-line').textContent = r.command
   } catch (e) { $('options-json').textContent = e.message; $('cli-line').textContent = '' }
 }
-for (const id of ['item', 'expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params', 'trace']) $(id).addEventListener('change', showOptions)
+for (const id of ['item', 'expose', 'profile', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params', 'trace']) $(id).addEventListener('change', showOptions)
 $('more').addEventListener('toggle', showOptions)
 $('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeText($('cli-line').textContent); say('Copied.') })
 $('launch').onclick = () => act(async () => {

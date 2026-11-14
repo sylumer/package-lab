@@ -99,6 +99,7 @@ scorm-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth
                          [--no-caught] [--show] [--json] [--strict] [--options options.json]
                          [--options-from run.json] [--override path=file …] [--pin name=json …]
                          [--answer pattern=reply …] [--launch-params a=1&b=2] [--trace]
+                         [--profile name] [--profile-file profile.json]
 ```
 
 Launches the item in a hidden browser, with SCORM Lab's test LMS. It lets the item run for `--wait` seconds (default
@@ -119,6 +120,8 @@ app.
 | `--pin` | none | `<name>=<json>`: forces a value the content reads, before its own code runs (see [Pins and answers](#pins-and-answers)). Repeat it for more |
 | `--answer` | none | `<pattern>=@<file>` or `<pattern>=<status>:<body>`: answers matching requests with a response of your own (see [Pins and answers](#pins-and-answers)). Repeat it for more |
 | `--launch-params` | none | Extra query parameters added to the launch address, like `a=1&b=2` |
+| `--profile` | `generic` | Hosts the content the way an LMS does: `generic` (SCORM Lab's own), `moodle`, `scorm-cloud`, `cornerstone`, `successfactors`, `docebo`, `totara`, `blackboard` or `canvas` (see [Profiles](#profiles)) |
+| `--profile-file` | none | A custom profile from a JSON file (see [Profiles](#profiles)). With `--profile` too, that preset is its base unless the file names one |
 | `--trace` | off | Records which functions of the package ran and which way each decision went, with the values (see [Tracing](#tracing)). Keep the run with `--out` to read it |
 | `--out` | none | Keeps the full run (scripts, requests, coverage, sources). Open it in the desktop app with **Open saved…**, or pass it to `report` or `--resume-from` |
 | `--live` | none | See [Live runs](#live-runs) |
@@ -135,6 +138,33 @@ missing options get their defaults. An unknown option or a bad value stops the r
 ```
 
 The options the run used are saved in the run's `launch.options`.
+
+#### Profiles
+
+A profile reproduces how an LMS hosts content: the origin it serves the package from, its frames, how it launches,
+where and when it puts the API, headers on the package's files, how commits behave and its limits. The presets other
+than `generic` are approximations from each LMS's public documentation; see the
+[user guide](user-guide.md#running-it-the-way-an-lms-does-profiles) for every field.
+
+`--profile-file` takes a custom profile: any fields, over a preset named in `base` (default `generic`). `frames` and
+`limits` may be partial.
+
+```json
+{ "base": "moodle", "contentOrigin": "other", "frames": { "depth": 2, "sandbox": "allow-scripts allow-same-origin" },
+  "launch": "popup", "popupDelay": 500, "apiWhere": "top", "launchParams": "id={scoid}&attempt={attempt}",
+  "apiDelay": 0, "csp": null, "headers": { "X-Frame-Options": "SAMEORIGIN" }, "commit": "slow", "slowMs": 800,
+  "limits": { "suspend12": 4096, "suspend2004": null }, "cookies": "normal" }
+```
+
+Fields that don't fit together stop the run with a message: `apiWhere: opener` needs `launch: popup`; a popup with
+`apiWhere` `top` or `parent` needs `frames.depth` of 1 or more; a `frameset` can't have `sandbox` or `allow`. `--depth`
+(when not 0) and `--window` go on top of the profile. In an options file, the same goes in `"profile"` (a name or an
+object). The run keeps it in `launch.options.profile`, and every field resolved in `launch.profile`.
+
+```bash
+# Does it still find the LMS when the LMS serves it from another domain?
+scorm-lab run course.zip --profile-file other.json     # other.json: { "contentOrigin": "other" }
+```
 
 #### Changing files and running again
 
@@ -230,7 +260,7 @@ progress goes to standard error.
 
 | Option | Default | What it does |
 |---|---|---|
-| `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), or `standard` (both) |
+| `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), `standard` (both), or `lms` (each [profile](#profiles)) |
 | `--variants` | none | Your own variants, from a JSON file: a list of `{ "name", "patch" }` or `{ "variants": [...] }`. `patch` is any [launch options](developer-guide.md#launch-options). Not with `--preset` |
 | `--out` | none | A folder; each run is kept in it as a saved run (`01-default.json`, `02-api_both.json`, …) |
 | `--json` | off | Prints JSON (below) instead of a table |

@@ -16,6 +16,7 @@
     <label>API <select id="expose">
       <option value="manifest">As the manifest says</option><option value="both">Both (1.2 and 2004)</option>
       <option value="1.2">SCORM 1.2 only</option><option value="2004">SCORM 2004 only</option><option value="none">None</option></select></label>
+    <label>Profile <select id="profile" title="Host the content the way an LMS does. Presets are approximations; change their fields under More options."><option value="generic">generic</option></select></label>
     <label>Frame depth <select id="depth"><option>0</option><option>1</option><option>2</option><option>3</option></select></label>
     <label class="check"><input type="checkbox" id="opener"> In a new window</label>
     <label class="check"><input type="checkbox" id="resume"> Resume last run’s data</label>
@@ -36,6 +37,9 @@
     <p class="muted small">The options this launch will use. To set the others, use a file with <code>--options</code> on the command line.</p>
     <div class="row"><label>Launch parameters <input id="launch-params" type="text" placeholder="a=1&amp;b=2" spellcheck="false" title="Extra query parameters added to the launch address"></label>
       <label class="check" title="Record which functions ran and which way each decision went, with the values. The content runs a little slower."><input type="checkbox" id="trace"> Trace the code</label></div>
+    <h3 class="section">Profile fields</h3>
+    <p class="muted small" id="profile-notes"></p>
+    <div id="profile-fields" class="row wrap"></div>
     <h3 class="section">Pins</h3>
     <div id="pins"></div>
     <h3 class="section">Answers</h3>

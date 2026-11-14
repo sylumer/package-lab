@@ -204,7 +204,7 @@ export function restoreTrace(trace, files) {
   for (const s of trace.scripts ?? []) fixFrames(s.from)
   for (const r of trace.requests ?? []) fixFrames(r.from)
   for (const k of ['console', 'exceptions', 'caught']) for (const x of trace[k] ?? []) fixFrames(x.at)
-  for (const p of trace.probe ?? []) for (const k of ['stack', 'sites']) if (Array.isArray(p[k])) p[k] = p[k].map(s => typeof s === 'string' ? s.replace(/(lab:\/\/run\/pkg\/[^\s()]*?):(\d+):(\d+)/g, (_, u, l, c) => `${u}:${l}:${col(u, +l, +c)}`) : s)
+  for (const p of trace.probe ?? []) for (const k of ['stack', 'sites']) if (Array.isArray(p[k])) p[k] = p[k].map(s => typeof s === 'string' ? s.replace(/(lab:\/\/(?:run|content)\/pkg\/[^\s()]*?):(\d+):(\d+)/g, (_, u, l, c) => `${u}:${l}:${col(u, +l, +c)}`) : s)
   // Coverage offsets are from the start of each script: for an inline script, that start is in the page.
   const scripts = new Map((trace.scripts ?? []).map(s => [s.sid + ':' + s.id, s])), firstStart = new Map()
   for (const c of trace.coverage ?? []) {

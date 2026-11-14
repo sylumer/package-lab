@@ -6,7 +6,7 @@ import { isLab } from './diff.js'
 import { milestones } from './milestones.js'
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-const short = u => String(u ?? '').replace(/^lab:\/\/run\/pkg\//, '')
+const short = u => String(u ?? '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
 const where = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 
 // The worst finding decides: { sev: 'error' | 'warn' | 'ok', title }.

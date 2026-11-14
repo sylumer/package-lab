@@ -15,7 +15,7 @@ import { globals } from './bootpath.js'
 export const QUIET = 2000, WINDOW = 300, NEAR = 1000, LEVELS = 3
 const GLOBAL = new Set(['window', 'self', 'globalThis'])
 const CALLBACK = new Set(['then', 'done', 'success', 'always', 'getJSON', 'get', 'post', 'ajax', 'load', 'onload', 'onreadystatechange'])
-const short = u => String(u ?? '').replace(/^lab:\/\/run\/pkg\//, '').replace(/^lab:\/\/run(?=\/)/, '')
+const short = u => String(u ?? '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '').replace(/^lab:\/\/(?:run|content)(?=\/)/, '')
 const pkgPath = u => { try { const x = new URL(u); return x.protocol === 'lab:' && x.pathname.startsWith('/pkg/') ? decodeURIComponent(x.pathname.slice(5)) : null } catch { return null } }
 const textOf = b => typeof b === 'string' ? b : b.toString('utf8')
 const secs = t => `${(t / 1000).toFixed(1)} s`

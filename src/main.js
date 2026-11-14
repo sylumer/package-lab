@@ -28,6 +28,7 @@ import { PRESETS, planVariants, runResult, summarise, experimentFindings } from 
 import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
 import { stall, stallFinding } from './stall.js'
+import { PROFILES, launchProfile, apiAt, fillParams } from './profiles.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -56,6 +57,7 @@ const mime = name => (MIME[extname(name).slice(1).toLowerCase()] ?? 'application
 
 let ui = null, web = null, pkg = null, config = {}, active = null, nextId = 1
 let served = null   // the files the running content is served from: the package's, with any overrides on top
+let pkgHeaders = {} // the run's LMS profile's headers on package files: its own, and its CSP
 let tracing = null  // a traced run (options.trace): { files: path → instrumented entry served in this run, untraced: path → why, sites }
 const runs = new Map()
 const runsDir = () => { const d = join(app.getPath('userData'), 'runs'); mkdirSync(d, { recursive: true }); return d }
@@ -72,7 +74,8 @@ function serve(req) {
   let path
   try { path = decodeURIComponent(u.pathname) } catch { path = u.pathname }
   const headers = { 'Cache-Control': 'no-store' }
-  if (path.startsWith('/__lab/')) {
+  // lab://run/ is the LMS's origin; lab://content/ serves the same package from another origin (a profile's contentOrigin: other).
+  if (path.startsWith('/__lab/') && u.host === 'run') {
     const name = path.slice(7)
     if (name === 'config.json') return new Response(JSON.stringify(config), { headers: { ...headers, 'Content-Type': 'application/json' } })
     if (HOST_FILES.has(name)) return new Response(readFileSync(new URL('./host/' + name, import.meta.url)), { headers: { ...headers, 'Content-Type': mime(name) } })
@@ -81,6 +84,7 @@ function serve(req) {
     const p = path.slice(5), files = served ?? pkg.files, file = files.get(p) ?? (p === '' || p.endsWith('/') ? files.get(p + 'index.html') : undefined)
     const buf = file && tracing ? traceFile(files.has(p) ? p : p + 'index.html', file) : file
     if (buf) {
+      Object.assign(headers, pkgHeaders)
       headers['Content-Type'] = mime(p); headers['Accept-Ranges'] = 'bytes'
       const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('Range') || '')
       if (range && (range[1] || range[2])) {
@@ -174,9 +178,10 @@ function watchPopups(wc, extra, ropts, wins) {
   })
 }
 
-async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace }) {
+async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace, headers }) {
   await finish()
   served = files ?? null   // only now: the previous run may have been using the old set
+  pkgHeaders = headers ?? {}
   tracing = trace ? { files: new Map(), untraced: new Map(), sites: pkg.sites } : null
   const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
@@ -312,19 +317,21 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
   const m = pkg.analysis.manifest, item = m.items[itemIndex]
   if (!item?.res) throw new Error('That item has nothing to launch.')
   const res = item.res
-  const files = overlayFiles(pkg.files, o.files)
-  let url = res.path ? 'lab://run/pkg/' + res.path.split('/').map(encodeURIComponent).join('/') + res.query : res.href
-  const params = item.params.replace(/^[?&]/, '')
-  if (params) url += (url.includes('?') ? '&' : '?') + params
-  if (o.launchParams) url += (url.includes('?') ? '&' : '?') + o.launchParams
+  const files = overlayFiles(pkg.files, o.files), prof = launchProfile(o)
+  // The package's address on the LMS's origin, or on another one (the profile's contentOrigin).
+  let url = res.path ? `lab://${prof.contentOrigin === 'other' ? 'content' : 'run'}/pkg/` + res.path.split('/').map(encodeURIComponent).join('/') + res.query : res.href
   const expose = !o.expose || o.expose === 'manifest' ? m.version : o.expose
-  const cmi = givenCmi ?? (o.resume && pkg.lastCmi ? pkg.lastCmi : null)
-  config = { expose, depth: o.depth, opener: o.opener, launch: url, cmi,
-    runtime: { edition: m.edition === '2nd' ? '2nd edition' : '', learner: { id: 'learner-1', name: 'Learner, Test' }, credit: 'credit', mode: 'normal',
+  const cmi = givenCmi ?? (o.resume && pkg.lastCmi ? pkg.lastCmi : null), learner = { id: 'learner-1', name: 'Learner, Test' }
+  // The manifest's parameters, then the profile's (placeholders filled in), then the launch option's.
+  const params = [item.params.replace(/^[?&]/, ''), fillParams(prof.launchParams, { scoid: item.id, attempt: cmi ? 2 : 1, learner: learner.id }), o.launchParams]
+  for (const q of params.filter(Boolean)) url += (url.includes('?') ? '&' : '?') + q
+  config = { expose, depth: prof.frames.depth, opener: prof.launch === 'popup', launch: url, cmi, frames: prof.frames, popupDelay: prof.popupDelay, apiDelay: prof.apiDelay, apiAt: apiAt(prof),
+    runtime: { edition: m.edition === '2nd' ? '2nd edition' : '', learner, credit: 'credit', mode: 'normal', limits: prof.limits, commit: prof.commit, slowMs: prof.slowMs,
       launchData: item.launchData, mastery: item.mastery, maxTime: item.maxTime, timeLimitAction: item.timeLimitAction, completionThreshold: item.completionThreshold } }
-  const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o }
-  await begin({ kind: 'package', label: `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}`,
-    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace })
+  const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o, profile: prof }
+  const headers = { ...prof.headers, ...(prof.csp ? { 'Content-Security-Policy': prof.csp } : {}) }
+  await begin({ kind: 'package', label: `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${prof.name !== 'generic' ? ' · ' + prof.name : ''}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}`,
+    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers })
   return true
 }
 
@@ -502,6 +509,7 @@ const handlers = {
     return { binary: false, diff: unified(orig?.toString('utf8') ?? '', now.toString('utf8')) || '(no differences)', added: !orig }
   },
   'experiment-presets': () => Object.keys(PRESETS),
+  profiles: () => PROFILES,
   'experiment-start': o => experimentStart(o),
   'experiment-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
   'discover-start': o => discoverStart(o),

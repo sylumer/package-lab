@@ -94,6 +94,8 @@ These come from following everything the launch page loads (see **Boot path** in
 | The content found the API but never called it | error | Something after the lookup stopped it | Look at the first error after the lookup |
 | The content set its own window.API or API_1484_11 | error if calls went to it, otherwise warning | A preview or standalone shim: nothing is saved | Find the setting (preview, offline, standalone) that makes it do this, and turn it off in the export |
 | The content's top window is on another site | info | Wrappers that search `window.top` fail here | |
+| The content can't reach the LMS from another origin | error | The content runs on another origin than the LMS window that holds the API (a profile with **Content origin: other**, as LMSs that serve content from a separate domain or CDN do, or a sandbox). The browser refused its lookups of the API through `parent`, `top` or `opener` with a `SecurityError`. The evidence lists each refused lookup with its frame and the line that made it. When this appears, "looked for *API* and found nothing" doesn't, since this says why | The LMS and the content must share an origin: have the LMS serve the package from its own domain. Otherwise the content needs a cross-domain wrapper that talks to the LMS with `postMessage` |
+| The LMS frame's sandbox has no allow-same-origin | error | The frame holding the content has a `sandbox` attribute (a profile's **Sandbox**) without `allow-same-origin`, so the content gets an opaque origin of its own (`null`): it can't reach the API and can't keep cookies or storage. Without `allow-scripts` none of its scripts run at all | Add `allow-same-origin` and `allow-scripts` to the sandbox in the LMS's settings or player template, or remove it |
 
 ## From a run: requests and errors
 
@@ -133,7 +135,7 @@ These appear only when the content called the API.
 | *N* API calls failed | warning | Calls that returned `false` or an error code; an LMS rejects the same values | Look at the values and error text |
 | The content never called LMSFinish / Terminate | warning | Many LMSs save only when the session ends properly. A timed run stops before the learner leaves, so this is expected there | Leave the course the normal way, then stop |
 | The content never committed | info | Progress is lost if the browser closes first | |
-| Suspend data is *N* characters | error if over the limit, warning near it | SCORM 1.2 allows 4,096 characters, 2004 allows 64,000; more is truncated or rejected and resuming breaks | Publish as SCORM 2004, or reduce what is saved |
+| Suspend data is *N* characters | error if over the limit, warning near it | SCORM 1.2 allows 4,096 characters, 2004 allows 64,000 (or the run's LMS profile's own limit, which the detail names); more is truncated or rejected and resuming breaks | Publish as SCORM 2004, or reduce what is saved |
 | The content never set exit | info | Without `suspend`, many LMSs start a new attempt next time | |
 | The content never reported completion | info | | |
 
