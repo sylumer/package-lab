@@ -184,6 +184,24 @@ Then the other tabs:
 because content often catches its own LMS errors and fails silently. Turn it off if a course throws so many that it
 slows down.
 
+### Timeline
+
+The **Timeline** tab shows one run on a single time axis, so you can see what happened together. Each row is one kind of
+event:
+
+- **Milestones**: the steps the run reached (the same ones as the strip at the top of Findings).
+- **Requests**: a bar from the request to its response. Red when it failed.
+- **Scripts parsed**: when each script was read.
+- **API calls**: a dot per call, coloured by kind (start, read, write, save, finish).
+- **Errors**: a red tick per error.
+- **What showed**: a dot each time the content's screen was checked. Hover it to see the text the content showed.
+- **Trace activity**: a sparkline of how busy the traced run was. It appears only for a traced run.
+
+Use the **Zoom** slider to look closer, and the **Start** slider to move along the run when zoomed in. Hover an item for
+its details. Click an item to open the tab it came from (Network for a request, API for a call, and so on). The tab
+opens at the top, not at that row. Steps the run didn't reach are listed under the chart. The report has the same
+timeline as a picture.
+
 ## Testing a theory: launch settings
 
 Change one setting, launch again, and see whether the content gets further.

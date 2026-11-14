@@ -873,6 +873,40 @@ ids, in order, are `launched`, `scripts`, `shown`, `looked`, `found`, `initialis
 `main.js` adds `milestones` to each package run (the run summary the interfaces get, and the saved run) and puts
 `milestoneFinding` first in its findings. Saved runs from before this have no `milestones`; the report computes them.
 
+## Timeline (P4.2)
+
+`src/timeline.js` is pure. `timelineModel(trace, milestones?)` gives the lanes of one run, in ms from the start of the
+run. `milestones` defaults to `milestones(trace, null)`, so a run without a boot graph still works. Missing lists (WebKit
+runs have no `scripts` or `exec`) count as empty.
+
+```js
+{
+  range: { from: 0, to: duration },          // duration: trace.duration or the latest time in the trace
+  lanes: {
+    milestones: [{ t, id, label, title }],   // reached steps with a time, in STEPS order
+    requests:   [{ t, t2, failed, label, title }],  // t2: the response or failure time (requests[].end); = t when unknown
+    scripts:    [{ t, label, title }],
+    api:        [{ t, kind, label, title }], // kind: init, get, set, commit, finish or other (callKind)
+    errors:     [{ t, kind, label, title }], // kind: uncaught or caught
+    dom:        [{ t, label, title }],       // probe dom reports of content frames; label is the text sample (80 characters)
+    density:    [count per bucket]           // only when the trace has exec: 80 buckets; a repeat record (4) counts its n
+  },
+  milestones: [step],                        // the ten steps, as milestones() gives them
+  missing: [label],                          // steps not reached
+  size                                       // the bucket size in ms, when density is there
+}
+```
+
+`timelineView(trace, milestones?, { from, to })` is what the interfaces use: the same items cut to a window, each with `x`
+(and `x2` for a bar) as a fraction of the window (0 to 1), the density buckets as `{ x, w, n }`, `ticks` (`{ x, label }`
+at round steps), and `lanes` as `{ id, label, tab, items }` in the order of `LANES`. `tab` is the tab a click opens.
+
+The Timeline tab calls the `timeline` handler (`{ run, from?, to? }`) in `main.js`, because the UI is a classic script and can't
+import the module; it draws the SVG itself with `createElementNS`. The report draws the whole run with `timelineHtml`
+(`report.js`), every label through `esc`. Requests get an `end` time from the recorder (on the response or the failure); older
+saved runs and WebKit runs have none, so their bars are dots. The milestone lane is in STEPS order, not sorted by time: a
+step's time is its first evidence, and `shown` can come before `initialised`.
+
 ## Why it stalled
 
 `src/stall.js` is pure. `stall(trace, milestones)` returns `{ stalled, pollers, unanswered, listeners, pending, last,

@@ -34,6 +34,7 @@ import { drill, watchPins } from './drilldown.js'
 import { PROFILES, launchProfile } from './profiles.js'
 import { serveRequest, WEBKIT_ORIGINS, launchPlan, withProgress, runAnalysis, savedRun } from './launch.js'
 import { codeViewAsync } from './codeview.js'
+import { timelineView } from './timeline.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -674,6 +675,13 @@ const handlers = {
     if (!text && !r) text = packageText(path) ?? ''
     if (!text) return { path, empty: true, otherPackage: !own }
     return codeViewAsync({ text, path, line, col, mode, source, trace: r?.trace, readFile: own ? packageText : () => null })
+  },
+  // The Timeline tab (P4.2): one run's lanes in the window asked for (from, to in ms; default the whole run). See src/timeline.js.
+  timeline: ({ run, from, to }) => {
+    const r = runs.get(+run); if (!r) throw new Error('Choose a run.')
+    const win = {}
+    for (const [k, v] of [['from', from], ['to', to]]) if (v != null) { win[k] = Number(v); if (!Number.isFinite(win[k])) throw new Error('The window needs numbers of milliseconds.') }
+    return timelineView(r.trace, r.milestones ?? undefined, win)
   },
   'live-input': e => live.input(e),
   // Macros: Record clicks starts keeping live-input events; Save macro stops and returns them. 'macro-from-run' returns the clicks and keys the probe saw in a run's content frames.

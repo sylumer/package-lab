@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { macro: [], cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 // ---- The code view: every file:line in evidence opens it (src/ui/codeview.js draws it, the code-view handler fills it) ----
 const codePane = $('code-pane')
@@ -414,6 +414,60 @@ let liveStop = null
 function liveWatch(on) {
   if (on && !liveStop) liveStop = lab.live(f => { liveImg.src = 'data:image/jpeg;base64,' + f.jpeg; liveInfo.textContent = `${f.w} × ${f.h} · ${secs(f.t)} s into the run` })
   else if (!on && liveStop) { liveStop(); liveStop = null; liveImg.removeAttribute('src'); liveInfo.textContent = 'Waiting for the first frame…' }
+}
+// ---- Timeline (P4.2): one run's events on a time axis. The lanes come from the timeline handler (src/timeline.js), for the window the
+// sliders ask for; a click on an item opens its tab (not its row). The SVG is built with createElementNS, text as text nodes. ----
+const TL_NS = 'http://www.w3.org/2000/svg', TL_W = 1000, TL_LABEL = 150, TL_ROW = 26, TL_LABEL_GAP = 110
+const tlShort = s => String(s ?? '').length > 22 ? String(s).slice(0, 21) + '…' : String(s ?? '')
+const svgEl = (tag, attrs = {}, ...kids) => { const e = document.createElementNS(TL_NS, tag); for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v); e.append(...kids); return e }
+function timelineBody(d) {
+  const P = TL_W - TL_LABEL - 10, H = 24 + d.lanes.length * TL_ROW + 4, X = x => TL_LABEL + x * P
+  const svg = svgEl('svg', { class: 'tl-svg', viewBox: `0 0 ${TL_W} ${H}`, role: 'img', 'aria-label': 'Timeline of the run' })
+  svg.addEventListener('click', e => { const t = e.target.closest?.('[data-tab]'); if (t) { st.tab = t.dataset.tab; render() } })
+  for (const k of d.ticks) svg.append(svgEl('line', { class: 'tl-grid', x1: X(k.x), x2: X(k.x), y1: 20, y2: H - 2 }), svgEl('text', { class: 'tl-tick', x: X(k.x), y: 12, 'text-anchor': 'middle' }, k.label))
+  d.lanes.forEach((L, i) => {
+    const y0 = 24 + i * TL_ROW, mid = y0 + TL_ROW / 2
+    svg.append(svgEl('line', { class: 'tl-sep', x1: 0, x2: TL_W, y1: y0, y2: y0 }), svgEl('text', { class: 'tl-lane', x: 6, y: mid + 4 }, L.label))
+    for (const it of L.items) {
+      const tab = { 'data-tab': L.tab }, tip = svgEl('title', {}, it.title)
+      if (L.id === 'density') { if (!it.n) continue; const hh = (TL_ROW - 6) * it.n / L.max; svg.append(svgEl('rect', { class: 'tl-density', x: X(it.x), y: y0 + TL_ROW - 3 - hh, width: Math.max(1, it.w * P), height: hh, ...tab }, tip)); continue }
+      if (L.id === 'requests') { svg.append(svgEl('rect', { class: `tl-bar tl-${it.failed ? 'bad' : 'other'}`, x: X(it.x), y: mid - 4, width: Math.max(2, (it.x2 - it.x) * P), height: 8, ...tab }, tip)); continue }
+      const cls = L.id === 'api' ? it.kind : L.id === 'errors' ? 'bad' : L.id === 'milestones' ? 'ms' : L.id === 'dom' ? 'dom' : 'script'
+      svg.append(svgEl('circle', { class: `tl-dot tl-${cls}`, cx: X(it.x), cy: mid, r: 4, ...tab }, tip))
+    }
+    // Milestone labels, left to right; one is left out when it would run into the one before it.
+    if (L.id === 'milestones') { let last = -Infinity; for (const it of [...L.items].sort((a, b) => a.x - b.x)) if (X(it.x) - last >= TL_LABEL_GAP) { svg.append(svgEl('text', { class: 'tl-mlabel', x: X(it.x) + 6, y: mid + 4 }, tlShort(it.label))); last = X(it.x) } }
+  })
+  return [h('p', { class: 'muted' }, `Showing ${secs(d.range.from)} s to ${secs(d.range.to)} s of ${secs(d.range.duration)} s.`), svg]
+}
+// Asks the handler for a window (none: the whole run) and redraws only the SVG, so a slider keeps its place while it is dragged.
+function loadTimeline(win) {
+  const tl = st.tl, seq = ++tl.seq
+  lab.invoke('timeline', { run: tl.run, ...win }).then(d => {
+    if (seq !== tl.seq || st.tl !== tl) return
+    tl.data = d; tl.error = null
+    const holder = document.querySelector('#view .tl-holder')
+    if (holder) holder.replaceChildren(...timelineBody(d)); else render()
+  }).catch(e => { if (seq !== tl.seq || st.tl !== tl) return; tl.error = e.message || String(e); render() })
+}
+VIEWS.Timeline = () => {
+  const r = run(); if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
+  // The key changes when the run does (more events, a longer run), so the timeline is worked out again.
+  const key = `${r.id}:${r.trace.duration}:${r.trace.probe.length}:${r.trace.requests.length}`
+  if (!st.tl || st.tl.key !== key) { st.tl = { key, run: r.id, zoom: 1, pan: 0, data: null, error: null, seq: 0 }; loadTimeline({}) }
+  const tl = st.tl
+  if (tl.error) return [h('p', { class: 'bad' }, `The timeline couldn’t be worked out: ${tl.error}`), h('button', { type: 'button', class: 'secondary', onclick: () => { st.tl = null; render() } }, 'Try again')]
+  const d = tl.data
+  if (!d) return h('p', { class: 'muted' }, 'Working out the timeline…')
+  const dur = d.range.duration, winOf = () => { const span = dur / tl.zoom, from = (dur - span) * tl.pan; return { from, to: from + span } }
+  const zoom = h('input', { type: 'range', min: 1, max: 20, step: 0.1, value: tl.zoom, oninput: e => { tl.zoom = +e.target.value; panEl.disabled = tl.zoom <= 1; loadTimeline(tl.zoom > 1 ? winOf() : {}) } })
+  const panEl = h('input', { type: 'range', min: 0, max: 1000, value: Math.round(tl.pan * 1000), disabled: tl.zoom <= 1 ? true : null, oninput: e => { tl.pan = e.target.value / 1000; loadTimeline(winOf()) } })
+  return [h('div', { class: 'tl-controls' },
+    h('label', {}, 'Zoom ', zoom),
+    h('label', {}, 'Start ', panEl)),
+    h('p', { class: 'muted' }, 'Hover an item for details. Click it to open the tab it came from (the tab, not the row).'),
+    h('div', { class: 'tl-holder' }, ...timelineBody(d)),
+    d.missing.length ? h('p', { class: 'muted' }, `Not reached: ${d.missing.join(', ')}.`) : null]
 }
 VIEWS.Live = () => st.running ? livePanel : h('p', { class: 'muted' }, 'Launch an item to see it here. It runs on the Mac; this view lets you watch and use it from here.')
 

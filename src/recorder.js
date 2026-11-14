@@ -23,7 +23,7 @@ export function nameAt(source, line, col) {
 }
 
 // A popup recorder's list moved onto the run's clock: each item's t, and for the execution trace each event's time.
-export const shiftTimes = (list, items, off) => items.map(x => ({ ...x, ...(x.t === undefined ? {} : { t: x.t + off }),
+export const shiftTimes = (list, items, off) => items.map(x => ({ ...x, ...(x.t === undefined ? {} : { t: x.t + off }), ...(x.end === undefined ? {} : { end: x.end + off }),
   ...(list === 'exec' ? { events: x.events.map(e => Array.isArray(e) ? [e[0] + off, ...e.slice(1)] : e) } : {}) }))
 
 // What the probe is told about storage (P2.2): only blocking needs anything from here; partitioned is done by the main process.
@@ -128,8 +128,8 @@ export class Recorder {
           return this.send('Fetch.continueRequest', { requestId: p.requestId }, sid).catch(() => {})
         })
       }
-      case 'Network.responseReceived': { const r = this.req.get(p.requestId); if (r) { r.status = p.response.status; r.mime = p.response.mimeType } return }
-      case 'Network.loadingFailed': { const r = this.req.get(p.requestId); if (r) { r.failed = p.blockedReason || p.corsErrorStatus?.corsError || p.errorText; r.canceled = p.canceled } return }
+      case 'Network.responseReceived': { const r = this.req.get(p.requestId); if (r) { r.status = p.response.status; r.mime = p.response.mimeType; r.end = t } return }
+      case 'Network.loadingFailed': { const r = this.req.get(p.requestId); if (r) { r.failed = p.blockedReason || p.corsErrorStatus?.corsError || p.errorText; r.canceled = p.canceled; r.end = t } return }
       // A dialog is recorded. During a learner-style leave (P2.4, `leaving`) a beforeunload prompt is accepted, as a learner confirming would; otherwise it is left as it was.
       case 'Page.javascriptDialogOpening':
         this.push('probe', { type: 'dialog', kind: p.type, message: String(p.message ?? '').slice(0, 200), leaving: !!this.leaving, t, sid })

@@ -90,3 +90,16 @@ ol.chain li { margin: .35em 0; }
 .cv-line.hl { outline: 1px solid var(--warn); outline-offset: -1px; box-shadow: inset 3px 0 0 var(--warn); }
 .cv-key { padding: 0 6px; border-radius: 3px; } .cv-key.cov-ran { background: color-mix(in srgb, #2a8a3e 25%, transparent); } .cv-key.cov-none { background: color-mix(in srgb, var(--err) 28%, transparent); } .cv-key.cov-part { background: color-mix(in srgb, var(--warn) 30%, transparent); } .cv-modes { display: inline-flex; gap: 4px; }
 .cv input[type=number] { width: 7ch; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
+/* Timeline (P4.2) */
+.tl-controls { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin: 4px 0; }
+.tl-controls input[type=range] { width: 220px; vertical-align: middle; }
+.tl-svg { width: 100%; height: auto; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tl-svg [data-tab] { cursor: pointer; }
+.tl-grid, .tl-sep { stroke: var(--line); }
+.tl-tick, .tl-lane { fill: var(--muted); }
+.tl-bar, .tl-density { fill: var(--muted); opacity: .6; }
+.tl-bar.tl-bad { fill: var(--err); opacity: 1; }
+.tl-dot { stroke: none; }
+.tl-init { fill: #1e7d32; } .tl-get { fill: #1565c0; } .tl-set { fill: #7b1fa2; } .tl-commit { fill: #00838f; } .tl-finish { fill: #5d4037; }
+.tl-other, .tl-script { fill: var(--muted); } .tl-ms { fill: #1e7d32; } .tl-bad { fill: var(--err); } .tl-dom { fill: #ff9800; }
+.tl-mlabel { fill: var(--fg); font-size: 11px; }

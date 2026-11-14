@@ -4,6 +4,7 @@
 import { bootRun } from './bootpath.js'
 import { isLab } from './diff.js'
 import { milestones } from './milestones.js'
+import { timelineView } from './timeline.js'
 import { excerptor, urlPath } from './codeview.js'
 import { entryBuffer, isText } from './overlay.js'
 
@@ -51,6 +52,10 @@ const CSS = `
 .sl pre.sl-diff { margin: 4px 0; padding: 6px 0; overflow-x: auto; background: var(--sl-code); border-radius: 6px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .sl .sl-diff div { padding: 0 8px; white-space: pre; } .sl .sl-code .hl { background: color-mix(in srgb, var(--sl-warn) 25%, transparent); } .sl .sl-ln { display: inline-block; min-width: 4ch; margin-right: 1.5ch; text-align: right; color: var(--sl-muted); user-select: none; }
 .sl .sl-excerpt { margin: 4px 0; } .sl .sl-finding a { color: inherit; } .sl .sl-diff .add { background: color-mix(in srgb, var(--sl-ok) 20%, transparent); } .sl .sl-diff .del { background: color-mix(in srgb, var(--sl-err) 20%, transparent); } .sl .sl-diff .hunk { color: var(--sl-muted); }
+.sl .sl-tl { width: 100%; height: auto; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sl .sl-tl-grid { stroke: var(--sl-line); } .sl .sl-tl-sep { stroke: var(--sl-line); } .sl .sl-tl-tick, .sl .sl-tl-lane { fill: var(--sl-muted); }
+.sl .tl-bar, .sl .tl-density { fill: var(--sl-muted); opacity: .6; } .sl .tl-bar.tl-bad { fill: var(--sl-err); opacity: 1; }
+.sl .tl-dot { stroke: none; } .sl .tl-mlabel { fill: var(--sl-muted); font-size: 11px; } .sl .tl-init { fill: var(--sl-ok); } .sl .tl-get { fill: #1565c0; } .sl .tl-set { fill: #7b1fa2; } .sl .tl-commit { fill: #00838f; } .sl .tl-finish { fill: #5d4037; } .sl .tl-other, .sl .tl-script { fill: var(--sl-muted); } .sl .tl-ms { fill: var(--sl-ok); } .sl .tl-bad { fill: var(--sl-err); } .sl .tl-dom { fill: #ff9800; }
 `
 const PAGE_CSS = `
 :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d9d9de; --err: #c4281c; --warn: #a15c00; --ok: #1e7d32; --code: #f0f0f3; color-scheme: light dark; }
@@ -131,6 +136,29 @@ ${bh ? `<h2>Behaviour</h2><p><b>${esc(bh.summary)}</b></p>${milestoneHtml(bh.a.m
 <h2>New findings (in B, not in A)</h2>${findingsHtml(d.findings.added)}<h2>Findings gone (in A, not in B)</h2>${findingsHtml(d.findings.gone)}`
 }
 
+// The run's timeline as a static SVG (P4.2): the same lanes as the Timeline tab, whole run, hover titles.
+const TL_W = 1000, TL_LABEL = 150, TL_ROW = 26, TL_LABEL_GAP = 110
+const tlShort = s => String(s ?? '').length > 22 ? String(s).slice(0, 21) + '…' : String(s ?? '')
+export function timelineHtml(trace, ms) {
+  if (!trace) return ''
+  const d = timelineView(trace, ms), H = 24 + d.lanes.length * TL_ROW + 4, P = TL_W - TL_LABEL - 10, px = x => TL_LABEL + x * P, X = x => px(x).toFixed(1)
+  const ticks = d.ticks.map(k => `<line class="sl-tl-grid" x1="${X(k.x)}" x2="${X(k.x)}" y1="20" y2="${H - 2}"/><text class="sl-tl-tick" x="${X(k.x)}" y="12" text-anchor="middle">${esc(k.label)}</text>`).join('')
+  const rows = d.lanes.map((L, i) => {
+    const y0 = 24 + i * TL_ROW, mid = y0 + TL_ROW / 2
+    const items = L.items.map(it => {
+      const tip = `<title>${esc(it.title)}</title>`
+      if (L.id === 'density') { const hh = (TL_ROW - 6) * it.n / L.max; return it.n ? `<rect class="tl-density" x="${X(it.x)}" y="${(y0 + TL_ROW - 3 - hh).toFixed(1)}" width="${Math.max(1, it.w * P).toFixed(1)}" height="${hh.toFixed(1)}">${tip}</rect>` : '' }
+      if (L.id === 'requests') return `<rect class="tl-bar tl-${it.failed ? 'bad' : 'other'}" x="${X(it.x)}" y="${mid - 4}" width="${Math.max(2, (it.x2 - it.x) * P).toFixed(1)}" height="8">${tip}</rect>`
+      const cls = L.id === 'api' ? it.kind : L.id === 'errors' ? 'bad' : L.id === 'milestones' ? 'ms' : L.id === 'dom' ? 'dom' : 'script'
+      return `<circle class="tl-dot tl-${cls}" cx="${X(it.x)}" cy="${mid}" r="4">${tip}</circle>`
+    }).join('')
+    let labels = ''
+    if (L.id === 'milestones') { let last = -Infinity; for (const it of [...L.items].sort((a, b) => a.x - b.x)) if (px(it.x) - last >= TL_LABEL_GAP) { labels += `<text class="tl-mlabel" x="${(px(it.x) + 6).toFixed(1)}" y="${mid + 4}">${esc(tlShort(it.label))}</text>`; last = px(it.x) } }
+    return `<line class="sl-tl-sep" x1="0" x2="${TL_W}" y1="${y0}" y2="${y0}"/><text class="sl-tl-lane" x="6" y="${mid + 4}">${esc(L.label)}</text>${items}${labels}`
+  }).join('')
+  return `<div class="sl-scroll"><svg class="sl-tl" viewBox="0 0 ${TL_W} ${H}" role="img" aria-label="Timeline of the run">${ticks}${rows}</svg></div>${d.missing.length ? `<p class="sl-muted">Not reached: ${esc(d.missing.join(', '))}.</p>` : ''}`
+}
+
 function milestoneHtml(list) {
   return `<h2>Milestones</h2><p class="sl-mono">${list.map(s => `<span class="${s.reached ? '' : 'sl-bad'}" title="${esc(s.evidence)}">${s.reached ? '✓' : '✗'} ${esc(s.label)}</span>`).join(' &nbsp; ')}</p>`
 }
@@ -144,7 +172,7 @@ export function renderReport(o) {
   const body = `<div class="sl"><style>${CSS}</style>
 ${o.fragment ? '' : `<h1>${esc(o.title ?? 'SCORM Lab report')}</h1>`}${o.subtitle ? `<p class="sl-muted">${esc(o.subtitle)}</p>` : ''}
 <div class="sl-verdict"><span class="sl-badge ${v.sev}">${v.sev === 'warn' ? 'warning' : v.sev === 'ok' ? 'ok' : 'error'}</span><b>${esc(v.title)}</b><span class="sl-muted">${c.errors} errors · ${c.warnings} warnings · ${c.info} notes</span></div>
-${run?.kind === 'package' ? milestoneHtml(Array.isArray(run.milestones) ? run.milestones : milestones(run.trace, run.boot)) : ''}<h2>Findings</h2>${findingsHtml(findings, ex)}
+${run?.kind === 'package' ? milestoneHtml(Array.isArray(run.milestones) ? run.milestones : milestones(run.trace, run.boot)) : ''}${run?.trace ? `<h2>Timeline</h2>${timelineHtml(run.trace, run.milestones ?? undefined)}` : ''}<h2>Findings</h2>${findingsHtml(findings, ex)}
 ${run ? runHtml(run) : ''}
 ${o.boot ?? run?.boot ? `<h2>Loading path</h2>${bootHtml(o.boot ?? run.boot, run?.trace)}` : ''}
 ${pkgTable}

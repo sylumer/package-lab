@@ -14,7 +14,8 @@ import { analyze, pkgPath } from '../src/analyze.js'
 import { matchByPath, branchDiff, compare, segs } from '../src/diff.js'
 import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
 import { bootGraph, resolveRef } from '../src/bootpath.js'
-import { renderReport, verdict } from '../src/report.js'
+import { renderReport, verdict, timelineHtml } from '../src/report.js'
+import { timelineModel, timelineView } from '../src/timeline.js'
 import { normaliseOptions, cliCommand, VIEWPORTS, viewportName } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
@@ -1240,6 +1241,46 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.ok(correct(mm).files !== mm && mm.get('imsmanifest.xml').toString().includes('schemaversion>2004'), 'export: the original files are not changed')
   assert.equal(fixedName('a b.ZIP'), 'a b-fixed.zip')
 }
+// Timeline (P4.2): lanes from hand-made traces (the good run's lanes are checked in the end-to-end part).
+{
+  const tr = {
+    duration: 4000,
+    requests: [{ t: 100, end: 400, url: 'lab://run/pkg/a.js', method: 'GET', status: 200 }, { t: 500, url: 'https://x.test/b', method: 'GET', failed: 'net::ERR', status: undefined }],
+    scripts: [{ t: 150, url: 'lab://run/pkg/a.js', length: 10 }], console: [],
+    exceptions: [{ t: 900, text: 'boom' }], caught: [{ t: 950, text: 'c', uncaught: false }],
+    probe: [{ type: 'api', t: 200, call: 'LMSInitialize', el: '', result: 'true' }, { type: 'api', t: 300, call: 'LMSSetValue', el: 'cmi.core.lesson_status', result: 'true' },
+      { type: 'dom', t: 1200, frame: 'lab://content/pkg/index.html', text: 40, media: 0, sample: 'Hello' }, { type: 'dom', t: 5, frame: 'lab://run/__lab/host.html', text: 9 }],
+    exec: [{ t: 0, sid: '', frame: 'x', events: [[10, 1, 0], [1500, 4, 0, 1, 3]] }],
+  }
+  const ms = [{ id: 'launched', label: 'Launch page loaded', reached: true, t: 100, evidence: 'e' }, { id: 'scripts', label: 'Scripts loaded', reached: false, t: null, evidence: '' }]
+  const m = timelineModel(tr, ms)
+  assert.deepEqual(m.range, { from: 0, to: 4000 }, 'timeline: range is the run')
+  assert.deepEqual(m.lanes.api.map(a => a.kind), ['init', 'set'], 'timeline: API calls coloured by kind')
+  assert.deepEqual(m.lanes.requests.map(r => [r.t, r.t2, r.failed]), [[100, 400, false], [500, 500, true]], 'timeline: request bars, failed flag')
+  assert.deepEqual(m.lanes.errors.map(e => e.kind), ['uncaught', 'caught'], 'timeline: errors')
+  assert.deepEqual(m.lanes.dom.map(d => d.label), ['Hello'], 'timeline: SCORM Lab’s own page is not a DOM snapshot')
+  assert.deepEqual(m.lanes.milestones.map(x => x.id), ['launched'], 'timeline: reached milestones only')
+  assert.deepEqual(m.missing, ['Scripts loaded'], 'timeline: missing milestones named')
+  assert.equal(m.lanes.density.reduce((a, b) => a + b, 0), 5, 'timeline: density counts events and repeats')
+  assert.equal(m.size, 50, 'timeline: 80 buckets over the run')
+  assert.equal(timelineModel({ probe: [], requests: [] }).lanes.density, undefined, 'timeline: no density when untraced')
+  const empty = timelineModel({})
+  assert.ok(empty.range.to > 0 && empty.lanes.api.length === 0 && empty.lanes.requests.length === 0, 'timeline: empty trace')
+  const w = timelineView(tr, ms, { from: 0, to: 1000 })
+  const lane = (v, id) => v.lanes.find(l => l.id === id).items
+  assert.deepEqual(lane(w, 'api').map(a => +a.x.toFixed(2)), [0.2, 0.3], 'timeline view: calls as fractions of the window')
+  assert.equal(lane(timelineView(tr, ms, { from: 0, to: 800 }), 'errors').length, 0, 'timeline view: items outside the window are left out')
+  assert.equal(lane(w, 'requests')[0].x2, 0.4, 'timeline view: a bar that ends inside the window')
+  assert.equal(lane(timelineView(tr, ms, { from: 1000, to: 2000 }), 'density').length, 20, 'timeline view: density buckets in the window')
+  assert.deepEqual(lane(timelineView(tr, ms, { from: 1000, to: 2000 }), 'dom').map(d => +d.x.toFixed(1)), [0.2], 'timeline view: a DOM snapshot at 1200 in 1000 to 2000')
+  assert.ok(timelineView(tr, ms).ticks.length >= 4, 'timeline view: ticks')
+  const cut = timelineView(tr, ms, { from: 150, to: 1000 }).lanes.find(l => l.id === 'requests').items[0]
+  assert.ok(cut.x === 0, 'timeline view: a bar that starts before the window starts at 0')
+  assert.deepEqual([timelineView(tr, ms, { from: -5, to: 9e9 }).range], [{ from: 0, to: 4000, duration: 4000 }], 'timeline view: the window is clamped to the run')
+  const bad = timelineHtml({ duration: 1000, requests: [], probe: [], exceptions: [{ t: 10, text: '<img onerror=x>' }], caught: [] }, [])
+  assert.ok(bad.includes('&lt;img onerror=x&gt;') && !bad.includes('<img'), 'timeline report: text is escaped')
+  assert.ok(bad.startsWith('<div class="sl-scroll"><svg class="sl-tl"'), 'timeline report: static SVG')
+}
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -1351,6 +1392,13 @@ if (!process.argv.includes('--unit')) {
   assert.ok(hs.waitingFor.unanswered[0].message === '“player-ready”' && hs.waitingFor.listeners.length === 1, 'handshake: --json waitingFor: ' + JSON.stringify(hs.waitingFor))
   assert.match(node(['run', handshake, '--wait', '3']).stdout, /WARNING {2}The content was waiting for: a reply to “player-ready”/, 'handshake: the CLI prints the finding')
   assert.ok(g.milestones.every(m => !m.reached || m.t === null || m.t >= 0 && m.t < 20000) && saved.trace.probe.filter(p => p.type === 'api').every(p => p.t < 20000), 'good: milestone and API times are relative to the start of the run')
+  { // The Timeline (P4.2) on the good run, which the run above saved: ten API calls, and every milestone up to wrote, in order.
+    const tlg = timelineModel(saved.trace, saved.milestones), want = STEPS.slice(0, idx('wrote') + 1).map(s => s[0])
+    assert.equal(tlg.lanes.api.length, 10, 'timeline: ten API calls: ' + tlg.lanes.api.map(a => a.label))
+    const got = tlg.lanes.milestones.map(m => m.id)
+    assert.deepEqual(got.filter(id => want.includes(id)), want, 'timeline: milestones up to wrote, in order: ' + got)
+    assert.ok(want.every(id => tlg.lanes.milestones.some(m => m.id === id && m.t != null)), 'timeline: every step up to wrote has a time')  // not sorted by time: a step's time is its first evidence ("shown" is any DOM report)
+  }
   if (slow) {
     const pl = run(polling, '--wait', '4'), plf = pl.findings.find(f => /was waiting for/.test(f.title))
     assert.ok(plf && plf.evidence.some(e => /polls every 250 ms/.test(e) && (process.env.SCORM_LAB_FORCE_TRACE === '1' || !/tests/.test(e))), 'polling: a poller without a trace: ' + titles(pl))
