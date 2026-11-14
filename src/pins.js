@@ -9,7 +9,7 @@ const short = u => String(u ?? '').replace(/lab:\/\/run\/pkg\//g, '')
 const PATH = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/
 const DENIED = new Set(['window', 'self', 'top', 'parent', 'globalThis', 'document', 'location', 'API', 'API_1484_11', 'constructor', 'prototype', '__proto__'])
 export const USER_AGENT = 'navigator.userAgent'
-export const PIN_MODES = ['force']   // P1.5 adds 'watch' (record reads and writes without forcing a value)
+export const PIN_MODES = ['force', 'watch']   // watch (P1.5): record reads and writes without forcing a value
 // Returns why a pin path can't be used, or '' if it can.
 export function pinPathProblem(path) {
   if (typeof path !== 'string' || !PATH.test(path)) return 'must be a name like previewMode or a dotted path like config.mode'
@@ -21,7 +21,7 @@ export function pinPathProblem(path) {
   return ''
 }
 // The text put ahead of probe.js: the pins that apply in a frame are read from window.__labPins, which the probe deletes.
-export const pinPrefix = pins => pins?.length ? `globalThis.__labPins = ${JSON.stringify(pins.filter(p => p.path !== USER_AGENT && p.mode === 'force'))};\n` : ''
+export const pinPrefix = pins => pins?.length ? `globalThis.__labPins = ${JSON.stringify(pins.filter(p => p.path !== USER_AGENT))};\n` : ''
 export const userAgentPin = pins => pins?.find(p => p.path === USER_AGENT && typeof p.value === 'string')?.value
 
 // The line number of a top-level (column 0) let or const declaration of name in text, or 0. A pin can't replace one:
@@ -73,8 +73,10 @@ export function buildAnswer(r) {
 }
 
 // ---- Findings ----
+// Watch pins (P1.5's drill-down) only record: they get no findings here.
 export function pinFindings(trace, options = {}) {
-  const out = [], probe = trace.probe ?? [], pins = options.pins ?? [], responses = options.responses ?? []
+  const pins = (options.pins ?? []).filter(p => p.mode !== 'watch'), forced = new Set(pins.map(p => p.path))
+  const out = [], probe = (trace.probe ?? []).filter(p => !/^pin-/.test(p.type) || forced.has(p.path)), responses = options.responses ?? []
   if (pins.length) {
     const writes = probe.filter(p => p.type === 'pin-write'), failed = probe.filter(p => p.type === 'pin-failed')
     const seen = new Set(), where = p => p.stack?.[0] ? short(p.stack[0]) : 'somewhere unknown'

@@ -101,7 +101,7 @@ function scanScript(text) {
 // Top-level names a script defines and the ones it uses as soon as it runs (column-0 statements, so not inside
 // functions). Minified files are skipped: everything is on one line. Known libraries declare their globals.
 const LIBS = [[/jquery/i, ['$', 'jQuery']], [/require(\.min)?\.js$/i, ['require', 'define', 'requirejs']], [/underscore|lodash/i, ['_']], [/backbone/i, ['Backbone']], [/swfobject/i, ['swfobject']]]
-function globals(text, name = '') {
+export function globals(text, name = '') {
   const defs = new Set(LIBS.filter(([re]) => re.test(name)).flatMap(([, g]) => g)), uses = new Map()
   const lines = text.split('\n'), minified = text.length > 2000 && text.length / lines.length > 300
   for (const m of text.matchAll(/\b(?:window|self|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)/g)) defs.add(m[1])

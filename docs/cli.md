@@ -47,6 +47,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `run <package.zip>` | Launches an item in a hidden browser, records it, and reports what went wrong |
 | `experiment <package.zip>` | Runs the same launch several ways, one after another, and prints how far each got |
 | `discover <package.zip>` | Works out what the content wants from its server: the fields it reads from each answer, and a stand-in response |
+| `drill <package.zip>` | Why it stopped: the decisions that led to the dead end, their values, and where each `undefined` came from |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
@@ -197,7 +198,7 @@ responses of an options file or `--options-from` run.
 every decision (`if`, `? :`, `&&`, `||`, `??`, `switch`, loop tests) with its result and the values it tested. The
 content behaves as it does without it. The saved run (`--out`) holds the events in `trace.exec`, the table of places
 they refer to in `trace.sites`, and the original files in `trace.sources`; the desktop and web interfaces show them in
-the **Execution** tab. See [Tracing the code](user-guide.md#tracing-the-code) for what it covers, and the
+the **Execution** tab. To have the decisions explained, use [`drill`](#drill). See [Tracing the code](user-guide.md#tracing-the-code) for what it covers, and the
 [developer guide](developer-guide.md#the-execution-trace) for the format. To read the last events from a script:
 
 ```bash
@@ -319,6 +320,57 @@ code that made it, each field with its type, how it was used and where, and the 
 - `rounds` is the number of answered runs; `complete` is true when the last one read nothing new (so it ran with the
   final stand-in), false when `--rounds` stopped it.
 - `standIn` is the last run, against the run with no answer: `better` is 1 if it got further, -1 if less far, 0 if the same.
+
+Exit status is 0 unless the command fails.
+
+## drill
+
+Why it stopped: the decisions that led to where the run stopped, each with its values, and where each `undefined`
+came from. See [Why it stopped](user-guide.md#why-it-stopped-drill-down) for how it works.
+
+```bash
+scorm-lab drill course.zip [--item n] [--json] [--out folder] [run options]
+```
+
+It runs the item with tracing (whatever `--trace` says), works out the chain, and, if the chain has values it needs to
+watch (global names such as `player` or `config.cdn`), runs it again with those values watched (`pins` with
+`mode: "watch"`, added to your own). The run options apply to both runs. Progress goes to standard error.
+
+| Option | Default | What it does |
+|---|---|---|
+| `--out` | none | A folder: the runs (`01-traced.json`, `02-watched.json`) and the result as `drill.json` (the same as `--json`) |
+| `--json` | off | Prints JSON (below) instead of text |
+
+The text output is the milestones line, the numbered chain under **Why it stopped**, up to ten other decisions whose
+other branch never ran, and the findings (see [From a drill-down](findings.md#from-a-drill-down)).
+
+`drill --json`:
+
+```json
+{
+  "package": "course.zip", "item": { "number": 1, "…": "…" }, "base": { "trace": true, "…": "…" }, "furthest": "shown",
+  "traced": true, "deadEnd": { "t": 193, "quiet": false, "events": 9 },
+  "decisions": [{ "t": 193, "site": 4, "file": "boot.js", "line": 3, "at": "boot.js:3", "kind": "if", "code": "if (window.player && player.ready)",
+    "result": 0, "said": "false", "operands": [{ "code": "window.player", "value": "undefined", "preview": ["undefined"] }],
+    "untaken": { "lines": ["start()"], "calls": ["start()"] } }],
+  "chain": [
+    { "n": 1, "text": "In boot.js:3, `if (window.player && player.ready)` was false because `window.player` was undefined. …", "short": "…", "at": "boot.js:3", "decision": "if (window.player && player.ready)", "level": 1 },
+    { "n": 6, "text": "`config` came from data/config.json (200), which has no `cdn`.", "short": "data/config.json has no `cdn`", "cause": "file", "file": "data/config.json", "field": "cdn" }
+  ],
+  "cause": { "kind": "file", "text": "…" },
+  "summary": "`if (window.player && player.ready)` was false (boot.js:3) ← … ← data/config.json has no `cdn`",
+  "watch": ["player", "config.cdn"], "watched": true,
+  "findings": ["…"],
+  "out": null
+}
+```
+
+- `decisions` are the key decisions: in the dead end, and their other branch is code that never ran. `result` is 1 or
+  0 (for `??`, 1 means it had a value); `untaken` is the first lines of the other branch and the functions it calls that never ran.
+- `chain[].cause`, on the last step only, is `request` (with `request`), `script` (with `file`), `file` (with `file`
+  and `field` if one is missing) or `version`. `cause` is null when the chain ends somewhere SCORM Lab can't name;
+  a step with `discover: true` is a server response that Discover can work out.
+- `watch` is the paths the watch run watched; `watched` is false when there was nothing to watch (one run only).
 
 Exit status is 0 unless the command fails.
 

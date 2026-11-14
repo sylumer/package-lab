@@ -22,7 +22,7 @@ const UNARY = new Set(['typeof', 'void', '-', '+', '!', '~'])
 const COMPARE = 'switch(o){case void 0:case"??":return a;case"!":return!a;case"===":return a===b;case"!==":return a!==b;case"==":return a==b;case"!=":return a!=b;case"<":return a<b;case"<=":return a<=b;case">":return a>b;case">=":return a>=b;case"in":return a in b;case"instanceof":return a instanceof b}'
 export const PRELUDE = `typeof __labT=="function"||function(g){function d(n,f){Object.defineProperty(g,n,{value:f,configurable:true})}d("__labT",function(){});d("__labR",function(s,v){return v});d("__labC",function(s,a,b,o){${COMPARE}})}(globalThis);`
 
-const clip = (s, n = 120) => { s = s.replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
+export const clip = (s, n = 120) => { s = s.replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const LINE = /\r\n?|[\n\u2028\u2029]/g   // line ends as V8 counts them
 export function lineStarts(text) { const out = [0]; for (const m of text.matchAll(LINE)) out.push(m.index + m[0].length); return out }
 // The index of the last entry <= x in a sorted list (by key).
@@ -242,8 +242,8 @@ export function show(p) {
     default: return p[0]
   }
 }
-const LITERAL = /^(['"`].*['"`]|-?[\d.][\w.]*|true|false|null|undefined|void 0)$/
-const HEAD = { if: t => `if (${t})`, ternary: t => `${t} ? …`, '&&': t => `${t} && …`, '||': t => `${t} || …`, '??': t => `${t} ?? …`, switch: t => `switch (${t})`,
+export const LITERAL = /^(['"`].*['"`]|-?[\d.][\w.]*|true|false|null|undefined|void 0)$/
+export const HEAD = { if: t => `if (${t})`, ternary: t => `${t} ? …`, '&&': t => `${t} && …`, '||': t => `${t} || …`, '??': t => `${t} ?? …`, switch: t => `switch (${t})`,
   while: t => `while (${t})`, 'do-while': t => `do … while (${t})`, for: t => `for (…; ${t}; …)` }
 // One event as a sentence: "if (cfg.lms) → false, cfg.lms = undefined", "startCourse() called".
 export function describe(ev, site) {

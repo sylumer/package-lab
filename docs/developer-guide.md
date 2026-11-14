@@ -13,6 +13,7 @@ How SCORM Lab is built, the formats it reads and writes, and how to change it.
 - [Static analysis](#static-analysis)
 - [The boot graph](#the-boot-graph)
 - [The execution trace](#the-execution-trace)
+- [The drill-down](#the-drill-down)
 - [Findings](#findings)
 - [Adding a finding](#adding-a-finding)
 - [Comparison](#comparison)
@@ -60,6 +61,7 @@ src/
   pins.js               Pins and answers: matching, the probe's prefix, the findings, the CLI's spellings
   shape.js              What the content wants from its server: reads → shape, the discovery loop, its findings
   instrument.js         The execution trace: instrumenting scripts and pages, positions back to the originals, reading events
+  drilldown.js          Why it stopped: key decisions, where each undefined came from, the chain and its finding
   overlay.js            Overrides: the file set a run is served from, and the findings about changed files
   textdiff.js           A small LCS line diff (diffLines, unified)
   milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
@@ -119,7 +121,7 @@ The rest of the file, in order:
   (`active`: window, popups, recorders, launch settings, boot graph, auto-stop timer). Finished runs are kept in a Map
   for the session.
 - **`emit(channel, data)`:** sends to the desktop window over IPC and to web clients over server-sent events.
-  Channels: `package`, `run`, `state`, `probe`, `experiment`, `discover`.
+  Channels: `package`, `run`, `state`, `probe`, `experiment`, `discover`, `drill`.
 - **`begin()` and `finish()`:** open a run window, start the recorder on `about:blank` (the debugger needs a renderer
   before the content loads), then navigate. `finish()` reads the stored data model, stops the recorders (merging
   popups), destroys the windows, computes findings and saves the run.
@@ -141,7 +143,7 @@ and a line in the guides. The shape:
 { expose: 'manifest'|'both'|'1.2'|'2004'|'none', depth: 0–5, opener, resume, caught (bool), auto (s, 0 = until stopped),
   wait (s, headless runs), profile: 'none', browser: 'chromium', viewport: null | { width, height },
   files: { path: { content } | { base64 } },
-  pins: [{ path, value (JSON), frames: 'content'|'all', mode: 'force' }],
+  pins: [{ path, value (JSON), frames: 'content'|'all', mode: 'force' } | { path, frames, mode: 'watch' }],
   responses: [{ match, method?, status, headers, body }], launchParams: 'a=1&b=2', storage: 'normal', trace: false }
 ```
 
@@ -170,6 +172,8 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `experiment-stop` | — | `true`: stops the run in progress and the rest of the experiment (or discovery) |
 | `discover-start` | `{ item, request?, rounds? (1–10, default 5), …launch options (every run's) }` | `true`, at once; progress comes as `discover` events. Throws on bad rounds or pattern, or if a run, experiment or discovery is under way |
 | `discover-stop` | — | `true`: stops the run in progress and the rest of the discovery |
+| `drill-start` | `{ run }` (a run id) | `true`, at once; progress comes as `drill` events (see [The drill-down](#the-drill-down)). Throws if the run isn't a package run, its package isn't the one open, or a run, experiment, discovery or drill-down is under way |
+| `drill-stop` | — | `true`: stops the run in progress and the rest of the drill-down |
 | `stop` | — | The run's id, or null |
 | `compare` | `{ ref, run }` | `{ cmp, findings }` |
 | `open-run` | — | Run summaries (desktop only: opens a dialog) |
@@ -223,6 +227,7 @@ auto-attached target too). It reports through the `__labReport` binding:
 | `{ type: 'api', …, host: true }` | Calls to an API object the probe wrapped: one on a real LMS (references), or content's own object in a package run |
 | `{ type: 'pin-read', path, n, stack }` | Each read of a pinned value (an accessor property). Throttled like lookups |
 | `{ type: 'pin-write', path, value, n, stack }` | Each assignment to a pinned name; the pin ignores it. `value` is a short text preview |
+| `{ type: 'watch-read', path, n, stack }`, `{ type: 'watch-write', path, value, n, stack }` | A watch pin (P1.5): each read and write of the watched value, which passes through unchanged. Throttled like lookups |
 | `{ type: 'pin-failed', path, error }` | The pin couldn't be defined: a frozen object, a name the browser won't redefine |
 | `{ type: 'shape', url, path, use, n, stack }` | From `shape-probe.js`, only in runs that answer with `@probe`: a read of `path` (dotted, from the top of the response) in the response from `url` (`use: 'read'`), or how a missing value was used: `in`, `keys`, `array` (iterated, `length`, an array method called), `string` (a string method called, or turned into a string), `number` (turned into a number), `text` (`+` or `==`). Throttled like lookups per path, use and call site; at most 3,000 per frame |
 | `{ type: 'exec', events, wrapped }` | From `trace-probe.js`, in traced runs only: a batch of execution trace events. The recorder puts these in `trace.exec`, not `trace.probe` |
@@ -354,9 +359,52 @@ The run summary the interfaces get has no `exec` or `sites`; it has `execEvents`
 
 `SCORM_LAB_FORCE_TRACE=1` makes `launchItem` trace every run: the tests use it.
 
+## The drill-down
+
+`src/drilldown.js` is pure (P1.5). `drill({ trace, milestones, files, launch, watch? })` takes a traced run, its
+milestones, the files it was served (`overlayFiles(pkg.files, options.files)`), its `launch` (for the API version) and,
+on the second call, the watch run's trace. Steps:
+
+1. **Sources.** `programs(files)` parses every `.js`/`.mjs` file and each inline script of a page (over a copy of the
+   page with everything else blanked, so positions are page positions) with the vendored acorn, keeping parent links.
+2. **Dead end** (`deadEnd`). All events in time order; the end is the first event after the last reached milestone
+   followed by more than 2 s without events (else the last event); the window is the last 300 events up to it, plus
+   decisions within 1 s of that milestone.
+3. **Key decisions.** The last event of each decision site in the window; its node is found from the site (`if` and
+   `? :` by the test's start, `&&`/`||`/`??` by the left's start and text). `untakenRange` gives the other branch (for an
+   `if` without `else` whose branch exits, the rest of the block); `ran()` says whether it ran: an event at a site
+   inside, else V8's block coverage (the innermost range around its start; inline scripts: events only). Decisions
+   inside another's test (the left of `&&` in an `if`) give their operands to it. Each has its operands (site `args`
+   with their previews; `typeof x` with `'undefined'` counts as `x` undefined), the first lines of the untaken branch
+   and the functions it calls whose sites never started.
+4. **The chain** starts from the last key decision with an `undefined`/`null` operand or a falsy one whose origin is a
+   named cause. `origin()` for an operand path: a local (`findLocal`) that is a parameter of a callback (`.then`,
+   `.onload`, `$.getJSON`…) is the response to the last fetch/XHR request from that file before the decision
+   (`fromResponse`: failed → cause `request`; a package JSON file → the first missing field, cause `file`; a server →
+   "run Discover"); `API`/`API_1484_11` against `launch.expose` → cause `version`; otherwise the path is added to `watch`
+   (if `pinPathProblem` allows it) and, with the watch run, a `watch-write` ends the chain there. Without one, the
+   static `assignments(progs, path)` (assignments, top-level declarations and function declarations, object literal
+   keys under a prefix, `Object.defineProperty`) that never ran are explained by `whyNotRun`: a file that never loaded
+   (a failed request → cause `script`; else the string literal that names it and its guard), or the guard around the
+   assignment (`guardOf`: the nearest `if`, `? :` or `&&`/`||`/`??` branch, or one hop to the first call of the named
+   function around it). The guard's last decision event is explained in turn (`explain`), up to three levels. A dotted
+   path nobody sets is traced through its root's assignments that ran (`fromCode`: a callback parameter, `JSON.parse`
+   or `.json()`, `location.search`, `GetValue`). `globals()` from `bootpath.js` covers names a script defines that
+   acorn can't see (known libraries).
+5. **Result:** `{ traced, deadEnd, decisions, chain: [{ n, text, short, at?, decision?, cause?, request?, file?, field?, discover? }],
+   cause, summary, watch, watched, findings }` (the `drill --json` object in [cli.md](cli.md#drill) without the CLI's
+   fields). The finding's title is `Why it stopped: ` and the steps' `short` texts joined with ` ← `; `error` with a
+   cause, `warn` without. `watchPins(options, paths)` adds the watch pins to a run's own.
+
+Callers run twice: the CLI's `drill` (`runPackage`, then again with `watchPins` if `watch` isn't empty) and `drillStart`
+in `main.js` (in the experiment slot; traces the run again first if it wasn't traced; `runToEnd` for each run). Events
+`drill`: `{ state: 'start', run }`, `{ state: 'step', run, note }`, `{ state: 'done', run, result }` (with `traceRun` and
+`watchRun`, run ids), `{ state: 'error', run, message }`. The UI keeps the latest in `st.drill` and shows it in the
+**Drill-down** tab for that run.
+
 ## Pins and answers
 
-`src/pins.js` is pure. A **pin** is `{ path, value, frames, mode }` in `options.pins` (checked in `options.js`; `mode` is always `'force'` for now, and P1.5's `'watch'` slots in there: `PIN_MODES` in `pins.js`). The recorder puts `globalThis.__labPins = [...]` ahead of `probe.js` (`pinPrefix`, applied through `Page.addScriptToEvaluateOnNewDocument` in every page and iframe); the probe reads and deletes it, drops the pins whose `frames` doesn't cover this frame (`'content'` excludes SCORM Lab's own `lab://run/__lab/` pages) and installs each one. A top-level name becomes an accessor on `window`: the getter returns the value and reports `pin-read`, the setter ignores the assignment and reports `pin-write`, so `var x = …` at the top of a classic script assigns through it. A dotted path is an accessor on the root that, when given an object, installs the next segment on that object, and so on; a frozen object makes `defineProperty` throw, which is reported as `pin-failed`. The accessors are `configurable: true` (the plan said `false`) so that a top-level `let` or `const` in the content creates its own binding instead of a SyntaxError that would stop the whole script; `pinFindings` then recognises that case (the pin was never read or written, and `lexicalDeclaration` finds a column-0 `let`/`const` of the root name in `trace.sources`) and says so. Inline scripts count only if the browser recorded them under their page's URL; a `let` inside a function or an indented block isn't a global and isn't matched. `navigator.userAgent` is the exception: `userAgentPin` gives the value, and the recorder sends `Emulation.setUserAgentOverride` to every session. `location` and the other `navigator` names are refused; `launchParams` goes on the launch URL instead.
+`src/pins.js` is pure. A **pin** is `{ path, value, frames, mode }` in `options.pins` (checked in `options.js`; `mode` is `'force'` or `'watch'`, `PIN_MODES` in `pins.js`). A **watch** pin (`{ path, frames, mode: 'watch' }`, no value; the drill-down adds them) records reads and writes without forcing anything: its leaf is an accessor that passes the value through (or the original accessor's getter and setter), non-enumerable if the name didn't exist until it is written. Intermediate names of dotted paths share one accessor per object and name (`hooks` in `probe.js`), so `config.a` and `config.b` both follow a new `config`, and a watch on `config` itself reports through that shared accessor; pins are installed longest path first for that. `pinFindings` ignores watch pins. The recorder puts `globalThis.__labPins = [...]` ahead of `probe.js` (`pinPrefix`, applied through `Page.addScriptToEvaluateOnNewDocument` in every page and iframe); the probe reads and deletes it, drops the pins whose `frames` doesn't cover this frame (`'content'` excludes SCORM Lab's own `lab://run/__lab/` pages) and installs each one. A top-level name becomes an accessor on `window`: the getter returns the value and reports `pin-read`, the setter ignores the assignment and reports `pin-write`, so `var x = …` at the top of a classic script assigns through it. A dotted path is an accessor on the root that, when given an object, installs the next segment on that object, and so on; a frozen object makes `defineProperty` throw, which is reported as `pin-failed`. The accessors are `configurable: true` (the plan said `false`) so that a top-level `let` or `const` in the content creates its own binding instead of a SyntaxError that would stop the whole script; `pinFindings` then recognises that case (the pin was never read or written, and `lexicalDeclaration` finds a column-0 `let`/`const` of the root name in `trace.sources`) and says so. Inline scripts count only if the browser recorded them under their page's URL; a `let` inside a function or an indented block isn't a global and isn't matched. `navigator.userAgent` is the exception: `userAgentPin` gives the value, and the recorder sends `Emulation.setUserAgentOverride` to every session. `location` and the other `navigator` names are refused; `launchParams` goes on the launch URL instead.
 
 An **answer** is `{ match, method?, status, headers, body }` in `options.responses`. With responses set, `Recorder.setup` calls `Fetch.enable` (all URLs, request stage) on every session. `Fetch.requestPaused` runs `answerFor(responses, url, method)`: the first response that matches (glob or `/regex/flags`, tried on the whole URL, the path with query, and the path) and isn't for `lab://run/__lab/` is sent with `Fetch.fulfillRequest` (`buildAnswer`: base64 body, a content type guessed from the body if none, CORS opened if not set; a body starting `@probe` is a [probing answer](#discovery-what-the-content-wants-from-its-server)); everything else gets `Fetch.continueRequest`. The matching request in `trace.requests` gets `answered: true` and `answeredBy` (the response's index in the list). `networkId` links the paused request to the Network event, which can arrive on either side of it. Responses apply to package runs only, in every frame and popup. `bodyFile` isn't an option: only the CLI reads files (`--answer pattern=@file`, or a response's `bodyFile` in an `--options` file, relative to that file) and it puts the text in `body`; `normaliseOptions` refuses `bodyFile`, so the web handlers can't be made to read a path.
 
@@ -656,7 +704,7 @@ A frame is `{ fn, url, line, col }`. Older runs without `format` (from before ve
 npm test
 ```
 
-`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `SCORM_LAB_FORCE_TRACE=1` so every run is traced). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
+`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `SCORM_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
 `test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
 
 | Fixture | Change | Tests |
@@ -670,6 +718,7 @@ npm test
 | `pinned` | `boot.js` sets `previewMode`, a `config` object and a frozen object itself, and logs what it reads | Pins hold (`previewMode`, `config.mode`, `navigator.userAgent`), the writes are reported with `boot.js`, a frozen object can't be pinned, an unread pin is noted |
 | `lexical` | `boot.js` declares `let previewMode` | The can't-pin finding, and the content keeps its own value |
 | `needs` | `boot.js` fetches `/api/player/config` and starts the lesson only with it; reads `cfg.lms.enabled` (truthiness), `cfg.lms.version` (`=== '2004'`) and `cfg.assets.base` (joined to text) | Discovery: the three fields with the right types, the stand-in reaches past `looked`. Its `boot.js` also runs in the unit tests, in a `vm` context with `shape-probe.js` and stand-ins for `Response`, `XMLHttpRequest` and `fetch`, to test the Proxy and the loop without Electron |
+| `levels` | The lesson starts only if `window.player && player.ready`; `player` is set by `js/player.js`, which `boot.js` loads only if `config.cdn` is set; `config` comes from `data/config.json`, which has no `cdn` | The drill-down's three levels, explained down to the JSON file (`--slow`: CLI and web handlers). Its `boot.js` also feeds the drill-down unit test with hand-made events and coverage |
 | `loader` | Loading screen; `data/config.json` with a trailing comma; `js/next.js` loaded only after the config parses | Invalid JSON; stuck on loading screen; code that loads next never ran |
 
 The end-to-end part covers:
@@ -684,6 +733,9 @@ The end-to-end part covers:
   snippets (short-circuits, getters, optional chaining, `await`, generators, classes and `super`, labelled loops,
   `switch`, comma expressions, arrow bodies, default parameters, directives, ASI, `with`, Proxies…) under `node:vm` as
   they are, instrumented with `trace-probe.js`, and instrumented with only the prelude, and compare results and logs.
+- **Drill-down:** `drill hosted --json` names the failed `/api/player/config` request, with one run (the operand is a local).
+  The unit checks cover operand paths, the branch not taken, the dead end, static assignments, the probe's watch pins
+  under `vm`, and the whole chain for `levels` and `hosted` over hand-made traces.
 - **Live:** a frame appears, a click on **Next** reaches the course (`lesson_location` 2), and stop ends it early.
 - **Web:** 401 without the token, the token exchange, upload, launch with auto-stop, live frames over SSE, the run in
   `state`, saved runs, and `load-run` refusing paths outside the runs folder, the `options` handler building the pin and answer flags and refusing `bodyFile`.

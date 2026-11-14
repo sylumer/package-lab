@@ -16,6 +16,8 @@ import { entryFor } from '../src/overlay.js'
 import { furthest, strip } from '../src/milestones.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { discover, checkDiscover } from '../src/shape.js'
+import { drill, watchPins } from '../src/drilldown.js'
+import { overlayFiles } from '../src/overlay.js'
 import { renderReport, verdict, counts, screens } from '../src/report.js'
 
 const APP_DIR = new URL('..', import.meta.url).pathname
@@ -33,6 +35,7 @@ Commands
   run <package.zip>         Launch an item in a hidden browser, record it, and report what went wrong.
   experiment <package.zip>  Run the same launch several ways, one after another, and show how far each got.
   discover <package.zip>    Work out what the content wants from its server: the fields it reads, and a stand-in response.
+  drill <package.zip>       Why it stopped: the decisions that led to the dead end, their values, and where each undefined came from.
   report <package.zip | run.json>
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
@@ -76,6 +79,10 @@ Options for discover (also the run options above, which set every round's launch
                             request the first run makes to the server's root or another site.
   --rounds <n>              At most this many rounds of answering and watching (1–10). Default 5.
   --out <folder>            Keep each round's run in <folder>, and the result as discovery.json.
+  --json                    Print JSON instead of text.
+
+Options for drill (also the run options above; the first run is always traced)
+  --out <folder>            Keep both runs in <folder>, and the result as drill.json.
   --json                    Print JSON instead of text.
 
 Options for report
@@ -364,6 +371,35 @@ const commands = {
     }
     printFindings(result.findings)
     if (dir) console.log(paint('2', `\nRuns and discovery.json saved in ${dir}`))
+    return 0
+  },
+  // A traced run, then (if the drill-down asks to watch values) the same run with watch pins, then the chain.
+  drill(o) {
+    const pkg = openZip(o._[0]), options = { ...buildOptions(o), trace: true }, item = pickItem(pkg.analysis, o.item), files = overlayFiles(pkg.files, options.files)
+    const dir = o.out ? resolve(o.out) : null
+    if (dir) mkdirSync(dir, { recursive: true })
+    if (!o.json) process.stderr.write(`Tracing ${pkg.name} for ${options.wait} s…\n`)
+    const first = runPackage(pkg, { ...o, out: dir ? join(dir, '01-traced.json') : undefined, live: undefined }, options).run
+    const input = { trace: first.trace, milestones: first.milestones, files, launch: first.launch }
+    let result = drill(input), second = null
+    if (result.watch.length) {
+      if (!o.json) process.stderr.write(`Watching ${result.watch.join(', ')}…\n`)
+      let opts
+      try { opts = normaliseOptions({ ...options, pins: watchPins(options, result.watch) }) } catch (e) { fail(e.message) }
+      second = runPackage(pkg, { ...o, out: dir ? join(dir, '02-watched.json') : undefined, live: undefined }, opts).run
+      result = drill({ ...input, watch: second.trace })
+    }
+    const json = { package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(x => x.index === item.index)), base: options,
+      furthest: first.milestones ? furthest(first.milestones)?.id ?? null : null, ...result, out: dir }
+    if (dir) writeFileSync(join(dir, 'drill.json'), JSON.stringify(json, null, 1))
+    if (o.json) { console.log(JSON.stringify(json, null, 1)); return 0 }
+    printHeader(pkg, item)
+    if (first.milestones) console.log(`Milestones: ${strip(first.milestones)}`)
+    if (result.chain.length) { console.log(paint('1', '\nWhy it stopped')); for (const s of result.chain) console.log(`  ${s.n}. ${s.text}`) }
+    const others = result.decisions.filter(d => !result.chain.some(s => s.at === d.at && s.decision === d.code))
+    if (others.length) { console.log(paint('1', '\nOther decisions whose other branch never ran')); for (const d of others.slice(-10)) console.log(paint('2', `  ${d.at}  ${d.code} → ${d.said}${d.operands.length ? ', ' + d.operands.map(x => `${x.code} = ${x.value}`).join(', ') : ''}`)) }
+    printFindings(result.findings)
+    if (dir) console.log(paint('2', `\nRuns and drill.json saved in ${dir}`))
     return 0
   },
   report(o) {

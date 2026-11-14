@@ -1,7 +1,7 @@
 // Launch options: the one structure for everything that changes how a run is set up. The desktop and web UI, the
 // launch handler, the CLI (flags and --options file) and the saved run's launch.options all use it. Pure; no Electron.
 // Later work packages add fields here and nowhere else. Defaults live here and only here.
-import { pinPathProblem, PIN_MODES, matcher } from './pins.js'
+import { pinPathProblem, PIN_MODES, matcher, USER_AGENT } from './pins.js'
 const DEFAULTS = Object.freeze({
   expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10,
   profile: 'none', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false,
@@ -47,7 +47,7 @@ const check = {
     }
     return Object.fromEntries(out)   // not out[p] = …, which would set the prototype for a path called __proto__
   },
-  // [{ path, value (JSON), frames: 'content' | 'all', mode: 'force' }]
+  // [{ path, value (JSON), frames: 'content' | 'all', mode: 'force' }] or [{ path, frames, mode: 'watch' }]
   pins: (k, v) => {
     if (!Array.isArray(v) || !v.every(obj)) bad(k, 'must be a list of { path, value }')
     if (v.length > MAX_LIST) bad(k, `can hold at most ${MAX_LIST} pins`)
@@ -56,11 +56,13 @@ const check = {
       if (extra.length) bad(k, `has an unknown field: ${extra.join(', ')}`)
       const why = pinPathProblem(x.path)
       if (why) bad(k, `has a path that ${why}: ${JSON.stringify(x.path)}`)
-      if (!Object.hasOwn(x, 'value') || typeof JSON.stringify(x.value) !== 'string') bad(k, `needs a value (any JSON, null included) for ${x.path}`)
-      if (JSON.stringify(x.value).length > MAX_PIN) bad(k, `has a value over ${MAX_PIN / 1024 ** 2} MB for ${x.path}`)
       const frames = x.frames ?? 'content', mode = x.mode ?? 'force'
       if (!['content', 'all'].includes(frames)) bad(k, `needs frames to be content or all for ${x.path}`)
       if (!PIN_MODES.includes(mode)) bad(k, `needs mode to be ${PIN_MODES.join(' or ')} for ${x.path}`)
+      // A watch pin only records reads and writes (P1.5): it has no value, and the user agent can't be watched.
+      if (mode === 'watch') { if (x.path === USER_AGENT) bad(k, `can only force ${x.path}, not watch it`); return { path: x.path, frames, mode } }
+      if (!Object.hasOwn(x, 'value') || typeof JSON.stringify(x.value) !== 'string') bad(k, `needs a value (any JSON, null included) for ${x.path}`)
+      if (JSON.stringify(x.value).length > MAX_PIN) bad(k, `has a value over ${MAX_PIN / 1024 ** 2} MB for ${x.path}`)
       return { path: x.path, value: structuredClone(x.value), frames, mode }
     })
   },

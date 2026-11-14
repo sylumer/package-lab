@@ -26,6 +26,7 @@ import { overlayFiles, overrideList, overrideFinding, overrideProgressFinding, e
 import { unified } from './textdiff.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
 import { discover, checkDiscover } from './shape.js'
+import { drill, watchPins } from './drilldown.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -401,6 +402,39 @@ async function discoverStart({ item, request, rounds = 5, ...rest }) {
   return true
 }
 
+// ---- Drill-down: why a run stopped (see src/drilldown.js) ----
+// For a package run: traced again first if it wasn't, then (if the drill-down asks to watch values) a run with watch
+// pins. It shares the experiment slot. Events 'drill': { state: 'start', run } · { state: 'step', run, note } ·
+// { state: 'done', run, result } · { state: 'error', run, message }. result also has traceRun and watchRun (run ids).
+async function drillStart({ run: id }) {
+  const r = runs.get(+id)
+  if (!r || r.kind !== 'package') throw new Error('Choose a run of a package.')
+  if (experiment || active) throw new Error('Something is already running. Stop it first.')
+  if (!pkg || r.package !== pkg.name) throw new Error('Open that run’s package first.')
+  const base = normaliseOptions({ ...(r.launch.options ?? {}), trace: true }), item = r.launch.itemIndex, job = experiment = { stop: false }
+  emit('drill', { state: 'start', run: r.id })
+  ;(async () => {
+    try {
+      const step = async (note, options) => {
+        emit('drill', { state: 'step', run: r.id, note })
+        const x = job.stop ? null : await runToEnd(item, options)
+        if (job.stop) throw new Error('Stopped.')
+        if (!x) throw new Error('The run didn’t finish.')
+        return x
+      }
+      const traced = r.trace.sites ? r : await step('Running it again with tracing…', base)
+      const input = { trace: traced.trace, milestones: traced.milestones, files: overlayFiles(pkg.files, base.files), launch: traced.launch }
+      let result = drill(input), watched = null
+      if (result.watch.length) {
+        watched = await step(`Watching ${result.watch.join(', ')}…`, normaliseOptions({ ...base, pins: watchPins(base, result.watch) }))
+        result = drill({ ...input, watch: watched.trace })
+      }
+      emit('drill', { state: 'done', run: r.id, result: { ...result, traceRun: traced.id, watchRun: watched?.id ?? null } })
+    } catch (e) { emit('drill', { state: 'error', run: r.id, message: e.message }) } finally { experiment = null }
+  })()
+  return true
+}
+
 // The override for a path, if there is one of its own (not something inherited like “constructor”).
 const override = path => Object.hasOwn(pkg.overrides, path) ? pkg.overrides[path] : undefined
 // A file of the open package (not an override), after checking the path. Undefined for a new file.
@@ -465,6 +499,8 @@ const handlers = {
   'experiment-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
   'discover-start': o => discoverStart(o),
   'discover-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
+  'drill-start': o => drillStart(o),
+  'drill-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
   stop: async () => { const r = await finish(); return r ? r.id : null },
   compare: ({ ref, run }) => {
     const a = runs.get(ref), b = runs.get(run)

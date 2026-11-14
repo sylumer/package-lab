@@ -11,6 +11,7 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 - [Testing a theory: launch settings](#testing-a-theory-launch-settings)
 - [What the content wants from its server](#what-the-content-wants-from-its-server)
 - [Tracing the code](#tracing-the-code)
+- [Why it stopped: drill-down](#why-it-stopped-drill-down)
 - [Testing resume and progress saving](#testing-resume-and-progress-saving)
 - [Comparing with a working copy (optional)](#comparing-with-a-working-copy-optional)
 - [Saved runs](#saved-runs)
@@ -335,6 +336,48 @@ What tracing covers, and what it doesn't:
 The saved run keeps the trace: `trace.exec`, `trace.sites` and the original files in `trace.sources` (see the
 [developer guide](developer-guide.md#saved-run-scorm-lab-run-version-1)). From the command line: `scorm-lab run --trace`.
 
+## Why it stopped: drill-down
+
+The **Drill-down** tab explains, without your help, why a run stopped where it did. Choose a run and click
+**Drill down**. If the run wasn't traced, SCORM Lab runs the item again with tracing; then, if it needs to know where a
+value came from, it runs it once more watching that value. Each run takes as long as **Stop after** (10 s if that is
+**I stop it**), uses the run's own settings, and appears in the runs list. **Stop** stops it.
+
+The answer is a numbered chain, read as a story, and a finding that sums it up in one line:
+
+1. In `boot.js:3`, `if (window.player && player.ready)` was false because `window.player` was undefined. Otherwise it
+   would have run `start()`, which never ran.
+2. `player` was never assigned (watched). It is set at `js/player.js:1`, which is in a file that never loaded.
+3. `js/player.js` is loaded only by `boot.js:9`, which never ran.
+4. `boot.js:9` loads `js/player.js` only when `if (config.cdn)` (`boot.js:7`) is true; it was false because
+   `config.cdn` was undefined.
+5. `config.cdn` was never assigned (watched). `config` was set at `boot.js:6`.
+6. `config` came from `data/config.json` (200), which has no `cdn`.
+
+How it gets there:
+- **The dead end.** The last 300 events before the run went quiet (2 s without any) after its last milestone, and the
+  decisions made within 1 s of that milestone.
+- **Key decisions.** Decisions there whose other branch is code that never ran (from the trace and the browser's
+  coverage). The chain starts from the last one whose values explain it: an `undefined` or `null`, or a false value
+  from somewhere SCORM Lab can name. The others are listed under the chain.
+- **Where a value came from.** SCORM Lab looks for every place in the package that sets it (assignments, declarations,
+  keys in object literals, `Object.defineProperty`) and, in the watch run, which of them ran, when, and with what value.
+  When none ran, it says why: the file never loaded, or a decision kept it from running, and it follows that
+  decision's own `undefined` values, up to three levels. A value can also come from a response (a request's callback
+  or `JSON.parse`), the launch address's query, the LMS (`GetValue`), or a script that defines it.
+- **The finding** is an error when the chain ends at a cause SCORM Lab can name: a failed request, a script that failed
+  or that nothing loads, a JSON file without the field, or an API version the LMS didn't offer. Otherwise it's a
+  warning, and the last step says where to look.
+
+What it can't follow:
+- Names local to a function aren't watched, only read from the code: a function's parameter given to `.then(…)` and
+  the like is taken to be what the last request from that file sent.
+- A server's response isn't visible: run **Discover** on the Server needs tab to see what the content reads from it.
+- In inline scripts of a page, whether code ran is judged from the trace only.
+- A watched name that didn't exist before is seen by `name in window` as there (with the value `undefined`).
+
+From the command line: [`scorm-lab drill`](cli.md#drill).
+
 ## Testing resume and progress saving
 
 1. Launch with **Stop after: I stop it**. Go part-way through, then leave the course the normal way. The API tab
@@ -378,8 +421,9 @@ Runs made by the CLI (`scorm-lab run --out`) and the Concierge module (**Downloa
    mode-switch findings. Looked and found nothing means a version or frame problem: try API **Both**, then frame
    depth, then **In a new window**.
 5. **Calls the API but doesn't save:** look at the progress findings and the **API** tab. Then test resuming as above.
-6. **Not sure why it went that way:** launch again with **Trace the code** on and read the **Execution** tab from the
-   bottom up: the last decisions and their values say which test sent it down the wrong path.
+6. **Not sure why it went that way:** use **Drill down** on the run: it follows the decision that sent it down the
+   wrong path back to its cause. For more, launch again with **Trace the code** on and read the **Execution** tab from
+   the bottom up.
 7. **Its own API object:** the content decided it isn't in an LMS. **Lookups** shows the assignment and the code
    that made it; **Package** lists the mode switches. Find the export setting for an LMS or standalone package.
 

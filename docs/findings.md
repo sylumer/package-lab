@@ -183,6 +183,17 @@ Only after **Discover** on the Server needs tab, or `scorm-lab discover`. See
 | The content didn’t read what *URL* sent | info | SCORM Lab answered the request and saw nothing read from the answer. The content may ignore it, stop before reading it, or read it in a way SCORM Lab doesn't follow (a Blob, a stream, a worker) | Look at the code that made the request (the evidence) |
 | The content made no requests to a server | info | Its first run made no fetch or XHR request to the server's root or another site | Nothing to discover. If it should have, check how far it got first |
 
+## From a drill-down
+
+Only after **Drill down** on the Drill-down tab, or `scorm-lab drill`. See [Why it stopped](user-guide.md#why-it-stopped-drill-down).
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| Why it stopped: *chain* | error | The title is the chain in one line, each step the reason for the one before (`←`). The evidence numbers the steps: the decision that kept the content from code that never ran, with its values; where each `undefined` came from (an assignment, or one that never ran and the decision that kept it from running, up to three levels); and the cause at the end, which SCORM Lab can name: a request that failed, a script that failed or that nothing loads, a JSON file without the field, or an API version the LMS didn't offer | The fix depends on the cause: answer the request, add the field with a file override, check the script, or offer the other API version |
+| Why it stopped: *chain* | warning | The same, but the last step isn't a cause SCORM Lab can name: a value local to a function, a response from a server SCORM Lab can't see, a query parameter, a value from the LMS, something nothing in the package sets, or a value set too late | Read the code in the last step. For a server response, run Discover |
+| Why it stopped: no decision led to code that never ran | info | In the last part of the run, every decision's other branch ran at some point, or had nothing to run | Look at the Execution tab for the last events before the run went quiet |
+| Why it stopped: nothing to drill into | info | The run had no trace, or the trace has no decisions in the package's scripts | Drill down on a traced run |
+
 ## From a comparison
 
 Only after **Compare** with a run of a working copy.

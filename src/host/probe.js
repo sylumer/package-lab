@@ -85,21 +85,45 @@
     pinSeen.set(key, n)
     if (n <= 3 || n % 100 === 0) report({ type, path, n, stack: s, ...extra })
   }
-  const pinAt = (obj, segs, pin) => {
-    const [key, ...rest] = segs
+  // A dotted path's intermediate names share one accessor per object and name (hooks), so several pins under one root
+  // (config.a, config.b) all follow a new object assigned to it. A watch pin (P1.5) passes values through and reports
+  // watch-read and watch-write; on a name that another pin goes through, the shared accessor reports for it.
+  // ponytail: a watched name that didn't exist yet is a non-enumerable accessor, so `name in obj` says yes; a Proxy would avoid that.
+  const hooks = new WeakMap()
+  const leaf = (obj, key, pin) => {
+    const hook = hooks.get(obj)?.get(key)
+    if (pin.mode === 'watch' && hook) { hook.watch.push(pin.path); return }
+    if (pin.mode === 'watch') {
+      const d = Object.getOwnPropertyDescriptor(obj, key)
+      let v = d && 'value' in d ? d.value : undefined
+      Object.defineProperty(obj, key, { configurable: true, enumerable: d ? d.enumerable : false,
+        get() { pinNote('watch-read', pin.path); return d && d.get ? d.get.call(this) : v },
+        set(x) { pinNote('watch-write', pin.path, { value: preview(x) }); if (d && d.set) d.set.call(this, x); else { v = x; if (!d) Object.defineProperty(obj, key, { enumerable: true }) } } })
+      return
+    }
+    Object.defineProperty(obj, key, { configurable: true, enumerable: true,
+      get() { pinNote('pin-read', pin.path); return pin.value },
+      set(v) { pinNote('pin-write', pin.path, { value: preview(v) }) } })
+  }
+  const pinAt = (obj, segs, pin, prefix = '') => {
+    const [key, ...rest] = segs, here = prefix ? prefix + '.' + key : key
     try {
-      if (!rest.length) {
-        Object.defineProperty(obj, key, { configurable: true, enumerable: true,
-          get() { pinNote('pin-read', pin.path); return pin.value },
-          set(v) { pinNote('pin-write', pin.path, { value: preview(v) }) } })
-        return
-      }
+      if (!rest.length) return leaf(obj, key, pin)
+      let m = hooks.get(obj)
+      if (!m) hooks.set(obj, m = new Map())
+      const hook = m.get(key)
+      if (hook) { hook.list.push([rest, pin]); const v = obj[key]; if (v && typeof v === 'object') pinAt(v, rest, pin, here); return }
+      const h = { list: [[rest, pin]], watch: [] }
+      m.set(key, h)
       let held = obj[key]
-      if (held && typeof held === 'object') pinAt(held, rest, pin)
-      Object.defineProperty(obj, key, { configurable: true, enumerable: true, get: () => held,
-        set(v) { held = v; if (v && typeof v === 'object') pinAt(v, rest, pin) } })
+      if (held && typeof held === 'object') pinAt(held, rest, pin, here)
+      Object.defineProperty(obj, key, { configurable: true, enumerable: true,
+        get() { for (const w of h.watch) pinNote('watch-read', w); return held },
+        set(v) { for (const w of h.watch) pinNote('watch-write', w, { value: preview(v) }); held = v; if (v && typeof v === 'object') for (const [r, p] of h.list) pinAt(v, r, p, here) } })
     } catch (e) { report({ type: 'pin-failed', path: pin.path, error: String(e.message || e).slice(0, 200) }) }
   }
+  // Longer paths first, so a watched name that another pin goes through finds the shared accessor already there.
+  pins.sort((a, b) => b.path.split('.').length - a.path.split('.').length)
   const held = pins.map(pin => { const root = pin.path.split('.')[0]; pinAt(window, [root, ...pin.path.split('.').slice(1)], pin); return [pin, root, Object.getOwnPropertyDescriptor(window, root)?.get] })
   // Content that redefines a pinned name (defineProperty, delete, a function declaration) replaces the pin: say so once the page has loaded.
   addEventListener('load', () => { for (const [pin, root, get] of held) if (get && Object.getOwnPropertyDescriptor(window, root)?.get !== get) report({ type: 'pin-failed', path: pin.path, error: 'the content redefined ' + root + ' after the pin was set, so the pin no longer applies' }) })

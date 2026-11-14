@@ -22,6 +22,7 @@ import { STEPS, milestones, furthest, firstMissing, milestoneFinding, progress, 
 import { probeBody, shapePrefix, requestPattern, serverRequests, sourceHint, shapeReads, inferShape, discover, discoverFindings, checkDiscover } from '../src/shape.js'
 import { servedBody } from '../src/pins.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, show, traceFindings } from '../src/instrument.js'
+import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import vm from 'node:vm'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
@@ -116,6 +117,31 @@ const NEEDS_BOOT = `fetch('/api/player/config').then(function (r) { if (!r.ok) t
 `
 const needs = fixture('needs', d => {
   writeFileSync(join(d, 'boot.js'), NEEDS_BOOT)
+  sub(d, 'lesson.html', '<script src="lesson.js" defer></script>', '<script src="lesson.js" defer></script><script src="boot.js" defer></script>')
+  sub(d, 'lesson.js', /\nstart\(\)\s*$/, '\n')
+})
+
+// levels (P1.5): the lesson starts only if window.player is ready; player is set by js/player.js, which boot.js loads only
+// if config.cdn is set; config comes from data/config.json, which has no cdn. The drill-down must explain it to the JSON file.
+const LEVELS_BOOT = `var config = {}
+function begin() {
+  if (window.player && player.ready) start()
+}
+fetch('data/config.json').then(function (r) { return r.json() }).then(function (c) {
+  config = c
+  if (config.cdn) {
+    var s = document.createElement('script')
+    s.src = 'js/player.js'
+    s.onload = begin
+    document.head.appendChild(s)
+  } else setTimeout(begin, 100)
+})
+`
+const levels = fixture('levels', d => {
+  mkdirSync(join(d, 'js')); mkdirSync(join(d, 'data'))
+  writeFileSync(join(d, 'data', 'config.json'), '{ "start": true }\n')
+  writeFileSync(join(d, 'js', 'player.js'), 'window.player = { ready: true }\n')
+  writeFileSync(join(d, 'boot.js'), LEVELS_BOOT)
   sub(d, 'lesson.html', '<script src="lesson.js" defer></script>', '<script src="lesson.js" defer></script><script src="boot.js" defer></script>')
   sub(d, 'lesson.js', /\nstart\(\)\s*$/, '\n')
 })
@@ -246,7 +272,7 @@ for (const [o, re] of [[{ nope: 1 }, /Unknown option: nope/], [{ nope: 1, other:
   [{ profile: '' }, /profile/], [{ browser: 'webkit' }, /browser/], [{ viewport: { width: 1 } }, /viewport/], [{ viewport: { width: 0, height: 5 } }, /viewport/], [{ files: [] }, /files/],
   [{ files: { 'a.js': 1 } }, /files/], [{ pins: {} }, /pins/], [{ pins: [1] }, /pins/], [{ responses: 'x' }, /responses/],
   [{ pins: [{ path: 'a b', value: 1 }] }, /pins.*path/], [{ pins: [{ path: 'a' }] }, /pins.*value/], [{ pins: [{ path: 'a', value: undefined }] }, /pins.*value/], [{ pins: [{ path: 'a', value: 1, frames: 'top' }] }, /frames/],
-  [{ pins: [{ path: 'a', value: 1, mode: 'watch' }] }, /mode/], [{ pins: [{ path: 'a', value: 1, nope: 1 }] }, /unknown field: nope/], [{ pins: [{ path: 'API', value: 1 }] }, /can’t pin API/],
+  [{ pins: [{ path: 'a', value: 1, mode: 'nope' }] }, /mode/], [{ pins: [{ path: 'navigator.userAgent', mode: 'watch' }] }, /watch/], [{ pins: [{ path: 'a', value: 1, nope: 1 }] }, /unknown field: nope/], [{ pins: [{ path: 'API', value: 1 }] }, /can’t pin API/],
   [{ pins: [{ path: 'location.search', value: 'a' }] }, /launch parameters/], [{ pins: [{ path: 'navigator.language', value: 'a' }] }, /navigator\.userAgent/], [{ pins: [{ path: 'a.__proto__.b', value: 1 }] }, /pins/],
   [{ responses: [{ body: 'x' }] }, /match/], [{ responses: [{ match: '/(/', body: 'x' }] }, /pattern/], [{ responses: [{ match: '/a/', status: 99 }] }, /status/], [{ responses: [{ match: 'a', body: 1 }] }, /body/],
   [{ responses: [{ match: 'a', headers: { x: {} } }] }, /headers/], [{ responses: [{ match: 'a', bodyFile: 'x.json' }] }, /command line/], [{ responses: [{ match: 'a', nope: 1 }] }, /unknown field/],
@@ -360,6 +386,21 @@ assert.deepEqual(pt(/tried to change/).evidence, ['previewMode = true from boot.
 assert.deepEqual(pt(/never read/).evidence, ['nobody = 1']); assert.equal(pt(/never read/).sev, 'info', 'pins: never read is a note, and neither the user agent nor a failed pin is listed')
 assert.match(pt(/Couldn’t pin locked\.a/).detail, /frozen/); assert.match(pt(/Couldn’t pin lex: .*let or const/).evidence[0], /boot\.js:2/); assert.match(pt(/Couldn’t pin lex/).fix, /file override/)
 assert.equal(pt(/Answered 1 request/).evidence[0], 'GET lab://run/api/x → 200'); assert.deepEqual(pt(/matched no request/).evidence, ['/never'])
+// Watch pins (P1.5): no value, go to the probe, and get no findings of their own.
+assert.deepEqual(normaliseOptions({ pins: [{ path: 'config.cdn', mode: 'watch', value: 1 }] }).pins, [{ path: 'config.cdn', frames: 'content', mode: 'watch' }], 'options: a watch pin has no value')
+assert.equal(pinPrefix([{ path: 'a', frames: 'content', mode: 'watch' }]), 'globalThis.__labPins = [{"path":"a","frames":"content","mode":"watch"}];\n', 'pins: watch pins go to the probe')
+assert.deepEqual(pinFindings(trace({ probe: [{ type: 'pin-failed', path: 'w', error: 'x' }] }), { pins: [{ path: 'w', frames: 'content', mode: 'watch' }] }), [], 'pins: watch pins get no findings')
+assert.deepEqual(watchPins({ pins: [{ path: 'a', value: 1, frames: 'content', mode: 'force' }] }, ['b']).map(p => p.path + ' ' + p.mode), ['a force', 'b watch'], 'drill: watch pins added to the run’s own')
+{
+  // The probe's watch pins under vm (window as a plain object: vm's global object bypasses accessors).
+  const reports = [], ctx = vm.createContext({ location: { href: 'lab://run/pkg/a.html' }, document: { referrer: '', addEventListener() {} }, addEventListener() {}, setTimeout() {}, __labReport: x => reports.push(JSON.parse(x)) })
+  vm.runInContext('window = {}; window.__labPins = ' + JSON.stringify([{ path: 'player', frames: 'content', mode: 'watch' }, { path: 'config', frames: 'content', mode: 'watch' }, { path: 'config.cdn', frames: 'content', mode: 'watch' }, { path: 'config.x', value: 5, frames: 'content', mode: 'force' }]), ctx)
+  vm.runInContext(readFileSync(new URL('../src/host/probe.js', import.meta.url), 'utf8'), ctx)
+  const got = vm.runInContext("window.config = {}; window.config = { a: 1 }; window.config.cdn = 'c'; window.player = { ready: true }; JSON.stringify([window.player.ready, window.config.cdn, window.config.x, Object.keys(window.config), 'nope' in window])", ctx)
+  assert.equal(got, '[true,"c",5,["a","cdn","x"],false]', 'watch: values pass through; a force pin under the same root still holds')
+  assert.deepEqual(reports.filter(r => r.type === 'watch-write').map(r => `${r.path}=${r.value}`), ['config={}', 'config={"a":1}', 'config.cdn=c', 'player={"ready":true}'], 'watch: writes reported')
+  assert.ok(reports.some(r => r.type === 'watch-read' && r.path === 'config.cdn'), 'watch: reads reported')
+}
 assert.deepEqual(pinFindings(trace(), {}), []); assert.deepEqual(pinFindings(trace(), normaliseOptions()), [], 'pins: none set, nothing said')
 assert.ok(runFindings(pinTrace, { kind: 'package', itemType: 'asset', options: pinOpts }).some(f => /tried to change a pinned value/.test(f.title)), 'pins: runFindings includes them')
 assert.ok(!runFindings(pinTrace, { kind: 'reference', options: pinOpts }).some(f => /pinned/.test(f.title)), 'pins: not for a reference')
@@ -626,6 +667,48 @@ assert.match(instrumentHtml('<script>if (</script><script>if (b) 1</script>').er
 }
 assert.deepEqual(traceFindings({ sites: [], untraced: [{ file: 'big.js', why: 'over 2 MB' }], truncated: { exec: true }, exec: [{ events: [[0, 1, 0]] }] }).map(f => f.title), ['1 script file was not traced', 'The execution trace is incomplete'], 'trace findings')
 assert.deepEqual(traceFindings({ probe: [] }), [], 'trace findings: only for traced runs')
+// Drill-down (P1.5): the pure parts over hand-made traces.
+assert.deepEqual(['window.player', 'cfg?.lms.version', 'a[0]', 'f()', "self['x'].y", 'typeof a'].map(codePath), ['player', 'cfg.lms.version', null, null, 'x.y', null], 'drill: operand paths')
+{
+  const progs = programs(new Map([['a.js', 'var cfg = { lms: { on: 1 } }\nObject.defineProperty(window, "flag", { value: 1 })\nif (x) { y = 1 } else z()\nif (!r) throw 1\nnext()']]))
+  assert.deepEqual(assignments(progs, 'cfg.lms.on').map(a => a.at), ['a.js:1'], 'drill: a key in an object literal'); assert.deepEqual(assignments(progs, 'flag').map(a => a.at), ['a.js:2'], 'drill: defineProperty')
+  const ifs = progs[0].all.filter(n => n.type === 'IfStatement'), src = progs[0].text, txt = r => r && src.slice(r.start, r.end)
+  assert.deepEqual([txt(untakenRange(progs[0], ifs[0], 1)), txt(untakenRange(progs[0], ifs[0], 0)), txt(untakenRange(progs[0], ifs[1], 1)), untakenRange(progs[0], ifs[1], 0) && txt(untakenRange(progs[0], ifs[1], 0))], ['z()', '{ y = 1 }', 'next()', 'throw 1'], 'drill: the branch not taken')
+  const ev = (t, kind = 3) => ({ ev: [t, kind, 0, 1] })
+  assert.deepEqual(deadEnd([ev(10), ev(20), ev(3000), ev(3100)], [{ reached: true, t: 0 }]), { from: 0, to: 1, near: [], end: 20, quiet: true }, 'drill: the dead end stops where the run went quiet')
+  assert.equal(deadEnd(Array.from({ length: 400 }, (_, i) => ev(i)), []).from, 100, 'drill: the last 300 events')
+}
+{
+  // levels, by hand: the sites from the instrumenter, the events and coverage the run would record.
+  const ins = instrument(LEVELS_BOOT, { file: 'boot.js' }), id = (kind, text) => ins.sites.findIndex(s => s.kind === kind && s.text === text)
+  const files = new Map([['boot.js', LEVELS_BOOT], ['js/player.js', 'window.player = { ready: true }\n'], ['data/config.json', '{ "start": true }']])
+  const off = s => LEVELS_BOOT.indexOf(s), cdnBlock = off('{\n    var s'), startCall = off('start()')
+  const tr = trace({ sites: ins.sites, scripts: [{ url: 'lab://run/pkg/boot.js' }], requests: [{ t: 80, type: 'Fetch', url: 'lab://run/pkg/data/config.json', method: 'GET', status: 200, from: [{ url: 'lab://run/pkg/boot.js', line: 5 }] }],
+    coverage: [{ url: 'lab://run/pkg/boot.js', fns: [['', [0, LEVELS_BOOT.length, 1, cdnBlock, LEVELS_BOOT.indexOf('} else'), 0, startCall, startCall + 7, 0]]] }],
+    exec: [{ frame: 'lab://run/pkg/lesson.html', events: [[91, 3, id('if', 'config.cdn'), 0, ['undefined']], [193, 1, id('function', 'begin')], [193, 3, id('&&', 'window.player'), 0, ['undefined']], [193, 3, id('if', 'window.player && player.ready'), 0], [193, 2, id('function', 'begin')]] }] })
+  const input = { trace: tr, milestones: [{ id: 'shown', reached: true, t: 90 }], files, launch: { expose: '1.2' } }
+  const first = drill(input)
+  assert.deepEqual(first.watch.sort(), ['config.cdn', 'player'], 'drill: the paths to watch')
+  const r = drill({ ...input, watch: trace() })
+  assert.deepEqual(r.chain.map(s => s.short), ['`if (window.player && player.ready)` was false (boot.js:3)', '`player` never set', 'js/player.js never loaded', '`if (config.cdn)` was false (boot.js:7)', '`config.cdn` never set', 'data/config.json has no `cdn`'], 'drill: the chain down to the JSON file: ' + r.chain.map(s => s.text).join('\n'))
+  assert.match(r.chain[1].text, /never assigned \(watched\)[\s\S]*js\/player\.js:1/, 'drill: the static assignment that never ran')
+  assert.deepEqual([r.cause.kind, r.findings[0].sev, r.findings[0].title.slice(0, 16)], ['file', 'error', 'Why it stopped: '], 'drill: a named cause is an error')
+  // The watch run saw the assignment: the chain stops there.
+  const w = drill({ ...input, watch: trace({ probe: [{ type: 'watch-write', path: 'player', value: '{}', t: 500, stack: ['lab://run/pkg/late.js:3:1'] }] }) })
+  assert.match(w.chain[1].text, /assigned at late\.js:3:1 .*later than the test/, 'drill: an assignment the watch run saw'); assert.equal(w.findings[0].sev, 'warn')
+}
+{
+  // hosted, by hand: if (!r.ok) was true, so return r.json() never ran; r is the response to a request that failed.
+  const BOOT = `fetch('/api/player/config').then(function (r) { if (!r.ok) throw new Error('no config'); return r.json() })\n`
+  const ins = instrument(BOOT, { file: 'boot.js' }), ret = BOOT.indexOf('return r.json')
+  const tr = trace({ sites: ins.sites, scripts: [{ url: 'lab://run/pkg/boot.js' }], requests: [{ t: 50, type: 'Fetch', url: 'lab://run/api/player/config', status: 404, from: [{ url: 'lab://run/pkg/boot.js', line: 1 }] }],
+    coverage: [{ url: 'lab://run/pkg/boot.js', fns: [['', [0, BOOT.length, 1]], ['', [BOOT.indexOf('function (r)'), BOOT.indexOf(' })'), 1, ret - 1, BOOT.indexOf(' })'), 0]]] }],
+    exec: [{ frame: 'x', events: [[60, 3, ins.sites.findIndex(s => s.kind === 'if'), 1, ['boolean', false]]] }] })
+  const r = drill({ trace: tr, milestones: [], files: new Map([['boot.js', BOOT]]) })
+  assert.deepEqual(r.chain.map(s => s.text), ['In boot.js:1, `if (!r.ok)` was true because `r.ok` was false. Otherwise it would have run `return r.json()`.', '`r` came from the response to /api/player/config, which failed (404).'], 'drill: hosted')
+  assert.deepEqual([r.cause.kind, r.watch], ['request', []], 'drill: a local is not watched')
+}
+assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothing to drill into', 'drill: an untraced run')
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -705,6 +788,19 @@ if (!process.argv.includes('--unit')) {
   assert.deepEqual(findingTitles(trRun), findingTitles(hRun), 'trace: the same findings as without it')
   assert.match(node(['report', trOut]).stdout, /<!doctype html>/, 'trace: a traced run makes a report')
   console.log('trace: ok')
+
+  // Drill-down (P1.5): hosted's fallback comes from the failed /api/player/config request. r is a local, so one run.
+  const dh = JSON.parse(node(['drill', hosted, '--wait', '3', '--json']).stdout)
+  assert.ok(dh.chain.some(s => s.request === '/api/player/config' && /failed \(404\)/.test(s.text)) && dh.cause?.kind === 'request' && dh.findings[0].sev === 'error', 'drill: hosted names the failed request: ' + JSON.stringify(dh.chain))
+  assert.ok(dh.chain[0].text.startsWith('In boot.js:4, `if (!r.ok)` was true') && !dh.watched, 'drill: hosted starts at the failed check, without a watch run')
+  if (slow) {
+    const dlDir = join(work, 'drill'), dl = node(['drill', levels, '--wait', '3', '--out', dlDir])
+    assert.match(dl.stdout, /Why it stopped\n\s+1\. In boot\.js:3, `if \(window\.player && player\.ready\)` was false[\s\S]*never assigned \(watched\)[\s\S]*js\/player\.js[\s\S]*`if \(config\.cdn\)`[\s\S]*data\/config\.json \(200\), which has no `cdn`/, 'drill: levels explained to the JSON file: ' + dl.stdout + dl.stderr)
+    const dlSaved = JSON.parse(readFileSync(join(dlDir, 'drill.json'), 'utf8'))
+    assert.ok(dlSaved.watched && dlSaved.watch.includes('player') && existsSync(join(dlDir, '02-watched.json')), 'drill: --out keeps both runs and drill.json')
+    assert.ok(JSON.parse(readFileSync(join(dlDir, '02-watched.json'), 'utf8')).launch.options.pins.some(p => p.mode === 'watch' && p.path === 'config.cdn'), 'drill: the watch run has watch pins')
+  }
+  console.log('drill: ok')
 
   // Overrides: the gated lesson only starts if window.startOK is set. Overriding lesson.js gets it going (CLI), and the
   // override survives a saved run and --options-from.
@@ -932,6 +1028,23 @@ if (!process.argv.includes('--unit')) {
       assert.equal((dText.match(/"state":"round"/g) ?? []).length, 3, 'web: an event per run')
       assert.deepEqual(done.result.requests[0].skeleton, { assets: { base: '' }, lms: { enabled: false, version: '' } }, 'web: the skeleton')
       assert.ok(existsSync(done.result.file) && JSON.parse(readFileSync(done.result.file, 'utf8')).format === 'scorm-lab-discovery', 'web: the result is saved')
+    }
+    // Drill-down over the handlers (slow): an untraced run of levels, traced again, watched, then the chain.
+    if (slow) {
+      assert.equal((await fetch(base + '/api/upload?name=levels.zip', { method: 'POST', headers: H, body: readFileSync(levels) })).status, 200)
+      const n0 = (await invoke('state')).runs.length
+      await invoke('launch', { item: 0, auto: 3 })
+      let plain
+      for (let end = Date.now() + 30000; Date.now() < end; await new Promise(r => setTimeout(r, 500))) { const s4 = await invoke('state'); if (!s4.running && s4.runs.length === n0 + 1) { plain = s4.runs.at(-1); break } }
+      const drEvs = await fetch(base + '/api/events', { headers: H }), drReader = drEvs.body.getReader()
+      let drText = ''
+      assert.equal(await invoke('drill-start', { run: plain.id }), true, 'web: drill-down starts')
+      await assert.rejects(invoke('drill-start', { run: plain.id }), /already running/, 'web: one at a time')
+      while (!/event: drill\ndata: \{"state":"(done|error)".*\n/.test(drText)) drText += new TextDecoder().decode((await drReader.read()).value)
+      drReader.cancel()
+      const dd = JSON.parse(/event: drill\ndata: (\{"state":"done".*)\n/.exec(drText)?.[1] ?? 'null')
+      assert.ok(dd?.result.cause?.kind === 'file' && dd.result.chain.at(-1).file === 'data/config.json' && dd.result.traceRun && dd.result.watchRun, 'web: drill-down result: ' + drText.slice(-800))
+      assert.equal((drText.match(/"state":"step"/g) ?? []).length, forced ? 1 : 2, 'web: traced again (unless every run is traced), then watched')
     }
     console.log('web: ok')
   } finally { server.kill() }

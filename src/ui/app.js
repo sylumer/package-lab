@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', 'Server needs', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
@@ -334,6 +334,32 @@ VIEWS.Execution = () => {
     ...table(['s', 'Where', 'What happened', ''], tail.map(e => [secs(e.t), e.file ? `${e.file}:${e.line}` : '', e.say, e.file ? h('button', { type: 'button', class: 'secondary', onclick: () => showCode(r, e) }, 'Code') : '']))]
 }
 
+// ---- Drill-down: why the selected run stopped, as a numbered chain (src/drilldown.js) ----
+st.drill = { run: null, busy: false, note: '', result: null }
+VIEWS['Drill-down'] = () => {
+  const r = run(), x = st.drill
+  if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
+  if (r.kind !== 'package') return h('p', { class: 'muted' }, 'Drill-down works on runs of a package.')
+  const mine = x.run === r.id, res = mine ? x.result : null
+  const out = [h('p', { class: 'muted small' }, `Follows the decisions that led to where ${r.label} stopped, back to where each value came from. It ${r.trace.execTail ? '' : 'runs the item again with tracing, then '}may run it once more, watching the values it needs to explain (each as long as “Stop after”, 10 s if that is “I stop it”).`),
+    h('div', { class: 'row' }, h('button', { type: 'button', disabled: x.busy || !!st.running, onclick: () => act(async () => {
+      Object.assign(st.drill, { run: r.id, busy: true, note: 'Starting…', result: null }); render()
+      try { await lab.invoke('drill-start', { run: r.id }) } catch (e) { x.busy = false; x.note = ''; throw e }
+    }) }, res ? 'Drill down again' : 'Drill down'),
+    h('button', { type: 'button', class: 'secondary', disabled: !x.busy, onclick: () => act(() => lab.invoke('drill-stop')) }, 'Stop'),
+    h('span', { class: 'muted small' }, mine ? x.note : ''))]
+  if (!res) return out
+  const open = id => id && st.runs.some(q => q.id === id) ? h('button', { type: 'button', class: 'link', onclick: () => { st.sel = id; st.tab = 'Execution'; render() } }, 'open') : null
+  out.push(h('h3', { class: 'section' }, 'Why it stopped'),
+    res.chain.length ? h('ol', { class: 'chain' }, res.chain.map(s => h('li', {}, s.text))) : h('p', { class: 'muted' }, 'No chain.'),
+    h('p', { class: 'muted small' }, 'Traced run: ', open(res.traceRun) ?? 'this one', res.watchRun ? [' · watch run (', res.watch.join(', '), '): ', open(res.watchRun)] : ''),
+    findingsList(res.findings))
+  const others = res.decisions.filter(d => !res.chain.some(s => s.at === d.at && s.decision === d.code))
+  if (others.length) out.push(h('h3', { class: 'section' }, 'Other decisions whose other branch never ran'),
+    ...table(['Where', 'Decision', 'Values', 'Would have run'], others.map(d => [d.at, `${d.code} → ${d.said}`, d.operands.map(o => `${o.code} = ${o.value}`).join(', '), h('code', {}, d.untaken.lines.join('\n'))])))
+  return out
+}
+
 // ---- Live view (web interface only): the running content, with clicks and keys sent back to it ----
 const KEYS = { Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', PageUp: 'PageUp', PageDown: 'PageDown', Home: 'Home', End: 'End' }
 const liveInput = e => lab.invoke('live-input', e).catch(() => {})
@@ -424,7 +450,7 @@ $('filter').oninput = () => render()
 $('item').onchange = () => render()
 let pending = false
 lab.on('probe', p => { st.live.push(p); if (!run() && !pending) { pending = true; setTimeout(() => { pending = false; if (!run()) render() }, 300) } })
-lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; st.runs.push(r); if (!st.exp.busy && !st.disc.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
+lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; st.runs.push(r); if (!st.exp.busy && !st.disc.busy && !st.drill.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
 lab.on('state', s => { st.running = s.running ? s : null; if (!s.running && st.tab === 'Live') st.tab = 'Findings'; render(); $('stop').disabled = !s.running; $('launch').disabled = !!s.running || !st.pkg?.items.length; $('ref').disabled = !!s.running; if (s.running) say(`Recording ${s.label}. ${s.auto ? `It stops by itself after ${s.auto} s, or` : 'Use the course, then'} Stop and analyse${lab.web ? '' : ' (or close its window)'}.`) })
 lab.on('experiment', e => {
   const x = st.exp
@@ -440,6 +466,14 @@ lab.on('discover', e => {
   else if (e.state === 'round') { x.rows[e.index] = e.row; x.note = `Finished: ${e.row.name}.` }
   else if (e.state === 'done') { x.result = e.result; x.rows = e.result.rows; x.busy = false; x.note = `Done after ${e.result.rounds} round${e.result.rounds === 1 ? '' : 's'}.${e.result.file ? ' Saved to ' + e.result.file : ''}` }
   else { x.busy = false; x.note = e.message }
+  render()
+})
+lab.on('drill', e => {
+  const x = st.drill
+  if (e.state === 'start') Object.assign(x, { run: e.run, busy: true, result: null, note: 'Working…' })
+  else if (e.state === 'step') x.note = e.note
+  else if (e.state === 'done') Object.assign(x, { run: e.run, busy: false, result: e.result, note: 'Done.' })
+  else Object.assign(x, { busy: false, note: e.message })
   render()
 })
 showPinBox()
