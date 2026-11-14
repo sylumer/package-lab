@@ -13,6 +13,7 @@ How SCORM Lab is built, the formats it reads and writes, and how to change it.
 - [The recorder](#the-recorder)
 - [Static analysis](#static-analysis)
 - [The boot graph](#the-boot-graph)
+- [cmi5 and xAPI (P4.5)](#cmi5-and-xapi-p45)
 - [The execution trace](#the-execution-trace)
 - [The drill-down](#the-drill-down)
 - [Findings](#findings)
@@ -77,7 +78,10 @@ src/
   batch.js              Batch checks: a folder's packages as rows, the CSV and the HTML summary, the worker pool for static checks (P4.3)
   batchworker.js        The thread that checks one package for a batch (checkPackage); loaded by staticRows
   stall.js              Why it stalled: pollers, unanswered messages, listeners that never ran, and the finding (P1.6)
-  milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
+  milestones.js         Milestones (where a run got to on the SCORM path, or the cmi5 or Tin Can one) and progress (comparing two runs)
+  cmi5.js               cmi5.xml and tincan.xml parsing, the course's manifest-shaped view, the launch parameters, LMS.LaunchData, the cmi5 rules (P4.5)
+  xapi.js               xAPI 1.0.3 statement validation, and the findings and milestone hits from a run's LRS record (P4.5)
+  lrs.js                The local LRS: createLrs → handle(request), snapshot(); served at /__lrs/ by main.js and the WebKit runner (P4.5)
   options.js            Launch options: normaliseOptions (the only place defaults live), cliCommand
   profiles.js           LMS profiles: the presets, checkProfile, resolveProfile, launchProfile (P2.1)
   analyze.js            Manifest and script scan
@@ -99,6 +103,7 @@ build/icon.svg          The app icon
 test/test.js            Tests; test/fixtures/base is the sample package
 test/packs.js           Rule pack tests (imported by test.js): synthetic packages and hand-made traces
 test/batch.js            Batch check tests (imported by test.js): CSV cells and the formula guard, summary, runs merged into rows, HTML escaping, folders
+test/xapi.js            cmi5 and xAPI tests (imported by test.js): the cmi5 and Tin Can fixtures, validation, the LRS, cmi5 rules, findings, milestones, redaction; pure
 test/codeview.js        Code view tests (imported by test.js): VLQ, source maps, formatting, coverage, links, excerpts, the 2 MB timing; pure
 docs/                   User and developer documentation
 ```
@@ -578,6 +583,74 @@ as an LMS player for phones does, so a `mobile` emulation lays the content out a
 
 `bootRun(boot, trace)` adds `run: { status, failed, pending, t }` to each node, from the run's requests. It matches
 `lab://run/pkg/<path>`, and `lab://run/<path>` for server paths.
+
+## cmi5 and xAPI (P4.5)
+
+A package is **cmi5** if `cmi5.xml` is in it (the shallowest one), **Tin Can** if it has a `tincan.xml` and no `imsmanifest.xml`,
+and SCORM otherwise. `analyze` sets `analysis.format` (`'scorm' | 'cmi5' | 'tincan'`), reads the course file (`src/cmi5.js`:
+`parseCmi5`, `parseTincan`; `analysis.course`) and gives it a manifest-shaped view, `analysis.manifest` with `version` and `format` set
+to the format, `items` that are the AUs (`type: 'au'`, with `.au`: id, title, url, moveOn, masteryScore, launchMethod, launchParameters,
+entitlementKey, activityType) or the Tin Can activities that have a `<launch>` (`type: 'activity'`), and `res` for each launch file. So
+items, the launch checks, `launchPlan`, `bootFor`, the CLI's `--item` and the interfaces work as they do for SCORM; the findings
+about SCORM check `analysis.format`. `formatName(analysis)` is the words for it.
+
+**Launching.** `launchPlan` sets `expose: 'none'` (no SCORM API), `launch.format`, and adds the LRS parameters to the URL (`cmi5Query`,
+`tincanQuery`). It returns `plan.lrs`, the LRS's configuration: `{ format, endpoint, token, fetchId, registration, sessionId, activityId, au,
+launchUrl, actor }`. The endpoint is `<lms origin>/__lrs/`: `lab://run/__lrs/` in Electron, `https://lab.invalid/__lrs/` in WebKit (the saved
+`launch.url` stays in `lab://` form). The learner is `learner-1`; the actor is an Agent with an `account` whose `homePage` is the LMS origin. A cmi5
+AU whose `launchMethod` is OwnWindow is opened in a window, as the window-opener profile does.
+
+**The LRS (`src/lrs.js`).** `createLrs({ ...plan.lrs, now, wall })` is pure and in memory: `handle({ method, path, search, headers (lower-case
+names), body (text) })` → `{ status, headers, body }`, and `snapshot()` → the record below. `serveRequest` takes `lrs` and `req` and gives
+`/__lrs/…` on the LMS origin to it; Electron's `serve` (now async, since it reads the body) and the WebKit runner's route do that, and are the only
+code that differs between browsers. `now` is the run's clock (the recorder's `t()`), so statement times line up with the trace. Behaviour:
+- Every response has the CORS headers (the content may be on `lab://content`), and `X-Experience-API-Version: 1.0.3`. OPTIONS is answered with 204.
+- Auth: `Authorization: Basic <token>` on everything except `about` and OPTIONS; 401 otherwise (without a `WWW-Authenticate` header, which would make the
+  browser ask for a password). The version header must be `1.0` or `1.0.x`; missing or other is 400 (`about` may omit it).
+- cmi5: `POST <endpoint>auth/fetch/<fetchId>` returns `{ "auth-token": … }` once and `{ "error-code": "1", "error-text": … }` (status 200, as the spec
+  says) after; a GET is 405. The LRS seeds the `LMS.LaunchData` state document, the `cmi5LearnerPreferences` agent profile and the LMS's own
+  "launched" statement (`by: 'lms'`) before the AU is launched.
+- Limits: a body over 10 MB (`MAX_BODY`; main.js and the WebKit runner refuse it before reading), more than 100 statements in a request, 2000 statements, 200 documents and 5 MB of documents are 413. CORS is answered only for the test LMS's origins. `maskTokens(trace)` replaces a Tin Can run's `auth=` values with `‹token›` in the trace's text; the saved `launch.url` is built with it already.
+- Statements: PUT (needs `statementId`, a body id is optional, 204; the same statement again 204, a different one with that id 409), POST (one or a list; the ids), GET (`statementId`,
+  `voidedStatementId`, or `since`, `until`, `verb`, `activity`, `registration`, `agent`, `related_*`, `limit`, `ascending`, `format=ids`; `more` is always empty).
+  The LRS adds `stored`, `authority` (an account `scorm-lab`), `version` and a default `timestamp`. A "voided" statement hides its target. The alternate request
+  syntax (a POST with `method=`) is supported. One invalid statement refuses the whole request (400) and none is stored.
+- Documents: state (activityId, agent, registration, stateId), activity profile, agent profile. PUT and POST (POST merges JSON objects), GET (one document, or the ids
+  with `since`), DELETE (a state's DELETE with no `stateId` clears it). Profiles need If-Match / If-None-Match to change a document that exists (409 / 412);
+  state accepts them. Documents are text with their `Content-Type`, up to 200 KB.
+
+**Validation (`xapi.js`).** `validateStatement(s)` → `[{ sev, code, path, text }]`: `error` is a MUST of xAPI 1.0.3 (the LRS refuses the statement), `warn` a SHOULD (accepted).
+Texts are fixed sentences that never quote the statement, so they are safe to keep in a redacted run. For cmi5, `cmi5StatementProblems(s, launch)` (`cmi5.js`) adds the AU rules a
+single statement can break (codes `cmi5-category`, `cmi5-sessionid`, `cmi5-launch`, `cmi5-id`, `cmi5-duration`, `cmi5-result`); they are recorded and the statement is accepted, since
+they are cmi5's, not xAPI's. The order rules (`cmi5Order`: before-init, no-init, after-term, repeated, both) and `moveOnCheck` work over the verbs, in `timestamp` order then arrival,
+and run when the findings are made.
+
+**Findings and milestones.** `lrsFindings(trace.lrs)` (called from `runFindings`) and `lrsHits(trace.lrs)` (called from `milestones`) read only the record, never the
+statements' text: a redacted run, whose text is masked but whose verbs, problem codes, timestamps and results are kept, gives the same ones. `milestones` uses `stepsFor(format)`:
+`CMI5_STEPS` (`launched`, `scripts`, `shown`, `fetched`, `initialized`, `completed`, `terminated`) and `TINCAN_STEPS` (`launched`, `scripts`, `shown`, `statement`, `completion`). A run with
+an LRS gets no "what it was waiting for" finding. `isLab` counts `/__lrs/` as the test LMS's own, so the LRS's 4xx answers are not "failed requests" and its paths are not "server paths".
+
+### The LRS record (`trace.lrs`)
+
+Added to the trace of a cmi5 or Tin Can run (absent for SCORM; no reader needs it). Saved runs carry it unchanged.
+
+```js
+trace.lrs = {
+  format: 'cmi5' | 'tincan', endpoint, registration, sessionId, activityId, actor: Agent, launchUrl, tokenIssued,
+  moveOn, masteryScore, launchMethod,                      // cmi5 only: the AU's, as the course file gave them ('' = none)
+  fetches:   [{ t, ok }],                                  // cmi5: each request to the fetch URL (ok: it got the token)
+  calls:     [{ t, method, resource, params: [name], status, auth: 'ok' | 'missing' | 'bad' | 'n/a', version, problems: [{ sev, code, text }] }],
+             // resource: statements | state | activity-profile | agent-profile | about | fetch | preflight | unknown; params are the query names only (never values); no token is kept
+  statements:[{ n, id, t, by: 'au' | 'lms', via: 'PUT' | 'POST', status: 'stored' | 'rejected' | 'duplicate', statement, voided?,
+                problems: [{ sev: 'error' | 'warn', code, path, text }] }],   // statement as received (stored ones as stored); n counts from 1 in arrival order
+  documents: [{ kind: 'state' | 'activity-profile' | 'agent-profile', id, activityId?, agent?, registration?, contentType, value (text), t, writes, by: 'au' | 'lms' }],
+  truncated: bool                                          // 2000 statements, 5000 requests
+}
+```
+
+Redaction (`redact.js`, `lrsRecord`): each statement keeps its keys and ids, UUIDs, timestamps, numbers, booleans, scores, `objectType`, the standard verb and category IRIs and
+SCORM-like vocabulary; every other string (names, activity ids, responses, descriptions, extension values) is replaced by its length. Documents keep kind, id, type, who wrote
+them and a marker for the value. The actor and activity id are masked; problem codes and texts are kept.
 
 ## The execution trace
 
@@ -1147,7 +1220,7 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
 {
   format: 'scorm-lab-run', version: 1,
   kind: 'package' | 'reference', label, package,          // package file name
-  launch: { version, expose, depth, opener, item, itemIndex, itemType, url, resume, options, profile },  // reference: { url }; options (added in P0.1) is the normalised launch options; profile (P2.1) the resolved LMS profile, every field
+  launch: { version, format, expose, depth, opener, item, itemIndex, itemType, url, resume, options, profile },  // reference: { url }; options (added in P0.1) is the normalised launch options; profile (P2.1) the resolved LMS profile, every field
   findings: [finding],                                     // as computed when saved; readers recompute
   milestones: [milestone] | null,                          // added in P0.2: see Milestones; null for a reference run
   boot: bootGraph | null,
@@ -1169,7 +1242,8 @@ chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Ap
     coverage:   [{ sid, id, url, hash, fns: [[name, [start, end, count, …]]] }],
     sources:    { url: source },
     truncated:  { list: true },                            // exec: true when trace events were dropped
-    cmi:        { '1.2'?: { element: value }, '2004'?: { … } } | null
+    cmi:        { '1.2'?: { element: value }, '2004'?: { … } } | null,
+    lrs:        lrsRecord | undefined                      // P4.5, cmi5 and Tin Can runs: see The LRS record (launch.format is then 'cmi5' | 'tincan', launch.expose 'none')
   }
 }
 ```
@@ -1232,7 +1306,14 @@ The code views (P4.1) have no end-to-end run: `test/codeview.js` is pure and run
 | `needs` | `boot.js` fetches `/api/player/config` and starts the lesson only with it; reads `cfg.lms.enabled` (truthiness), `cfg.lms.version` (`=== '2004'`) and `cfg.assets.base` (joined to text) | Discovery: the three fields with the right types, the stand-in reaches past `looked`. Its `boot.js` also runs in the unit tests, in a `vm` context with `shape-probe.js` and stand-ins for `Response`, `XMLHttpRequest` and `fetch`, to test the Proxy and the loop without Electron |
 | `levels` | The lesson starts only if `window.player && player.ready`; `player` is set by `js/player.js`, which `boot.js` loads only if `config.cdn` is set; `config` comes from `data/config.json`, which has no `cdn` | The drill-down's three levels, explained down to the JSON file (`--slow`: CLI and web handlers). Its `boot.js` also feeds the drill-down unit test with hand-made events and coverage |
 | `chromeonly` | `lesson.js` starts with an unguarded `navigator.userAgentData.brands` | Works in Chromium; an uncaught error in WebKit, which has no `userAgentData` |
+| (cmi5, Tin Can) | built in `test/xapi.js` from the cmi5 spec's sample structure (one block, one AU) and a Tin Can course: the AU is a script that fetches its token, reads LMS.LaunchData and sends statements | See below |
 | `loader` | Loading screen; `data/config.json` with a trailing comma; `js/next.js` loaded only after the config parses | Invalid JSON; stuck on loading screen; code that loads next never ran |
+
+The cmi5 and xAPI tests (P4.5) are in `test/xapi.js` and run in `--unit`: detection and parsing, validation (each rule, and that no problem text quotes a value), the LRS (every resource, the version header, auth, the fetch URL
+once, concurrency, the alternate syntax, the record), `launchPlan` and `serveRequest` for both formats, the cmi5 rules one at a time over statements sent to a real LRS, the Tin Can statements and
+the redacted record. The default suite runs one Electron run, the good cmi5 AU through the CLI (it reaches `terminated`, is saved with its statements, and reports, also redacted); `--slow` adds the
+broken AU (`completed` before `initialized`, a verb that isn't an IRI: both findings), the Tin Can package (statements listed and validated, one refused, a state document), the web handlers,
+and both in WebKit when it is installed.
 
 The end-to-end part covers:
 - **CLI:** analyze (JSON, `--strict` statuses, missing file), items, report (static and run).

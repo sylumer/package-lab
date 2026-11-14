@@ -6,9 +6,9 @@ export default {
   detect: (a, files) => score(files, [['name', /(^|\/)scormcontent\//i, 0.6], ['name', /lib\/rise/i, 0.5], ['text', /articulate.{0,200}rise|__rise/i, 0.4]]),
   staticRules({ analysis: a, files }) {
     const out = [], tc = named(files, /(^|\/)tincan\.xml$/i)
-    if (tc.length && !a.manifest)
+    if (tc.length && (!a.manifest || a.format === 'tincan'))
       out.push({ sev: 'info', basis: 'pattern', title: 'this looks like an xAPI export, not SCORM',
-        detail: 'Rise reports say a tincan.xml means xAPI content. There is no imsmanifest.xml, so an LMS that expects SCORM will refuse it.',
+        detail: 'Rise reports say a tincan.xml means xAPI content. There is no imsmanifest.xml, so an LMS that expects SCORM will refuse it. (SCORM Lab runs it against its own LRS.)',
         evidence: tc, fix: 'Publish again choosing SCORM 1.2 or SCORM 2004 in Rise’s LMS export, and upload the ZIP as exported.' })
     return out
   },

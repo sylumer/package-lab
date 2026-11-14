@@ -67,6 +67,27 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 
 The default is the first SCO.
 
+## cmi5 and Tin Can packages
+
+`analyze`, `items`, `run`, `report`, `experiment`, `batch` and the other commands that open a package also take a **cmi5**
+package (a `cmi5.xml` at the top) and a **Tin Can** package (a `tincan.xml` and no `imsmanifest.xml`). Their items are
+the AUs, or the activities with a `<launch>`; `--item` takes a number from `items` or the AU's (or activity's) id. A run of
+one gives the content a local LRS instead of a SCORM API, so `--api`, `--resume-from` and the `cycle` command don't apply
+to it. What differs in the output:
+
+- the summary line says `cmi5` or `Tin Can (xAPI)`; `analyze --json` has `format` (`scorm`, `cmi5` or `tincan`);
+- the `run` text has an **xAPI** block after the milestones: each statement with its time, who sent it, whether the LRS
+  stored or rejected it, a summary, and the problems found in it, then the documents written. The milestones are the
+  [cmi5 or Tin Can ones](user-guide.md#cmi5-and-tin-can-packages);
+- `run --json` has `xapi`: `{ format, endpoint, registration, tokenFetches, calls, statements, documents }`, the LRS record
+  of the [developer guide](developer-guide.md#the-lrs-record-tracelrs), and `counts.statements` and `counts.lrsCalls`; the
+  saved run (`--out`) holds the same under `trace.lrs`;
+- `report` of a run has an **xAPI** section; with `--redact` the statements' text, activity ids, names, responses and
+  documents are replaced by their lengths, and their structure, ids, times, scores, the standard verbs and the problems stay.
+
+The findings are in [findings.md](findings.md#from-a-cmi5-or-tin-can-run-the-lrs). `--wait` should be long enough for the
+AU to send its statements (a few seconds for a script-driven AU; a learner-driven one needs a [live run](#live-runs)).
+
 ## analyze
 
 ```bash
@@ -743,6 +764,7 @@ Starts the [web interface](web.md) and prints its address with the access token.
 ```json
 {
   "package": "course.zip",
+  "format": "scorm",
   "manifest": { "version": "2004", "edition": "4th", "schemaversion": "2004 4th Edition", "title": "…" },
   "apiUse": "2004", "fingerprints": ["Xyleme"], "files": 412, "size": 40054012,
   "items": [{ "number": 1, "id": "ITEM-1", "title": "Module 1", "type": "sco", "launch": "index.html", "parameters": "" }],
@@ -768,11 +790,13 @@ Starts the [web interface](web.md) and prints its address with the access token.
   "findings": ["…"],
   "api": [{ "call": "Initialize", "el": "", "value": null, "result": "true", "err": 0 }],
   "screens": [{ "frame": "lab://run/pkg/index.html", "readyState": "complete", "text": 0, "visible": 3, "media": 0, "loader": "div#preloader", "hidden": false, "sample": "" }],
+  "xapi": null,
   "out": "/path/to/run.json"
 }
 ```
 
-`diff --json` is described under [diff](#diff). `items --json` is the `items` array above. The boot graph and saved-run formats are described in the
+For a cmi5 or Tin Can run `api` is empty and `xapi` is the [LRS record](developer-guide.md#the-lrs-record-tracelrs) (no
+credential in it). `diff --json` is described under [diff](#diff). `items --json` is the `items` array above. The boot graph and saved-run formats are described in the
 [developer guide](developer-guide.md#data-formats).
 
 ## Live runs

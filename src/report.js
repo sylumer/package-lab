@@ -2,12 +2,14 @@
 // the Concierge module show. Pure. renderReport gives a complete page, or with fragment: true a <div class="sl">
 // with its own scoped styles, for embedding (the Concierge module prints it inside its page).
 import { bootRun } from './bootpath.js'
-import { isLab } from './diff.js'
+import { isLab, isLrs } from './diff.js'
 import { milestones } from './milestones.js'
 import { timelineView } from './timeline.js'
 import { excerptor, urlPath } from './codeview.js'
 import { entryBuffer, isText } from './overlay.js'
 import { redactRun } from './redact.js'
+import { statementSummary } from './xapi.js'
+import { formatName } from './cmi5.js'
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const short = u => String(u ?? '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
@@ -22,8 +24,10 @@ export function counts(findings = [], trace) {
   const c = { errors: findings.filter(f => f.sev === 'error').length, warnings: findings.filter(f => f.sev === 'warn').length, info: findings.filter(f => f.sev === 'info').length }
   if (trace) {
     const api = trace.probe.filter(p => p.type === 'api')
-    Object.assign(c, { apiCalls: api.length, requests: trace.requests.length, failedRequests: trace.requests.filter(r => r.status >= 400 || r.failed && !r.canceled).length,
+    // The LRS's own answers (a 400 for a bad statement) belong to the xAPI section, not to the failed requests.
+    Object.assign(c, { apiCalls: api.length, requests: trace.requests.length, failedRequests: trace.requests.filter(r => !isLrs(r.url, trace) && (r.status >= 400 || r.failed && !r.canceled)).length,
       uncaught: trace.exceptions.length, seconds: Math.round((trace.duration ?? 0) / 1000) })
+    if (trace.lrs) Object.assign(c, { statements: trace.lrs.statements.filter(s => s.by === 'au').length, lrsCalls: trace.lrs.calls.length })   // cmi5 and Tin Can (P4.5)
   }
   return c
 }
@@ -107,17 +111,27 @@ export function bootHtml(boot, trace) {
   if (boot.dynamic.length) out += `<details><summary>Paths built at run time (${boot.dynamic.length})</summary>${table(['File', 'Line', 'Code'], boot.dynamic.map(d => [esc(d.file), d.line, `<code>${esc(d.text)}</code>`]))}</details>`
   return out
 }
+// The xAPI section of a run with an LRS (trace.lrs): the statements with their problems, the documents and the requests.
+function xapiHtml(x) {
+  const ok = x.statements.filter(s => s.status === 'stored').length, bad = x.statements.filter(s => s.status === 'rejected').length
+  const probs = s => (s.problems ?? []).map(p => `<span class="${p.sev === 'error' ? 'sl-bad' : 'sl-muted'}">${esc(p.sev)} ${esc(p.path)}: ${esc(p.text)}</span>`).join('<br>')
+  return `<h2>xAPI</h2><p>${esc(x.format === 'cmi5' ? 'cmi5' : 'Tin Can')}: ${x.statements.length} statements (${ok} stored, ${bad} rejected), ${x.calls.length} requests to the LRS${x.format === 'cmi5' ? `, the auth token was fetched ${x.fetches.length} time${x.fetches.length === 1 ? '' : 's'}` : ''}.</p>
+${table(['#', 's', 'From', 'Status', 'Statement', 'Problems'], x.statements.map(s => [s.n, ((s.t ?? 0) / 1000).toFixed(2), esc(s.by === 'lms' ? 'the LMS' : 'the content'), s.status === 'rejected' ? '<span class="sl-bad">rejected</span>' : esc(s.status), `<code>${esc(statementSummary(s))}</code>`, probs(s)]), 300)}
+<details><summary>Documents (${x.documents.length})</summary>${table(['Kind', 'Id', 'Type', 'Written by', 'Content'], x.documents.map(d => [esc(d.kind), esc(d.id), esc(d.contentType), esc(d.by === 'lms' ? 'the LMS' : 'the content'), `<code>${esc(String(d.value).slice(0, 400))}</code>`]), 100)}</details>
+<details><summary>Requests to the LRS (${x.calls.length})</summary>${table(['s', 'Method', 'Resource', 'Status', 'Authorization', 'Problems'], x.calls.map(c => [((c.t ?? 0) / 1000).toFixed(2), esc(c.method), esc(c.resource), c.status >= 400 ? `<span class="sl-bad">${esc(c.status)}</span>` : esc(c.status), esc(c.auth), esc((c.problems ?? []).map(p => p.text).join(' '))]), 300)}</details>`
+}
 function runHtml(run) {
   const t = run.trace, c = counts(run.findings, t), api = t.probe.filter(p => p.type === 'api'), l = run.launch ?? {}
-  const facts = [['Ran for', `${c.seconds} s`], ['Offered', l.expose ? (l.expose === 'both' ? 'SCORM 1.2 and 2004 APIs' : l.expose === 'none' ? 'no API' : `SCORM ${l.expose} API`) + (l.depth ? `, ${l.depth} frames deep` : '') + (l.opener ? ', in a new window' : '') + (l.resume ? ', resuming saved data' : '') : '—'],
+  const facts = [['Ran for', `${c.seconds} s`], ['Offered', l.format && l.format !== 'scorm' ? 'a test LRS (' + (l.format === 'cmi5' ? 'cmi5' : 'Tin Can') + ')' : l.expose ? (l.expose === 'both' ? 'SCORM 1.2 and 2004 APIs' : l.expose === 'none' ? 'no API' : `SCORM ${l.expose} API`) + (l.depth ? `, ${l.depth} frames deep` : '') + (l.opener ? ', in a new window' : '') + (l.resume ? ', resuming saved data' : '') : '—'],
     ['API calls', c.apiCalls ? `${c.apiCalls} (first: ${api[0].call})` : 'none'], ['Requests', `${c.requests}${c.failedRequests ? `, ${c.failedRequests} failed` : ''}`], ['Uncaught errors', c.uncaught]]
   const shown = screens(t).map(d => [esc(short(d.frame)), esc(d.readyState), d.visible, d.media, esc(d.loader ?? ''), esc(d.sample ?? '')])
   const errs = [...t.exceptions.map(e => [((e.t ?? 0) / 1000).toFixed(2), 'uncaught', esc(e.text), esc(where(e.at?.[0]) || short(e.url) + ':' + e.line)]),
     ...(t.caught ?? []).filter(e => !e.uncaught).map(e => [((e.t ?? 0) / 1000).toFixed(2), 'caught', esc(e.text), esc(where(e.at?.[0]))])].sort((a, b) => a[0] - b[0])
-  const failed = t.requests.filter(r => r.status >= 400 || r.failed && !r.canceled)
+  const failed = t.requests.filter(r => !isLrs(r.url, t) && (r.status >= 400 || r.failed && !r.canceled))
   return `<h2>What happened</h2>${table(['', ''], facts.map(([k, v]) => [`<b>${esc(k)}</b>`, esc(v)]))}
 <h2>What the content showed at the end</h2>${table(['Frame', 'State', 'Visible elements', 'Images and media', 'Loading indicator', 'Text'], shown)}
 <h2>API calls</h2>${table(['s', 'Call', 'Element', 'Value', 'Result', 'Error'], api.map(a => [((a.t ?? 0) / 1000).toFixed(2), esc(a.call), esc(a.el), `<code>${esc(String(a.value ?? '').slice(0, 300))}</code>`, esc(a.result), a.err ? `<span class="sl-bad">${esc(a.err)}${a.diag ? ': ' + esc(a.diag) : ''}</span>` : '']), 300)}
+${t.lrs ? xapiHtml(t.lrs) : ''}
 <h2>Failed requests</h2>${table(['s', 'Method', 'URL', 'Status', 'From'], failed.map(r => [((r.t ?? 0) / 1000).toFixed(2), esc(r.method), esc(short(r.url)), `<span class="sl-bad">${esc(r.status ?? r.failed)}</span>`, esc(where(r.from?.[0]))]))}
 <h2>Errors</h2>${table(['s', 'Kind', 'Message', 'Where'], errs, 200)}`
 }
@@ -188,7 +202,7 @@ export function renderReport(input) {
   const o = input.redact ? { ...input, ...redactInput(input) } : input
   const run = o.run, findings = o.findings ?? run?.findings ?? [], v = verdict(findings), c = counts(findings)
   const a = o.analysis, m = a?.manifest, ex = o.excerpts !== false && (o.files || run?.trace?.sources || run?.launch?.options?.files) ? excerptor(reportText(o)) : null
-  const pkgTable = a ? `<h2>Package</h2>${table(['', ''], [['Manifest', m ? `SCORM ${m.version}${m.edition ? ' ' + m.edition + ' edition' : ''}` : 'none'], ['Scripts use', a.apiUse === 'none' ? 'no SCORM API names' : a.apiUse === 'both' ? 'both APIs' : 'SCORM ' + a.apiUse],
+  const pkgTable = a ? `<h2>Package</h2>${table(['', ''], [[a.format && a.format !== 'scorm' ? 'Course file' : 'Manifest', formatName(a)], ['Scripts use', a.apiUse === 'none' ? 'no SCORM API names' : a.apiUse === 'both' ? 'both APIs' : 'SCORM ' + a.apiUse],
     ['Made with', a.fingerprints.join(', ') || 'not recognised'], ['Files', `${a.files} (${(a.size / 1048576).toFixed(1)} MB)`], ['Items', (m?.items ?? []).map(i => `${i.title || i.id} (${i.type || '?'})`).join('; ')]].map(([k, x]) => [`<b>${esc(k)}</b>`, esc(x)]))}` : ''
   const body = `<div class="sl"><style>${CSS}</style>
 ${o.fragment ? '' : `<h1>${esc(o.title ?? 'SCORM Lab report')}</h1>`}${o.subtitle ? `<p class="sl-muted">${esc(o.subtitle)}</p>` : ''}

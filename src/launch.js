@@ -2,6 +2,7 @@
 // plan (the test LMS's configuration, the content's address, headers, label) and the findings a finished run gets.
 // src/main.js (Electron runs) and src/webkit-runner.js (WebKit runs, P2.3) both build on it. See docs/developer-guide.md.
 import { readFileSync } from 'node:fs'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
 import { normaliseOptions, viewportName } from './options.js'
 import { overlayFiles, overrideFinding, overrideProgressFinding } from './overlay.js'
@@ -9,6 +10,8 @@ import { staticFindings, runFindings, launchFindings, sortFindings } from './rul
 import { milestones, milestoneFinding, runCounts } from './milestones.js'
 import { stall, stallFinding } from './stall.js'
 import { launchProfile, apiAt, fillParams, storageMode } from './profiles.js'
+import { cmi5Query, tincanQuery } from './cmi5.js'
+import { LRS_PATH } from './lrs.js'
 
 // ---- Serving ----
 export const HOST_FILES = new Set(['host.html', 'host.js', 'wrap.html', 'scorm-runtime.js'])
@@ -20,9 +23,11 @@ export const mime = name => (MIME[extname(name).slice(1).toLowerCase()] ?? 'appl
 
 // One request to the test LMS or the package: { path (decoded), lms (is it the LMS's own origin), range (the Range header),
 // config, files (Map path → Buffer), headers (the profile's, on package files), file (path, buffer → buffer: a traced run
-// instruments here) } → { status, headers, body (Buffer | string) }.
-export function serveRequest({ path, lms, range = '', config, files, headers: pkgHeaders = {}, file: map = (_, b) => b }) {
+// instruments here), lrs (a cmi5 or Tin Can run's LRS, src/lrs.js) and req ({ method, search, headers (lower case names), body (text), tooLarge }: what
+// the LRS needs of the request) } → { status, headers, body (Buffer | string) }.
+export function serveRequest({ path, lms, range = '', config, files, headers: pkgHeaders = {}, file: map = (_, b) => b, lrs = null, req = {} }) {
   const headers = { 'Cache-Control': 'no-store' }
+  if (lrs && lms && path.startsWith(LRS_PATH)) return lrs.handle({ method: req.method ?? 'GET', path, search: req.search ?? '', headers: req.headers ?? {}, body: req.body ?? '', tooLarge: !!req.tooLarge })
   if (path.startsWith('/__lab/') && lms) {
     const name = path.slice(7)
     if (name === 'config.json') return { status: 200, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(config) }
@@ -63,18 +68,34 @@ export function launchPlan({ pkg, item: itemIndex, cmi: givenCmi, options, pkgOv
   const res = item.res, files = overlayFiles(pkg.files, o.files), prof = launchProfile(o)
   const path = res.path ? '/pkg/' + res.path.split('/').map(encodeURIComponent).join('/') + res.query : null
   let url = path ? `${prof.contentOrigin === 'other' ? 'lab://content' : 'lab://run'}${path}` : res.href, shown = path ? (prof.contentOrigin === 'other' ? origins.content : origins.lms) + path : res.href
-  const expose = !o.expose || o.expose === 'manifest' ? m.version : o.expose
+  // cmi5 and Tin Can (P4.5) have no SCORM API: the test LMS offers an LRS instead, and the launch URL carries its address and the learner.
+  const format = pkg.analysis.format ?? 'scorm'
+  const expose = format !== 'scorm' ? 'none' : !o.expose || o.expose === 'manifest' ? m.version : o.expose
   const cmi = givenCmi ?? null
   // The manifest's parameters, then the profile's (placeholders filled in), then the launch option's.
   const params = [item.params.replace(/^[?&]/, ''), fillParams(prof.launchParams, { scoid: item.id, attempt: cmi ? 2 : 1, learner: LEARNER.id }), o.launchParams]
-  for (const q of params.filter(Boolean)) { url += (url.includes('?') ? '&' : '?') + q; shown += (shown.includes('?') ? '&' : '?') + q }
-  const config = { expose, depth: prof.frames.depth, opener: prof.launch === 'popup', launch: shown, cmi, frames: prof.frames, popupDelay: prof.popupDelay, apiDelay: prof.apiDelay, apiAt: apiAt(prof),
+  const shownParams = []
+  let lrs = null
+  if (format !== 'scorm') {
+    const registration = randomUUID(), sessionId = randomUUID(), activityId = item.id, fetchId = randomBytes(12).toString('hex')
+    const token = Buffer.from(`lab-${randomBytes(6).toString('hex')}:${randomBytes(12).toString('hex')}`).toString('base64')
+    const q = (origin, mask) => { const endpoint = origin + LRS_PATH, actor = { objectType: 'Agent', name: LEARNER.name, account: { homePage: origin, name: LEARNER.id } }
+      return format === 'cmi5' ? cmi5Query({ endpoint, fetch: endpoint + 'auth/fetch/' + fetchId, actor, registration, activityId }) : tincanQuery({ endpoint, token: mask ? '‹token›' : token, actor, registration, activityId }) }
+    params.push(q(LAB_ORIGINS.lms, true));   // the saved launch.url never holds a Tin Can token
+     shownParams.push(q(origins.lms))
+    lrs = { format, endpoint: origins.lms + LRS_PATH, token, fetchId, registration, sessionId, activityId, au: item.au ?? null, launchUrl: shown.split('?')[0],
+      actor: { objectType: 'Agent', name: LEARNER.name, account: { homePage: origins.lms, name: LEARNER.id } } }
+  }
+  const add = (u, q) => u + (u.includes('?') ? '&' : '?') + q
+  for (const q of params.filter(Boolean)) url = add(url, q)
+  for (const q of [...params.slice(0, 3), ...shownParams].filter(Boolean)) shown = add(shown, q)
+  const config = { expose, depth: prof.frames.depth, opener: prof.launch === 'popup' || item.au?.launchMethod === 'OwnWindow', launch: shown, cmi, frames: prof.frames, popupDelay: prof.popupDelay, apiDelay: prof.apiDelay, apiAt: apiAt(prof),
     runtime: { edition: m.edition === '2nd' ? '2nd edition' : '', learner: LEARNER, credit: 'credit', mode: 'normal', limits: prof.limits, commit: prof.commit, slowMs: prof.slowMs,
       launchData: item.launchData, mastery: item.mastery, maxTime: item.maxTime, timeLimitAction: item.timeLimitAction, completionThreshold: item.completionThreshold } }
-  const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o, profile: prof, storage: storageMode(o) }
+  const launch = { version: m.version, format, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o, profile: prof, storage: storageMode(o) }
   const headers = { ...prof.headers, ...(prof.csp ? { 'Content-Security-Policy': prof.csp } : {}) }
-  const label = `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${prof.name !== 'generic' ? ' · ' + prof.name : ''}${launch.storage !== 'normal' ? ' · storage ' + launch.storage : ''}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}${o.browser !== 'chromium' ? ' · ' + o.browser : ''}${o.viewport ? ' · ' + viewportName(o.viewport) : ''}`
-  return { o, item, res, files, prof, config, launch, headers, label }
+  const label = `${pkg.name} · ${item.title || item.id} · ${format === 'cmi5' ? 'cmi5' : format === 'tincan' ? 'Tin Can' : expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${prof.name !== 'generic' ? ' · ' + prof.name : ''}${launch.storage !== 'normal' ? ' · storage ' + launch.storage : ''}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}${o.browser !== 'chromium' ? ' · ' + o.browser : ''}${o.viewport ? ' · ' + viewportName(o.viewport) : ''}`
+  return { o, item, res, files, prof, config, launch, headers, label, lrs }
 }
 
 // ---- A finished run's findings ----
@@ -85,7 +106,7 @@ export function withProgress(kind, trace, boot, findings, launch, before) {
   const ms = milestones(trace, boot), over = overrideFinding(launch?.options?.files)
   const helped = over && before && overrideProgressFinding(before, { milestones: ms, counts: runCounts(trace) })
   // "Was waiting for" goes under the blank-page or loading-screen finding when there is one, else it sorts with the warnings.
-  const waiting = stallFinding(stall(trace, ms)), sorted = sortFindings(findings), at = sorted.findLastIndex(f => /blank page|loading screen/.test(f.title))
+  const waiting = trace.lrs ? null : stallFinding(stall(trace, ms)), sorted = sortFindings(findings), at = sorted.findLastIndex(f => /blank page|loading screen/.test(f.title))
   if (waiting && at >= 0) sorted.splice(at + 1, 0, waiting)
   else if (waiting) { sorted.push(waiting); sortFindings(sorted) }
   return { findings: [milestoneFinding(ms), ...(over ? [over] : []), ...(helped ? [helped] : []), ...sorted], milestones: ms }

@@ -7,6 +7,8 @@ Progress on [plan.md](plan.md). The orchestrator updates this file with each wor
 
 In progress on branch `next`.
 
+**Phase 4 (everyday use), done.** Code views (formatting in a worker, source maps, coverage and trace markers, links from every file:line), a Timeline tab, folder batch checks (`batch`, desktop and Alfred), a redacted report (`report --redact`, reworked by sonnet after a privacy review) and cmi5/xAPI support with a local LRS. `npm test` ~2:29; `--slow` ~14:30.
+
 **Phase 3 (from diagnosis to fix), done.** Corrected package export with six autofixes and a fix picker (`fix`), rule packs for eleven authoring tools and wrappers with a `--tool` override (research was thin, so most rules are info), and comparing two packages (`diff`, Package diff tab) with a Myers line diff.
 
 **Phase 2 (what a local run can't see yet), done.** LMS profiles with eight approximate presets and content on another origin, blocked storage, WebKit runs and device sizes, input macros and the save-and-resume cycle (`cycle`). Popups are now recorded from their first request. `npm test` takes about 2:48, close to the 3:00 cap; later phases put their end-to-end checks behind `--slow`, which takes about 13 minutes.
@@ -39,8 +41,8 @@ In progress on branch `next`.
 | P4.1 | Code views | sonnet | done | 81722b0 | One review round (formatting in a worker, bounded caches). Big minified files open unformatted first. Six secondary e2e checks moved behind --slow: default suite ~2:24 |
 | P4.2 | Timeline | haiku | done | 2332458 | Resumed once after a usage limit. One review round (pan slider bug, clamping, handler bounds) |
 | P4.3 | Batch checks | haiku | done | 90ab8c8 | One review round (desktop-only guard for the folder dialog, worker pool hardening). Desktop check is static only |
-| P4.4 | Redacted report | haiku | done | | Escalated to sonnet after the first privacy review found leaks (deny-list design). Reworked to redact by field and rebuild findings; second marker-planting review fixed curly quotes and free-text elements. Error messages keep only their known shape; other sites keep host and path |
-| P4.5 | cmi5 and xAPI | sonnet | todo | | |
+| P4.4 | Redacted report | haiku | done | 1b7da04 | Escalated to sonnet after the first privacy review found leaks (deny-list design). Reworked to redact by field and rebuild findings; second marker-planting review fixed curly quotes and free-text elements. Error messages keep only their known shape; other sites keep host and path |
+| P4.5 | cmi5 and xAPI | sonnet | done | | One review round (LRS limits, CORS, SCORM results kept unchanged, token masking, redaction). No cycle for these formats; no LMS satisfied/abandoned statements |
 | P5.1 | Concierge module catch-up | sonnet | todo | | |
 | P5.2 | Alfred and CLI polish | haiku | todo | | |
 | P5.3 | Documentation pass | haiku + sonnet review | todo | | |

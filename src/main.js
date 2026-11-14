@@ -37,6 +37,7 @@ import { serveRequest, WEBKIT_ORIGINS, launchPlan, withProgress, runAnalysis, sa
 import { renderReport } from './report.js'
 import { codeViewAsync } from './codeview.js'
 import { timelineView } from './timeline.js'
+import { createLrs, maskTokens, MAX_BODY } from './lrs.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -59,6 +60,7 @@ else if (process.env.SCORM_LAB_DATA) app.setPath('userData', process.env.SCORM_L
 let ui = null, web = null, pkg = null, config = {}, active = null, nextId = 1
 let served = null   // the files the running content is served from: the package's, with any overrides on top
 let pkgHeaders = {} // the run's LMS profile's headers on package files: its own, and its CSP
+let lrs = null      // a cmi5 or Tin Can run's LRS (src/lrs.js): served at lab://run/__lrs/, and recorded in the trace
 let tracing = null  // a traced run (options.trace): { files: path → instrumented entry served in this run, untraced: path → why, sites }
 const runs = new Map()
 const runsDir = () => { const d = join(app.getPath('userData'), 'runs'); mkdirSync(d, { recursive: true }); return d }
@@ -70,13 +72,18 @@ function emit(channel, data) {
 }
 
 // ---- The package server ----
-function serve(req) {
+async function serve(req) {
   const u = new URL(req.url)
   let path
   try { path = decodeURIComponent(u.pathname) } catch { path = u.pathname }
   // lab://run/ is the LMS's origin; lab://content/ serves the same package from another origin (a profile's contentOrigin: other).
-  const r = serveRequest({ path, lms: u.host === 'run', range: req.headers.get('Range') || '', config, files: served ?? pkg?.files ?? new Map(), headers: pkgHeaders, file: tracing ? traceFile : undefined })
-  return new Response(r.body, { status: r.status, headers: r.headers })
+  const isLrs = !!lrs && u.host === 'run' && path.startsWith('/__lrs/')
+  // The LRS's body is read only if it is not over the cap (by its declared length, then by what arrived).
+  let tooLarge = isLrs && +req.headers.get('content-length') > MAX_BODY, body = ''
+  if (isLrs && !tooLarge && req.method !== 'GET' && req.method !== 'HEAD') { const buf = Buffer.from(await req.arrayBuffer()); tooLarge = buf.length > MAX_BODY; body = tooLarge ? '' : buf.toString('utf8') }
+  const r = serveRequest({ path, lms: u.host === 'run', range: req.headers.get('Range') || '', config, files: served ?? pkg?.files ?? new Map(), headers: pkgHeaders, file: tracing ? traceFile : undefined,
+    lrs: isLrs ? lrs : null, req: isLrs ? { method: req.method, search: u.search, headers: Object.fromEntries(req.headers.entries()), body, tooLarge } : undefined })
+  return new Response([101, 204, 205, 304].includes(r.status) ? null : r.body, { status: r.status, headers: r.headers })
 }
 
 // A traced run gets scripts and pages instrumented (src/instrument.js), worked out once per package and file content.
@@ -147,12 +154,13 @@ function watchPopups(wc, extra, ropts, wins, top = true) {
   })
 }
 
-async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace, headers, storage = 'normal', viewport = null, leave = false, recordInput = false }) {
+async function begin({ kind, label, url, launch, partition, lrs: lrsConfig, caught, boot, auto, files, pins, responses, trace, headers, storage = 'normal', viewport = null, leave = false, recordInput = false }) {
   await finish()
   // partitioned: the run's storage starts empty. (Otherwise it lasts from run to run while the app is open: it is one in-memory partition.)
   if (storage === 'partitioned') await session.fromPartition(partition).clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'websql', 'cachestorage', 'serviceworkers', 'filesystem'] })
   served = files ?? null   // only now: the previous run may have been using the old set
   pkgHeaders = headers ?? {}
+  lrs = null
   tracing = trace ? { files: new Map(), untraced: new Map(), sites: pkg.sites } : null
   const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
@@ -160,9 +168,10 @@ async function begin({ kind, label, url, launch, partition, caught, boot, auto, 
   if (viewport) win.setContentSize(viewport.width, viewport.height)
   const ropts = { caught, pins, responses, trace: !!trace, storage, viewport, recordInput }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
   rec.onProbe = p => emit('probe', p)
+  if (lrsConfig) lrs = createLrs({ ...lrsConfig, now: () => rec.t() })   // its times are on the run's clock, like the probe's
   win.webContents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { show: SHOW_RUNS, webPreferences: { partition, sandbox: true, backgroundThrottling: false } } }))
   watchPopups(win.webContents, extra, ropts, wins)
-  active = { win, wins, rec, extra, kind, label, launch, boot, tracing, started: Date.now(), leave }
+  active = { win, wins, rec, extra, kind, label, launch, boot, tracing, lrs, started: Date.now(), leave }
   win.on('close', e => { if (active?.win === win) { e.preventDefault(); finish() } })
   if (auto > 0) { const a = active; a.timer = setTimeout(() => { if (active === a) finish() }, auto * 1000) }
   // The debugger needs a renderer: start one on a blank page, attach, then go to the content.
@@ -203,6 +212,7 @@ async function finishActive(a) {
     restoreTrace(trace, a.tracing.files)
   }
   trace.cmi = cmi
+  if (a.lrs) { trace.lrs = a.lrs.snapshot(); maskTokens(trace) }
   if (a.kind === 'package' && cmi && pkg) pkg.lastCmi = cmi
   for (const w of a.wins) if (!w.isDestroyed()) w.destroy()
   emit('state', { running: null })
@@ -344,7 +354,7 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, leave = false, ...re
   const { o, res, files, config: cfg, launch, headers, label } = plan
   if (o.browser === 'webkit') { if (o.macro.length || leave) throw webkitMacro(); return beginWebkit({ plan, itemIndex, cmi }) }
   config = { ...cfg, snapshots: leave }   // the test LMS page reports its data model as it changes only for a run that will leave (host.js)
-  await begin({ kind: 'package', label, url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers, storage: launch.storage, viewport: o.viewport, leave, recordInput: o.recordInput })
+  await begin({ kind: 'package', label, url: 'lab://run/__lab/host.html', launch, partition: 'lab', lrs: plan.lrs, caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers, storage: launch.storage, viewport: o.viewport, leave, recordInput: o.recordInput })
   // The macro's events at their times into the run, through the same input as the live view; they stop if the run ends first.
   // A click in a frame of another origin was only placed approximately (approx): it is skipped, and the trace says so.
   const a = active, skipped = o.macro.filter(e => e.approx).length
@@ -519,6 +529,7 @@ async function cycleStart({ item, ...rest }) {
   rest = { ...rest, files: rest.files ?? pkg?.overrides }
   if (experiment || active) throw new Error('Something is already running. Stop it first.')
   if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
+  if (pkg.analysis.format !== 'scorm') throw new Error('The save-and-resume test is for SCORM packages: a cmi5 or Tin Can package saves through its LRS.')
   const base = normaliseOptions(rest), job = experiment = { stop: false }
   try { if (base.browser === 'webkit') throw webkitMacro() } catch (e) { experiment = null; throw e }
   emit('cycle', { state: 'start' })

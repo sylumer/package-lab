@@ -11,6 +11,8 @@ export function segs(url) {
   return p.split('/').filter(Boolean).map(s => { try { return decodeURIComponent(s) } catch { return s } })
 }
 export const isLab = url => /^lab:\/\/run\/__lab\//.test(url)
+// The test LMS's LRS (cmi5 and Tin Can runs only, so SCORM runs are judged as before): its answers are the xAPI section's, not failed requests.
+export const isLrs = (url, trace) => !!trace?.lrs && /^lab:\/\/run\/__lrs\//.test(url)
 const ignorable = url => !url || /^(data|blob|chrome|chrome-extension|devtools|about):/.test(url) || isLab(url)
 
 // For each item of a, the best item of b by common trailing segments (at least the file name), or null.

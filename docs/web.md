@@ -102,6 +102,7 @@ Everything works as in the [user guide](user-guide.md), except:
 - **Browser** and **Device size** (under More options) work as in the desktop app; the CLI line says `--browser webkit --viewport iphone`. A WebKit run happens on the Mac in a Node process, shows in the Runs list like any run, and has no live view. If Playwright isn't installed, the page shows the message that says how to install it. With a device size, the **Live** view shows the page at that size.
 - **Test saving** (the button next to Launch, and its tab) works as in the desktop app: both runs happen on the Mac, in the same slot as experiments, and the tab shows the two runs side by side with the findings when the second ends. Like the Experiments table, a page opened midway shows only what happens after it joined.
 - **Macro** (under More options) shows the macro the page holds, with **Clear** and **Use this run's clicks** (the clicks the probe saw in the selected run). The macro is kept in the page, so reloading clears it; the CLI line says `--macro macro.json`.
+- The **xAPI** tab works as in the desktop app, for a cmi5 or Tin Can run: the statements with their validation, the documents and the requests to the LRS. The LRS runs on the Mac (at `lab://run/__lrs/` inside the run's browser); the page only reads the run's record.
 - A **Live** tab shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** tab selected.
 

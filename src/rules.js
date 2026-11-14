@@ -1,10 +1,11 @@
 // Findings: evidence from the static analysis, a recorded run and (optionally) a comparison, turned into likely
 // causes. Pure. Each finding: { sev: 'error' | 'warn' | 'info', title, detail, evidence: [string], fix }.
-import { isLab } from './diff.js'
+import { isLab, isLrs } from './diff.js'
 import { bootRun } from './bootpath.js'
 import { pinFindings } from './pins.js'
 import { traceFindings } from './instrument.js'
 import { packRun } from './packs/index.js'
+import { lrsFindings } from './xapi.js'
 
 const where = f => f ? `${f.fn || '(anonymous)'} ${f.url ? f.url.replace(/^lab:\/\/(?:run|content)\/pkg\//, '') : ''}:${f.line}` : ''
 const short = u => (u || '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
@@ -15,11 +16,13 @@ export function staticFindings(a) {
   const out = []
   if (!a) return out
   const sev = { 'no-manifest': 'error', 'manifest-xml': 'error', 'launch-missing': 'error', 'launch-case': 'error', 'manifest-case': 'error',
-    'file-missing': 'warn', 'manifest-not-root': 'warn', 'launch-remote': 'warn', 'no-sco': 'warn' }
+    'file-missing': 'warn', 'manifest-not-root': 'warn', 'launch-remote': 'warn', 'no-sco': 'warn',
+    'course-case': 'error', 'course-not-root': 'error', 'no-au': 'error', 'cmi5-moveon': 'error' }   // (cmi5 and Tin Can course files, P4.5)
   const autofix = { 'manifest-case': 1, 'manifest-not-root': 1, 'file-missing': 1, 'launch-case': 'case' }   // problem code → the autofix that addresses it (src/fixes.js)
   for (const p of a.problems) out.push({ sev: sev[p.code] ?? 'warn', title: p.text, evidence: [], fix: '', ...(autofix[p.code] && { autofix: { id: autofix[p.code] === 1 ? p.code : autofix[p.code], params: {} } }) })
   const m = a.manifest
-  if (m && a.apiUse !== 'none' && a.apiUse !== 'both' && a.apiUse !== m.version)
+  const scorm = (a.format ?? 'scorm') === 'scorm'
+  if (m && scorm && a.apiUse !== 'none' && a.apiUse !== 'both' && a.apiUse !== m.version)
     out.push({ sev: 'error', title: `The manifest says SCORM ${m.version}, but the scripts use the SCORM ${a.apiUse} API`,
       detail: `An LMS offers only ${API_NAME[m.version]} for a SCORM ${m.version} package, and the content looks for ${API_NAME[a.apiUse]}, so it finds no LMS.`,
       evidence: evidenceFrom(a.scan, a.apiUse === '1.2' ? 'api12' : 'api04', 3),
@@ -57,7 +60,7 @@ export function runFindings(trace, launch = {}, analysis = null) {
   // In a package run, calls the probe logged (host: true) went to an API object that isn't SCORM Lab's LMS.
   const shim = launch.kind === 'package' ? allApi.filter(c => c.host) : [], api = allApi.filter(c => !shim.includes(c))
   const contentAssigns = launch.kind === 'package' ? probe.filter(p => p.type === 'assign' && !isLab(p.frame)) : []
-  const pkgReq = trace.requests.filter(r => !isLab(r.url) && !/^(data|blob):/.test(r.url))
+  const pkgReq = trace.requests.filter(r => !isLab(r.url) && !isLrs(r.url, trace) && !/^(data|blob):/.test(r.url))
   const failed = pkgReq.filter(r => r.failed && !r.canceled || r.status >= 400)
   const firstApi = api[0]?.t ?? Infinity
   const errors = [...trace.exceptions.map(e => ({ ...e, uncaught: true })), ...(trace.caught ?? []).filter(c => !c.uncaught)]
@@ -123,6 +126,7 @@ export function runFindings(trace, launch = {}, analysis = null) {
     if (init.length && !sets(v === '1.2' ? 'cmi.core.exit' : 'cmi.exit').length) out.push({ sev: 'info', title: 'The content never set exit', detail: 'Without exit set to suspend, many LMSs start a new attempt next time instead of resuming.', evidence: [], fix: '' })
     if (init.length && !sets(v === '1.2' ? 'cmi.core.lesson_status' : 'cmi.completion_status').length) out.push({ sev: 'info', title: 'The content never reported completion', evidence: [], fix: '' })
   }
+  if (trace.lrs) out.push(...lrsFindings(trace.lrs))   // cmi5 and Tin Can (P4.5)
   if (launch.kind === 'package' && analysis) out.push(...packRun(analysis, trace, launch))
   return out
 }
@@ -191,7 +195,7 @@ export function launchFindings(trace, boot) {
   const why = []
   const pkgFailed = trace.requests.filter(r => /^lab:\/\/(?:run|content)\/pkg\//.test(r.url) && (r.status >= 400 || r.failed && !r.canceled))
   for (const r of pkgFailed.slice(0, 6)) why.push(`Not found: ${short(r.url)} (${r.status ?? r.failed}) from ${where(r.from?.[0]) || '?'}`)
-  const serverFailed = trace.requests.filter(r => /^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(r.url))
+  const serverFailed = trace.requests.filter(r => /^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(r.url) && !isLrs(r.url, trace))
   for (const r of serverFailed.slice(0, 4)) why.push(`Asked the server for ${new URL(r.url).pathname} (outside the package) from ${where(r.from?.[0]) || '?'}`)
   const ex = [...trace.exceptions].sort((a, b) => a.t - b.t)
   ex.slice(0, 3).forEach((e, i) => why.push(`${i ? 'Then' : 'First'} uncaught error at ${(e.t / 1000).toFixed(1)} s: ${e.text} at ${where(e.at[0]) || short(e.url) + ':' + e.line}`))

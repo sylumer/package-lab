@@ -8,6 +8,7 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 - [Before running: Findings and Boot path](#before-running-findings-and-boot-path)
 - [Launching an item](#launching-an-item)
 - [Reading a run](#reading-a-run)
+- [cmi5 and Tin Can packages](#cmi5-and-tin-can-packages)
 - [Testing a theory: launch settings](#testing-a-theory-launch-settings)
 - [Running it the way an LMS does: profiles](#running-it-the-way-an-lms-does-profiles)
 - [What the content wants from its server](#what-the-content-wants-from-its-server)
@@ -145,6 +146,8 @@ The first finding says it in words: "Got as far as: …. Didn’t reach: …." T
 start looking. A timed run usually stops before the learner finishes, so a cross at **Committed** or **Finished** is
 often expected: use **Stop and analyse** after using the course to see them.
 
+A cmi5 or Tin Can run has its own, shorter list: see [cmi5 and Tin Can packages](#cmi5-and-tin-can-packages).
+
 The most useful findings are:
 
 - **The content shows a blank page** or **is stuck on a loading screen**: what went wrong while it loaded, in order.
@@ -171,6 +174,7 @@ Then the other tabs:
 | **Boot path** | The loading path, plus **In the run**: when each file was asked for and its status, or *never asked for* |
 | **Package** | The manifest, the items, and every match from the static scan (API names, searches, requests, server paths, mode switches) |
 | **API** | Every API call in order: element, value, result, error code and text, and the stored values at the end |
+| **xAPI** | For a cmi5 or Tin Can run: the statements, their validation, the documents and the requests to the LRS. See [the xAPI tab](#the-xapi-tab) |
 | **Lookups** | Each time the content read `window.API` or `window.API_1484_11` in any frame, with whether it found one and the code that looked. Also frame depth and opener for each frame, and any assignment to those names |
 | **Network** | Every request: status, type and the code that made it |
 | **Scripts** | Every script the browser parsed, in order, with what loaded it. **Code** opens the script in the [code view](#reading-the-code) |
@@ -201,6 +205,58 @@ Use the **Zoom** slider to look closer, and the **Start** slider to move along t
 its details. Click an item to open the tab it came from (Network for a request, API for a call, and so on). The tab
 opens at the top, not at that row. Steps the run didn't reach are listed under the chart. The report has the same
 timeline as a picture.
+
+## cmi5 and Tin Can packages
+
+SCORM Lab diagnoses two more kinds of package, found by their course file:
+
+- **cmi5**: a ZIP with `cmi5.xml` at the top (a course made of blocks and AUs, the assignable units).
+- **Tin Can (xAPI)**: a ZIP with `tincan.xml` and no `imsmanifest.xml`.
+
+Open one as you open a SCORM package. The **Package** tab shows *Course file: cmi5* and lists the AUs (or the Tin Can
+activities that have a `<launch>`) as the items, with `moveOn` and `masteryScore` for cmi5. **Findings** checks the course
+file and the launch files before running (see [Findings](findings.md#from-a-cmi5-or-tin-can-package)). Launch an item as
+usual. There is no SCORM API: the test LMS gives the content an **LRS** instead, a learning record store of its own, at
+`lab://run/__lrs/`, and puts its address in the launch URL the way an LMS does:
+
+- **cmi5**: `endpoint`, `fetch`, `actor`, `registration` and `activityId`. The AU POSTs to the `fetch` address to get an
+  auth token, **once** (a second request gets error 1, as in the standard), and sends it as `Authorization: Basic <token>`.
+  The LRS holds the `LMS.LaunchData` state document (`contextTemplate` with the session id, `launchMode`, `moveOn`,
+  `masteryScore`, `launchParameters`) and the learner's preferences, and has recorded the LMS's "launched" statement
+  before the AU starts. An AU whose `launchMethod` is OwnWindow opens in its own window.
+- **Tin Can**: `endpoint`, `auth` (the whole `Basic …` value), `actor`, `registration` and `activity_id`. The content gets the real token; in a saved run, a report and the Network tab's saved addresses it shows as `‹token›`.
+
+The LRS speaks xAPI 1.0.3: statements (PUT, POST, and GET with `statementId`, `since`, `until`, `verb`, `activity`,
+`registration`, `agent`, `limit`), state, activity profile and agent profile documents, `about`, and the
+`X-Experience-API-Version` header. It checks every statement against the standard. A statement that breaks a MUST is
+refused with status 400, as a real LRS does, and recorded with its problems; what the standard only recommends is accepted
+and noted. The learner is "Learner, Test" and nothing is kept after the run except what the saved run holds.
+
+The milestones follow the statements:
+
+- cmi5: **Launch page loaded**, **Scripts loaded**, **Content shown**, **Fetched the auth token**, **Initialized**,
+  **Completed, passed or failed**, **Terminated**.
+- Tin Can: the first three, then **Sent a statement** and **Sent a completion statement** (a statement with the verb
+  completed, passed, failed or mastered, or a result with `completion` or `success` true).
+
+Launch settings that are about SCORM (**API offered**, **Resume**, the save-and-resume test) don't apply. Profiles,
+frame depth, the device size, storage and WebKit do, and a run saves its statements.
+
+### The xAPI tab
+
+For a cmi5 or Tin Can run the **xAPI** tab shows:
+
+- **Statements**: every statement in the order it arrived, with when, who sent it (the LMS or the content), whether the
+  LRS stored or rejected it, a one-line summary (verb, object, result) and its **Validation**: each problem with the
+  place in the statement it is about (`result.score.scaled`) and whether it is an error (the LRS refuses the statement) or
+  a warning. Open a statement to see its JSON.
+- **Documents**: the state, activity profile and agent profile documents, and who wrote them.
+- **Requests to the LRS**: every request with its status, whether it carried the token and the version header, and what
+  was wrong with it.
+
+The cmi5 findings (statements out of order, "completed" before "initialized", no category activity or session id,
+`moveOn` not satisfied, the token fetched twice) are in [Findings](findings.md#from-a-cmi5-or-tin-can-run-the-lrs),
+with every xAPI check. A report has an **xAPI** section with the same tables.
 
 ## Testing a theory: launch settings
 
@@ -739,9 +795,9 @@ downloads the file. The CLI does it with `scorm-lab report run.json --redact` ([
 
 What goes: the text the pages show, console messages, the values the course stored (its answers, names and
 bookmarks), suspend data, request and response bodies and headers, anything you typed or recorded as a macro, changed
-file contents, the scripts' text and code snippets, query values and fragments in addresses, local file paths, and the
+file contents, the scripts' text and code snippets, the text of xAPI statements (names, activity ids, responses, extension values) and the state and profile documents, query values and fragments in addresses, local file paths, and the
 item's title. What stays: the verdict, the findings (worked out again from what is left), the milestones, the timeline,
-the API calls with their element names and SCORM's own words (`completed`, `passed`, `suspend`), numbers and times,
+the API calls with their element names and SCORM's own words, the xAPI statements' structure (the standard verbs and categories, ids, times, scores and the problems found in them), (`completed`, `passed`, `suspend`), numbers and times,
 function and property names, the package's name and file paths, and the first part of each error the browser reported (up to its first colon, or the whole message for a known shape such as “x is not defined”; quoted strings always go). Learner ids, names, locations and comments are hidden even when they are numbers. Addresses of other sites keep their host and path, with id-like parts hidden. A banner at the top says what was taken out and what was kept. Check the report before you send
 it: a message from the browser can still hold words the course wrote outside quotes.
 

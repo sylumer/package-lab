@@ -35,6 +35,8 @@ import { originFindings, storageFindings } from '../src/rules.js'
 import { cycleFindings, cycleRows, readMacro, macroFromTrace, resumeOptions } from '../src/cycle.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import './packs.js'
+import { cmi5Package, cmi5Steps, tincanPackage } from './xapi.js'
+import { CMI5_STEPS } from '../src/milestones.js'
 import './codeview.js'
 import './batch.js'
 import vm from 'node:vm'
@@ -1598,6 +1600,26 @@ if (!process.argv.includes('--unit')) {
   assert.equal(node(['report', notRun, '--redact', '--redact-names', '--key-out', key2]).status, 2, 'redact: a report that fails')
   assert.ok(!existsSync(key2), 'redact: a failed report leaves no key file behind')
   assert.equal(node(['report', out, '--redact', '--redact-names', '--key-out', keyFile]).status, 2, 'redact: an existing key file is not overwritten')
+  // cmi5 and Tin Can (P4.5). Without Electron: analyze, items and the course file. One Electron run in the default suite: the good cmi5 AU
+  // reaches terminated (fetched its token once, initialized, completed, passed, terminated), is saved with its statements, and reports (also redacted).
+  const cmi5Zip = join(work, 'cmi5.zip'), cmi5BadZip = join(work, 'cmi5-broken.zip'), tincanZip = join(work, 'tincan.zip')
+  writeFileSync(cmi5Zip, cmi5Package()); writeFileSync(cmi5BadZip, cmi5Package(cmi5Steps.broken)); writeFileSync(tincanZip, tincanPackage())
+  {
+    const ca = JSON.parse(node(['analyze', cmi5Zip, '--json']).stdout), ta = JSON.parse(node(['analyze', tincanZip, '--json']).stdout)
+    assert.deepEqual([ca.format, ca.manifest.version, ca.item.type, ca.item.launch, ca.verdict.sev], ['cmi5', 'cmi5', 'au', 'au/index.html', 'ok'], 'cmi5: analyze: ' + JSON.stringify(ca.findings.map(f => f.title)))
+    assert.deepEqual([ta.format, ta.item.type, ta.item.launch, ta.verdict.sev], ['tincan', 'activity', 'index.html', 'ok'], 'tincan: analyze')
+    assert.match(node(['analyze', cmi5Zip]).stdout, /^SCORM Lab · cmi5\.zip\ncmi5 · 1 items/, 'cmi5: the header names the format'); assert.match(node(['items', tincanZip]).stdout, /Sample Tin Can course {2}activity/)
+  }
+  const c5Out = join(work, 'cmi5-run.json'), c5 = run(cmi5Zip, '--out', c5Out), c5Saved = JSON.parse(readFileSync(c5Out, 'utf8'))
+  assert.equal(c5.furthest, 'terminated', 'cmi5: the good AU reaches terminated: ' + JSON.stringify(c5.milestones.filter(m => !m.reached)) + titles(c5))
+  assert.deepEqual(c5.milestones.map(m => m.id), CMI5_STEPS.map(m => m[0]), 'cmi5: its own milestones'); assert.ok(!c5.findings.some(f => f.sev === 'error' || f.sev === 'warn'), 'cmi5: no problems: ' + titles(c5))
+  assert.deepEqual(c5.xapi.statements.map(x => x.statement.verb.id.split('/').pop()), ['launched', 'initialized', 'completed', 'passed', 'terminated'], 'cmi5: the statements are in the run'); assert.equal(c5.xapi.tokenFetches.length, 1)
+  assert.deepEqual([c5Saved.trace.lrs.format, c5Saved.launch.format, c5Saved.launch.expose, c5Saved.trace.lrs.statements.length, c5Saved.trace.lrs.documents.some(d => d.id === 'LMS.LaunchData')], ['cmi5', 'cmi5', 'none', 5, true], 'cmi5: the saved run carries the LRS')
+  assert.ok(c5Saved.trace.lrs.calls.every(c => c.status < 400) && !JSON.stringify(c5Saved.trace.lrs).includes('Basic '), 'cmi5: every request was answered, and no credential is kept')
+  assert.match(node(['report', c5Out]).stdout, /<h2>xAPI<\/h2>[\s\S]*terminated/, 'cmi5: the report has the xAPI section')
+  const c5Red = node(['report', c5Out, '--redact']).stdout; assert.ok(/<h2>xAPI<\/h2>/.test(c5Red) && !/example\.com|Learner, Test|learner-1/.test(c5Red), 'cmi5: the redacted report has the section and none of the names')
+  console.log('cmi5: ok')
+
   const res = run(good, '--resume-from', out)
   // The sample only resumes after exit = suspend, which a timed-out run never sets; what carries over is its status.
   assert.ok(res.launch.resume && res.api.some(a => a.el === 'cmi.core.lesson_status' && a.call === 'LMSGetValue' && a.result === 'incomplete'), 'resume: stored data offered: ' + calls(res))
@@ -1763,6 +1785,8 @@ if (!process.argv.includes('--unit')) {
       assert.ok(titles(run(stored, '--browser', 'webkit', '--storage', 'blocked', '--wait', '2')).some(t => /needs storage the browser can block/.test(t)), 'webkit: blocked storage is explained')
       assert.ok(run(hosted, '--browser', 'webkit', '--answer', '/api/player/config=200:{}', '--wait', '2').findings.some(f => /Answered 1 request/.test(f.title)), 'webkit: answers')
       assert.match(node(['run', good, '--browser', 'webkit', '--trace']).stderr, /Tracing the code runs only in Chromium/, 'webkit: tracing is refused')
+      const wc5 = run(cmi5Zip, '--browser', 'webkit', '--wait', '3'); assert.equal(wc5.furthest, 'terminated', 'webkit: a cmi5 AU reaches terminated through the same LRS: ' + titles(wc5)); assert.equal(wc5.xapi.statements.length, 5)
+      const wt = run(tincanZip, '--browser', 'webkit', '--wait', '3'); assert.deepEqual(wt.xapi.statements.map(x => x.status), ['stored', 'rejected', 'stored'], 'webkit: a Tin Can package: its statements are validated the same')
       const bx = JSON.parse(node(['experiment', chromeOnly, '--preset', 'browsers', '--wait', '2', '--json']).stdout)
       assert.deepEqual(bx.variants.map(v => v.name), ['default', 'browser webkit'], 'browsers experiment: the variants')
       assert.ok(bx.variants[1].furthest !== bx.variants[0].furthest && idx(bx.variants[0].furthest) > idx(bx.variants[1].furthest), 'browsers experiment: webkit gets less far: ' + JSON.stringify(bx.variants.map(v => [v.name, v.furthest])))
@@ -1975,6 +1999,34 @@ if (!process.argv.includes('--unit')) {
     }
     assert.match(node(['cycle', good, '--browser', 'webkit']).stderr, /Chromium only/, 'cycle: WebKit is refused')
     assert.match(node(['run', good, '--browser', 'webkit', '--macro', macroFile]).stderr, /Chromium only/, 'macro: WebKit is refused')
+  }
+
+  if (slow) {   // cmi5 and Tin Can (P4.5): the broken AU, the Tin Can package, and the web interface carrying the statements
+    assert.match(node(['run', cmi5Zip, '--wait', '3']).stdout, /xAPI {2}5 statements \(5 stored, 0 rejected\)[\s\S]*launched[\s\S]*terminated[\s\S]*✓ Terminated/, 'cmi5: the text output lists the statements')
+    const c5b = run(cmi5BadZip), tb = titles(c5b)
+    assert.ok(c5b.findings.some(f => f.sev === 'error' && /^cmi5: The AU sent “completed” before “initialized”/.test(f.title)) && c5b.findings.some(f => f.sev === 'error' && /verb id that isn’t an IRI/.test(f.title)), 'cmi5 broken: both findings: ' + tb)
+    assert.equal(c5b.xapi.statements.find(x => x.status === 'rejected').problems[0].path, 'verb.id', 'cmi5 broken: the rejected statement says where')
+    const tcOut = join(work, 'tincan-run.json'), tcRun = run(tincanZip, '--out', tcOut), tcSaved = JSON.parse(readFileSync(tcOut, 'utf8'))
+    assert.deepEqual(tcRun.xapi.statements.map(x => [x.status, x.statement.verb.id.split('/').pop()]), [['stored', 'experienced'], ['rejected', 'answered'], ['stored', 'completed']], 'tincan: statements listed')
+    assert.ok(tcRun.xapi.statements[1].problems.some(p => p.code === 'score-range'), 'tincan: validated'); assert.ok(tcRun.findings.some(f => /^The LRS rejected 1 statement/.test(f.title)), 'tincan: the finding: ' + titles(tcRun))
+    assert.deepEqual([tcRun.furthest, tcSaved.trace.lrs.documents.map(d => d.id)], ['completion', ['bookmark']], 'tincan: reaches the completion statement, and its state document is kept')
+    assert.ok(!node(['report', tcOut, '--redact']).stdout.includes('example.com'), 'tincan: the redacted report')
+    // The same through the handlers (what the apps and the xAPI tab use): upload, launch, the run's trace.lrs, and the saved run opening again.
+    const wd = join(work, 'web-cmi5'), srv = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, SCORM_LAB_DATA: wd }, stdio: ['ignore', 'pipe', 'ignore'] })
+    let wlog = ''; srv.stdout.on('data', d => { wlog += d })
+    try {
+      await until(() => /http:\/\/\S+/.test(wlog), 30000, 'web start')
+      const wurl = /http:\/\/\S+/.exec(wlog)[0], wbase = wurl.split('/?')[0], wH = { cookie: (await fetch(wurl, { redirect: 'manual' })).headers.get('set-cookie').split(';')[0] }
+      const winvoke = async (name, arg) => { const r = await (await fetch(`${wbase}/api/invoke/${name}`, { method: 'POST', headers: wH, body: JSON.stringify(arg ?? {}) })).json(); if (r.error) throw new Error(r.error); return r.value }
+      await fetch(wbase + '/api/upload?name=cmi5.zip', { method: 'POST', headers: wH, body: readFileSync(cmi5Zip) })
+      const info = await winvoke('state'); assert.equal(info.pkg.analysis.format, 'cmi5'); assert.equal(info.pkg.items[0].type, 'au')
+      await winvoke('launch', { item: 0, auto: 3 })
+      let wst
+      for (const end = Date.now() + 30000; Date.now() < end; await new Promise(r => setTimeout(r, 500))) { wst = await winvoke('state'); if (wst.runs.length && !wst.running) break }
+      assert.equal(wst.runs[0].milestones.at(-1).reached, true, 'web cmi5: terminated'); assert.equal(wst.runs[0].trace.lrs.statements.length, 5, 'web cmi5: the run carries the LRS record')
+      const wrep = await winvoke('report-html', { run: wst.runs[0].id, redact: true }); assert.ok(/<h2>xAPI<\/h2>/.test(wrep.html) && !/example\.com/.test(wrep.html), 'web cmi5: the redacted report')
+      const sv = await winvoke('saved-runs'); assert.equal((await winvoke('load-run', { file: sv[0].file }))[0].trace.lrs.statements.length, 5, 'web cmi5: the saved run opens with its statements')
+    } finally { srv.kill() }
   }
 
   // The web interface: token, upload, launch, live frames, the run, saved runs.

@@ -3,6 +3,7 @@
 import { xmlTree, xKid, xKids, xFind } from './xml.js'
 import { detectPacks, packStatic } from './packs/index.js'
 import { textOf } from './packs/util.js'
+import { parseCmi5, parseTincan, courseProblems, courseManifest } from './cmi5.js'
 
 // A path inside the package from a base folder and an href: '..' and '.' resolved, %XX decoded, query and fragment
 // dropped. null for a link to another site or scheme.
@@ -12,7 +13,7 @@ export function pkgPath(base, href) {
   if (u.origin !== 'https://pkg.invalid') return null
   try { return decodeURIComponent(u.pathname.slice(1)) } catch { return u.pathname.slice(1) }
 }
-const isRemote = href => /^[a-z][a-z0-9+.-]*:|^\/\//i.test(href.trim())
+export const isRemote = href => /^[a-z][a-z0-9+.-]*:|^\/\//i.test(href.trim())
 const title = n => !n ? '' : n.kids.length ? xFind(n, 'langstring')?.text ?? n.text : n.text
 
 export function parseManifest(text, base = '') {
@@ -51,7 +52,11 @@ const SCRIPTY = /\.(js|mjs|html?)$/i
 const lineAt = (text, i) => { let n = 1; for (let k = text.indexOf('\n'); k !== -1 && k < i; k = text.indexOf('\n', k + 1)) n++; return n }
 
 // What one script or page says. Each list holds { line, text } snippets, capped per file.
-export function scanText(name, text) {
+const HOSTS = 'www\\.w3\\.org|ns\\.adobe\\.com|purl\\.org|www\\.imsglobal\\.org|www\\.adlnet\\.org|ltsc\\.ieee\\.org|schemas\\.'
+const absolute = hosts => new RegExp(`["'\`](https?:)?\\/\\/(?!${hosts})[a-z0-9.-]+\\.[a-z]{2,}[^"'\`\\s]*["'\`]`, 'gi')
+const ABSOLUTE = absolute(HOSTS), ABSOLUTE_XAPI = absolute(HOSTS + '|adlnet\\.gov|w3id\\.org|id\\.tincanapi\\.com|activitystrea\\.ms')
+// xapi: the package is cmi5 or Tin Can, whose vocabulary hosts (adlnet.gov, w3id.org…) are identifiers, not sites to reach.
+export function scanText(name, text, xapi = false) {
   const out = { api12: [], api04: [], search: [], requests: [], absolute: [], serverPaths: [], hostChecks: [], modeSwitches: [], apiDefine: [] }
   const add = (list, re, max = 20) => {
     for (const m of text.matchAll(re)) {
@@ -64,7 +69,7 @@ export function scanText(name, text) {
   add(out.api04, /\bAPI_1484_11\b|\b(Initialize|Terminate)\s*\(\s*["']{2}\s*\)/g)
   add(out.search, /\b(window\.)?(top|opener|parent)\b[\w.]*\.(API|API_1484_11)\b|findAPI|getAPI|scanForAPI|ScanParentsForApi|GetAPI/gi)
   add(out.requests, /\bfetch\s*\(|XMLHttpRequest|\$\.(ajax|get|getJSON|post)\s*\(|axios\.\w+\s*\(|\.open\s*\(\s*["'](GET|POST|PUT)["']/g)
-  add(out.absolute, /["'`](https?:)?\/\/(?!www\.w3\.org|ns\.adobe\.com|purl\.org|www\.imsglobal\.org|www\.adlnet\.org|ltsc\.ieee\.org|schemas\.)[a-z0-9.-]+\.[a-z]{2,}[^"'`\s]*["'`]/gi)
+  add(out.absolute, xapi ? ABSOLUTE_XAPI : ABSOLUTE)
   add(out.serverPaths, /["'`]\/(?!\/)(api|content|services?|rest|data|assets|static|player|lms|xyleme|ws|v\d)\b[^"'`\s]*["'`]/gi)
   add(out.hostChecks, /location\.(hostname|host|origin|protocol)\b|document\.domain\b|window\.top\s*(!==|===|!=|==)\s*window/g)
   add(out.apiDefine, /\b(window|self|top|parent)\.(API|API_1484_11)\s*=(?!=)/g)
@@ -77,10 +82,26 @@ export function analyze(files, { tool = null } = {}) {
   const names = [...files.keys()]
   const lower = new Map(names.map(n => [n.toLowerCase(), n]))
   const res = { files: names.length, size: names.reduce((t, n) => t + files.get(n).length, 0), problems: [], fingerprints: [], scan: {} }
-  const manifests = names.filter(n => /(^|\/)imsmanifest\.xml$/i.test(n)).sort((a, b) => a.split('/').length - b.split('/').length)
-  const root = manifests[0]?.replace(/imsmanifest\.xml$/i, '') ?? ''
+  const shallow = re => names.filter(n => re.test(n)).sort((a, b) => a.split('/').length - b.split('/').length)
+  const manifests = shallow(/(^|\/)imsmanifest\.xml$/i), cmi5s = shallow(/(^|\/)cmi5\.xml$/i), tincans = shallow(/(^|\/)tincan\.xml$/i)
+  // cmi5.xml makes it cmi5, unless an imsmanifest.xml sits higher in the ZIP (a SCORM package that carries a cmi5 sample deeper down);
+  // tincan.xml with no imsmanifest.xml makes it Tin Can (xAPI); anything else is SCORM.
+  const depth = n => n.split('/').length
+  const isCmi5 = cmi5s[0] && (!manifests.length || depth(cmi5s[0]) <= depth(manifests[0]))
+  const courseFile = isCmi5 ? cmi5s[0] : manifests.length ? undefined : tincans[0]
+  res.format = isCmi5 ? 'cmi5' : courseFile ? 'tincan' : 'scorm'
+  const root = (courseFile ?? manifests[0])?.replace(/(imsmanifest|cmi5|tincan)\.xml$/i, '') ?? ''
   res.root = root
-  if (!manifests.length) res.problems.push({ code: 'no-manifest', text: 'No imsmanifest.xml in the package.' })
+  if (courseFile) {
+    const kind = res.format === 'cmi5' ? 'cmi5.xml' : 'tincan.xml'
+    if (!new RegExp(`(^|/)${kind.replace('.', '\\.')}$`).test(courseFile)) res.problems.push({ code: 'course-case', text: `The course file is named ${courseFile}; it must be ${kind} in lower case.` })
+    if (root) res.problems.push({ code: 'course-not-root', text: `${kind} is in ${root}, not at the top of the ZIP. An LMS looks for it there.` })
+    try {
+      const course = (res.format === 'cmi5' ? parseCmi5 : parseTincan)(files.get(courseFile).toString('utf8'))
+      res.course = course; res.manifest = courseManifest(course, root, pkgPath, isRemote)
+      res.problems.push(...courseProblems(course))
+    } catch (e) { res.problems.push({ code: 'manifest-xml', text: `${kind} isn't well-formed: ${e.message}` }) }
+  } else if (!manifests.length) res.problems.push({ code: 'no-manifest', text: 'No imsmanifest.xml in the package.' })
   else {
     if (manifests[0] !== root + 'imsmanifest.xml') res.problems.push({ code: 'manifest-case', text: `The manifest is named ${manifests[0]}; it must be imsmanifest.xml in lower case.` })
     if (root) res.problems.push({ code: 'manifest-not-root', text: `The manifest is in ${root}, not at the top of the ZIP. Most LMSs need it at the top.` })
@@ -88,23 +109,24 @@ export function analyze(files, { tool = null } = {}) {
   }
   const m = res.manifest
   if (m) {
+    const rid = id => res.format === 'scorm' ? id : `“${id}”`   // an AU's id is course content: quoted, so a redacted report masks it
     for (const r of m.resources) {
       if (r.path && !files.has(r.path)) {
         const ci = lower.get(r.path.toLowerCase())
-        res.problems.push(ci ? { code: 'launch-case', text: `Resource ${r.id} launches ${r.path}, but the ZIP has ${ci}. Paths are case-sensitive on most servers.` }
-          : { code: 'launch-missing', text: `Resource ${r.id} launches ${r.path}, which isn't in the package.` })
+        res.problems.push(ci ? { code: 'launch-case', text: `Resource ${rid(r.id)} launches ${r.path}, but the ZIP has ${ci}. Paths are case-sensitive on most servers.` }
+          : { code: 'launch-missing', text: `Resource ${rid(r.id)} launches ${r.path}, which isn't in the package.` })
       }
-      for (const f of r.files) if (f && !files.has(f) && !lower.has(f.toLowerCase())) res.problems.push({ code: 'file-missing', text: `Resource ${r.id} lists ${f}, which isn't in the package.` })
-      if (r.href && isRemote(r.href)) res.problems.push({ code: 'launch-remote', text: `Resource ${r.id} launches ${r.href}, on another site: the package depends on that site being reachable.` })
+      for (const f of r.files) if (f && !files.has(f) && !lower.has(f.toLowerCase())) res.problems.push({ code: 'file-missing', text: `Resource ${rid(r.id)} lists ${f}, which isn't in the package.` })
+      if (r.href && isRemote(r.href)) res.problems.push({ code: 'launch-remote', text: `Resource ${rid(r.id)} launches ${r.href}, on another site: the package depends on that site being reachable.` })
     }
-    if (!m.items.some(i => i.type === 'sco')) res.problems.push({ code: 'no-sco', text: 'No item launches a SCO: assets never talk to the LMS, so no API calls or progress are expected.' })
+    if (res.format === 'scorm' && !m.items.some(i => i.type === 'sco')) res.problems.push({ code: 'no-sco', text: 'No item launches a SCO: assets never talk to the LMS, so no API calls or progress are expected.' })
   }
   const all = { api12: 0, api04: 0 }
   for (const n of names) {
     if (!TEXT.test(n) || files.get(n).length > 20e6) continue
     const text = textOf(files, n)   // decoded once and shared with the packs
     if (!SCRIPTY.test(n)) continue
-    const s = scanText(n, text)
+    const s = scanText(n, text, res.format !== 'scorm')
     all.api12 += s.api12.length; all.api04 += s.api04.length
     if (Object.values(s).some(l => l.length)) res.scan[n] = s
   }

@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { macro: [], cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', 'Folder check', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'xAPI', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', 'Folder check', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 // ---- The code view: every file:line in evidence opens it (src/ui/codeview.js draws it, the code-view handler fills it) ----
 const codePane = $('code-pane')
@@ -84,7 +84,7 @@ const VIEWS = {
     if (!a) return h('p', { class: 'muted' }, 'Open a package.')
     const m = a.manifest
     const out = [h('table', {}, h('tbody', {},
-      [['File', st.pkg.name], ['Files', `${a.files} (${(a.size / 1048576).toFixed(1)} MB)`], ['Manifest', m ? `SCORM ${m.version}${m.edition ? ' ' + m.edition + ' edition' : ''} (schemaversion “${m.schemaversion}”)` : 'none'],
+      [['File', st.pkg.name], ['Files', `${a.files} (${(a.size / 1048576).toFixed(1)} MB)`], [a.format && a.format !== 'scorm' ? 'Course file' : 'Manifest', !m ? 'none' : a.format === 'cmi5' ? 'cmi5 (cmi5.xml)' : a.format === 'tincan' ? 'Tin Can (tincan.xml)' : `SCORM ${m.version}${m.edition ? ' ' + m.edition + ' edition' : ''} (schemaversion “${m.schemaversion}”)`],
         ['Scripts use', a.apiUse === 'none' ? 'no SCORM API names' : a.apiUse === 'both' ? 'both APIs' : 'SCORM ' + a.apiUse], ['Made with', a.fingerprints.join(', ') || 'not recognised'], ['Root', a.root || '(top of the ZIP)']]
         .map(([k, v]) => h('tr', {}, h('th', {}, k), h('td', {}, v)))))]
     if (m) out.push(h('h3', { class: 'section' }, 'Items'), ...table(['Item', 'Type', 'Launch', 'Parameters', 'Mastery'], m.items.map(i => ['  '.repeat(i.depth) + (i.title || i.id), i.type, i.res?.path ?? i.res?.href ?? '', i.params, i.mastery])))
@@ -101,6 +101,24 @@ const VIEWS = {
     const cmi = run()?.trace.cmi
     if (cmi) for (const [v, vals] of Object.entries(cmi)) out.push(h('h3', { class: 'section' }, `Stored values at the end (SCORM ${v})`), ...table(['Element', 'Value'], Object.entries(vals).map(([k, x]) => [k, h('code', {}, x)])))
     return out
+  },
+  // The LRS of a cmi5 or Tin Can run (P4.5): the statements with their validation, the documents (state, profiles) and the requests.
+  xAPI() {
+    const x = run()?.trace.lrs
+    if (!x) return h('p', { class: 'muted' }, run() ? 'This run had no LRS: only cmi5 and Tin Can (xAPI) packages get one.' : 'Launch a cmi5 or Tin Can package to see its statements here.')
+    const verb = e => (e.statement?.verb?.id ?? '').replace(/^.*[/#]/, '') || '(no verb)'
+    const line = e => { const st = e.statement ?? {}, r = st.result ?? {}, o = st.object ?? {}, bits = [r.completion === true && 'completion', r.success === true ? 'success' : r.success === false && 'failure', typeof r.score?.scaled === 'number' && `scaled ${r.score.scaled}`, r.duration].filter(Boolean)
+      return [verb(e), o.definition?.name ? Object.values(o.definition.name)[0] : o.id ?? '', ...bits].join(' · ') }
+    const probs = e => (e.problems ?? []).length ? h('div', {}, e.problems.map(p => h('div', { class: p.sev === 'error' ? 'bad' : 'muted' }, `${p.sev} ${p.path || 'statement'}: ${p.text}`))) : ''
+    const n = k => x.statements.filter(e => e.status === k).length
+    return [h('p', { class: 'muted small' }, `${x.format === 'cmi5' ? 'cmi5' : 'Tin Can'} · ${x.statements.length} statements (${n('stored')} stored, ${n('rejected')} rejected) · ${x.calls.length} requests to the LRS${x.format === 'cmi5' ? ` · the auth token was fetched ${x.fetches.length} time${x.fetches.length === 1 ? '' : 's'}` : ''} · endpoint ${x.endpoint}`),
+      h('h3', { class: 'section' }, 'Statements'),
+      ...table(['#', 's', 'From', 'Status', 'Statement', 'Validation'], x.statements.map(e => [e.n, secs(e.t ?? 0), e.by === 'lms' ? 'the LMS' : 'the content',
+        h('span', { class: e.status === 'rejected' ? 'bad' : 'ok' }, e.status), h('details', {}, h('summary', {}, line(e)), h('pre', { class: 'code' }, JSON.stringify(e.statement, null, 2))), probs(e)])),
+      h('h3', { class: 'section' }, 'Documents (state, activity profile, agent profile)'),
+      ...table(['Kind', 'Id', 'Type', 'Written by', 'Writes', 'Content'], x.documents.map(d => [d.kind, d.id, d.contentType, d.by === 'lms' ? 'the LMS' : 'the content', d.writes, h('code', {}, String(d.value).slice(0, 600))])),
+      h('h3', { class: 'section' }, 'Requests to the LRS'),
+      ...table(['s', 'Method', 'Resource', 'Status', 'Authorization', 'Version header', 'Problems'], x.calls.map(c => [secs(c.t ?? 0), c.method, c.resource, h('span', { class: c.status >= 400 ? 'bad' : '' }, String(c.status)), c.auth, c.version, (c.problems ?? []).map(p => p.text).join(' ')]))]
   },
   Lookups() {
     const list = (run() ? run().trace.probe : st.live).filter(p => p.type !== 'api')
@@ -489,7 +507,7 @@ function render() {
   $('runs').replaceChildren(...st.runs.map(r => h('li', { class: r.id === st.sel ? 'sel' : null, onclick: () => { st.sel = r.id; render() } },
     h('label', { title: 'Reference: the run that works' }, h('input', { type: 'radio', name: 'ref', checked: st.ref === r.id, onclick: e => { e.stopPropagation(); st.ref = r.id; render() } }), h('span', { class: 'tag' }, 'R')),
     h('label', { title: 'The run that fails' }, h('input', { type: 'radio', name: 'fail', checked: st.fail === r.id, onclick: e => { e.stopPropagation(); st.fail = r.id; render() } }), h('span', { class: 'tag' }, 'F')),
-    h('span', { class: 'lbl' }, r.label, h('span', { class: 'kind' }, `${r.findings.filter(f => f.sev === 'error').length} errors · ${r.trace.probe.filter(p => p.type === 'api').length} API calls · ${r.trace.requests.length} requests`)))))
+    h('span', { class: 'lbl' }, r.label, h('span', { class: 'kind' }, `${r.findings.filter(f => f.sev === 'error').length} errors · ${r.trace.lrs ? r.trace.lrs.statements.length + ' statements' : r.trace.probe.filter(p => p.type === 'api').length + ' API calls'} · ${r.trace.requests.length} requests`)))))
   $('compare').disabled = !(st.ref && st.fail && st.ref !== st.fail)
   showMacro()
 }
@@ -639,7 +657,7 @@ $('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeT
 $('launch').onclick = () => act(async () => {
   st.live = []
   await lab.invoke('launch', { item: +$('item').value, ...launchOptions() })
-  st.sel = null; st.tab = lab.web ? 'Live' : 'API'; render()
+  st.sel = null; st.tab = lab.web ? 'Live' : st.pkg?.analysis.format && st.pkg.analysis.format !== 'scorm' ? 'xAPI' : 'API'; render()
 }, 'Launching…')
 $('ref').onclick = () => act(async () => { st.live = []; await lab.invoke('reference', { url: $('ref-url').value.trim(), caught: $('caught').checked, auto: +$('auto').value }); st.sel = null; st.tab = lab.web ? 'Live' : 'API'; render() }, 'Opening the reference…')
 $('stop').onclick = () => act(() => lab.invoke('stop'), 'Collecting coverage and sources…')

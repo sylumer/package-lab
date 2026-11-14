@@ -11,6 +11,7 @@ import { analyze } from './analyze.js'
 import { answerFor, buildAnswer, userAgentPin } from './pins.js'
 import { probeSource, FLUSH, CAP } from './recorder.js'
 import { serveRequest, launchPlan, WEBKIT_ORIGINS } from './launch.js'
+import { createLrs, maskTokens, MAX_BODY } from './lrs.js'
 
 const HOW = 'npm i -D playwright && npx playwright install webkit'
 // Only a source checkout can run WebKit: a packaged app has no package.json beside src/ (it is inside app.asar) and no Playwright.
@@ -51,6 +52,7 @@ export async function runWebkit({ plan, wait = 10, stop = () => false, onReady }
     const ctx = await browser.newContext({ viewport: { width: vp?.width ?? 1100, height: vp?.height ?? 800 }, deviceScaleFactor: vp?.deviceScaleFactor ?? 1, isMobile: !!vp?.mobile, hasTouch: !!vp?.touch,
       userAgent: userAgentPin(o.pins) ?? (vp?.userAgent || undefined), serviceWorkers: 'block' })
     const t0 = Date.now(), t = () => Date.now() - t0
+    const lrs = plan.lrs ? createLrs({ ...plan.lrs, now: t }) : null   // a cmi5 or Tin Can run's LRS, answered here like the test LMS's own files
     const trace = { label: plan.label, browser: 'webkit', browserVersion: browser.version(), started: new Date().toISOString(), targets: [], scripts: [], requests: [], navigations: [], console: [], exceptions: [],
       caught: [], log: [], probe: [], exec: [], coverage: [], sources: {}, truncated: {} }
     const push = (list, item) => { if (trace[list].length < (CAP[list] ?? 5000)) trace[list].push(item); else trace.truncated[list] = true }
@@ -98,7 +100,7 @@ export async function runWebkit({ plan, wait = 10, stop = () => false, onReady }
       if (!lms && u.origin !== WEBKIT_ORIGINS.content) return route.continue().catch(() => {})   // anything else goes to the network, as in a Chromium run
       let path
       try { path = decodeURIComponent(u.pathname) } catch { path = u.pathname }
-      const s = serveRequest({ path, lms, range: req.headers().range ?? '', config, files, headers })
+      const s = serveRequest({ path, lms, range: req.headers().range ?? '', config, files, headers, lrs, req: { method: req.method(), search: u.search, headers: req.headers(), body: (req.postDataBuffer()?.length ?? 0) > MAX_BODY ? '' : req.postData() ?? '', tooLarge: (req.postDataBuffer()?.length ?? 0) > MAX_BODY } })
       return route.fulfill({ status: s.status, headers: s.headers, body: typeof s.body === 'string' ? Buffer.from(s.body) : s.body }).catch(() => {})
     })
 
@@ -138,6 +140,7 @@ export async function runWebkit({ plan, wait = 10, stop = () => false, onReady }
       cmi = await withTimeout(page.evaluate('JSON.stringify(window.__labCmi?.() ?? null)')).then(JSON.parse).catch(() => null)
     }
     trace.cmi = cmi
+    if (lrs) { trace.lrs = lrs.snapshot(); maskTokens(trace) }
     trace.ended = new Date().toISOString(); trace.duration = t()
     return trace
   } finally { await browser.close().catch(() => {}) }

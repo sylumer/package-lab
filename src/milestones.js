@@ -1,13 +1,19 @@
 // Milestones: where a run got to on the SCORM path (launch page, scripts, something shown, API lookup, initialise,
 // read, write, commit, finish), and how two runs compare. Pure: takes a trace and the boot graph of the launch page.
-import { isLab } from './diff.js'
+import { isLab, isLrs } from './diff.js'
 import { bootRun } from './bootpath.js'
+import { lrsHits } from './xapi.js'
 
 export const STEPS = [
   ['launched', 'Launch page loaded'], ['scripts', 'Scripts loaded'], ['shown', 'Content shown'], ['looked', 'Looked for the API'],
   ['found', 'Found the API'], ['initialised', 'Initialised'], ['read', 'Read saved data'], ['wrote', 'Wrote data'],
   ['committed', 'Committed'], ['finished', 'Finished'],
 ]
+// cmi5 and Tin Can runs (P4.5) share the first three steps and then follow the LRS: the token, then the statements.
+const COMMON = STEPS.slice(0, 3)
+export const CMI5_STEPS = [...COMMON, ['fetched', 'Fetched the auth token'], ['initialized', 'Initialized'], ['completed', 'Completed, passed or failed'], ['terminated', 'Terminated']]
+export const TINCAN_STEPS = [...COMMON, ['statement', 'Sent a statement'], ['completion', 'Sent a completion statement']]
+export const stepsFor = format => format === 'cmi5' ? CMI5_STEPS : format === 'tincan' ? TINCAN_STEPS : STEPS
 const READ = /^cmi\.(core\.)?(entry|lesson_location|location)$|^cmi\.suspend_data$/
 const WRITE = /^cmi\.(core\.)?(lesson_location|location|lesson_status|completion_status|success_status|score\.\w+)$|^cmi\.suspend_data$/
 const ok = r => r && r.status >= 200 && r.status < 400 && !r.failed
@@ -17,7 +23,7 @@ const secs = t => t == null ? '' : ` at ${(t / 1000).toFixed(1)} s`
 export function milestones(trace, boot) {
   const probe = trace.probe ?? [], api = probe.filter(p => p.type === 'api')
   const nodes = boot ? bootRun(boot, trace) : [], root = nodes[0]?.run
-  const pkgReq = (trace.requests ?? []).filter(r => !isLab(r.url) && !/^(data|blob):/.test(r.url))
+  const pkgReq = (trace.requests ?? []).filter(r => !isLab(r.url) && !isLrs(r.url, trace) && !/^(data|blob):/.test(r.url))
   const isJs = r => /\.m?js(\?|$)/i.test(r.url)
   // Script tags on other sites can't be requested through SCORM Lab's host, so they aren't counted.
   const scripts = boot ? nodes.filter(n => n.how === 'tag' && n.kind === 'script' && !/^(remote|remote-http|local)$/.test(n.status)) : pkgReq.filter(isJs)
@@ -40,8 +46,9 @@ export function milestones(trace, boot) {
     wrote: apiStep(/SetValue$/, c => WRITE.test(c.el)),
     committed: returned(/^(LMSCommit|Commit)$/),
     finished: returned(/^(LMSFinish|Terminate)$/),
+    ...(trace.lrs ? lrsHits(trace.lrs) : {}),
   }
-  const list = STEPS.map(([id, label]) => {
+  const list = stepsFor(trace.lrs?.format).map(([id, label]) => {
     const h = id === 'scripts' && !hit.launched ? null : hit[id]
     return { id, label, reached: !!h, t: h?.t ?? null, evidence: h?.evidence ?? '' }
   })
@@ -63,7 +70,7 @@ export function milestoneFinding(list) {
 export function runCounts(trace) {
   const probe = trace.probe ?? [], doms = new Map(probe.filter(p => p.type === 'dom' && !isLab(p.frame)).map(d => [d.frame, d]))
   return { apiCalls: probe.filter(p => p.type === 'api').length, requests: (trace.requests ?? []).length,
-    failedRequests: (trace.requests ?? []).filter(r => r.status >= 400 || r.failed && !r.canceled).length,
+    failedRequests: (trace.requests ?? []).filter(r => !isLrs(r.url, trace) && (r.status >= 400 || r.failed && !r.canceled)).length,
     uncaught: (trace.exceptions ?? []).length, visibleText: [...doms.values()].reduce((t, d) => t + (d.text ?? 0), 0) }
 }
 

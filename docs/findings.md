@@ -23,6 +23,8 @@ if there are no errors.
 - [From a run: requests and errors](#from-a-run-requests-and-errors)
 - [From a run: milestones](#from-a-run-milestones)
 - [From a run: progress](#from-a-run-progress)
+- [From a cmi5 or Tin Can package](#from-a-cmi5-or-tin-can-package)
+- [From a cmi5 or Tin Can run: the LRS](#from-a-cmi5-or-tin-can-run-the-lrs)
 - [From a run in WebKit](#from-a-run-in-webkit)
 - [From a run: tracing](#from-a-run-tracing)
 - [From an experiment](#from-an-experiment)
@@ -161,7 +163,7 @@ such marker gets no pack unless you choose one (the **Authoring tool** option, o
 ## From a run: milestones
 
 Every package run has this finding first, whatever else is found. The same steps show as ticks and crosses at the top
-of the Findings tab, in the report, and in `run --json`. See [Milestones](user-guide.md#milestones) for the ten steps.
+of the Findings tab, in the report, and in `run --json`. See [Milestones](user-guide.md#milestones) for the ten steps (and the shorter lists for cmi5 and Tin Can runs).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -189,6 +191,72 @@ These appear only when the content called the API.
 | Suspend data is *N* characters | error if over the limit, warning near it | SCORM 1.2 allows 4,096 characters, 2004 allows 64,000 (or the run's LMS profile's own limit, which the detail names); more is truncated or rejected and resuming breaks | Publish as SCORM 2004, or reduce what is saved |
 | The content never set exit | info | Without `suspend`, many LMSs start a new attempt next time | |
 | The content never reported completion | info | | |
+
+## From a cmi5 or Tin Can package
+
+A package with a `cmi5.xml` is **cmi5**; one with a `tincan.xml` and no `imsmanifest.xml` is **Tin Can (xAPI)**. Their
+launch files get the usual checks (the launch file is missing, the capitals differ, the AU is on another site), with the
+text "Resource *R*" where *R* is the AU or activity id. Findings that are about SCORM (the version in the manifest, the
+SCORM API) are not made for them. These come from the course file:
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| The course file is named *X*; it must be cmi5.xml (or tincan.xml) in lower case | error | An LMS looks for exactly that name | Rename it |
+| cmi5.xml (or tincan.xml) is in *folder*, not at the top of the ZIP | error | An LMS looks for it at the top | Zip the package's contents, not the folder |
+| cmi5.xml (or tincan.xml) isn't well-formed: *why* | error | It can't be read, so nothing can be imported or launched | Fix the XML, or the root element (`courseStructure`, `tincan`) |
+| cmi5.xml has no assignable unit (`<au>`), or tincan.xml has no activity with a `<launch>` | error | There is nothing to launch | Re-export the course |
+| cmi5.xml has no course id, or its id isn't an absolute IRI | warning | `<course id>` must be an IRI such as `https://example.com/course` | Give it one |
+| An AU has no id, a duplicate id, an id that isn't an IRI, no `<url>`, or an unknown `launchMethod` | warning | cmi5 needs each AU's id (an IRI), unique, and a URL to launch | Correct the AU |
+| AU *A* has moveOn "*X*", or a masteryScore that isn't from 0 to 1 | error | `moveOn` is one of Passed, Completed, CompletedAndPassed, CompletedOrPassed, NotApplicable; `masteryScore` is a number from 0 to 1 | Correct the value |
+
+## From a cmi5 or Tin Can run: the LRS
+
+A run of a cmi5 or Tin Can package is given a local LRS (see [the xAPI tab](user-guide.md#the-xapi-tab)), and the
+content's statements are checked as they arrive. These findings come from what the LRS recorded. The
+[milestones](user-guide.md#milestones) of these runs follow the statements instead of the SCORM API: for cmi5 *Fetched the
+auth token*, *Initialized*, *Completed, passed or failed*, *Terminated*; for Tin Can *Sent a statement* and *Sent a
+completion statement*. "The content never looked for the SCORM API" and the SCORM API findings are not made.
+
+**xAPI (both formats)**
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| The content never called the LRS | error | The launch gave it the endpoint (and the fetch URL or auth), and nothing was requested: no statement was sent, so nothing is recorded | Check the launch parameters the content reads, and the Console for errors before its LRS code |
+| The content used the LRS but sent no statements | warning | It fetched a token or read a document, and stopped | Look for the error after the last request, in the xAPI tab's request list |
+| *N* requests had no usable X-Experience-API-Version header | error | Every xAPI request must say the version it speaks (1.0.0 to 1.0.3); an LRS answers 400 otherwise | Send `X-Experience-API-Version: 1.0.3` |
+| *N* requests to the LRS had no Authorization header, or weren't authorised | error | The LRS answers 401 until the request carries `Authorization: Basic <token>` (cmi5: the token from the fetch URL; Tin Can: the `auth` parameter) | Send the token on every request |
+| Statements were sent with the wrong Content-Type | error | Statements must be sent as `application/json` | Set the header |
+| *N* requests asked the LRS for something it doesn't have | warning | The LRS has the statements, state, activity profile, agent profile and about resources | Check the path the content builds from the endpoint |
+| The content used the alternate request syntax | info | A POST with `method=` and the headers in the body, meant for old browsers | None needed |
+| The LRS rejected *N* statements | error | A statement that breaks xAPI 1.0.3 is refused with status 400 and lost. The evidence lists each problem and where it is in the statement (for example `result.score.scaled: must be from -1 to 1`) | Correct the statement where the content builds it |
+| *N* statements have a verb id that isn't an IRI | error | A verb id must be an absolute IRI, such as `http://adlnet.gov/expapi/verbs/completed`; "completed" alone is not | Use the full IRI |
+| *N* statements break xAPI recommendations | warning | Accepted by the LRS, because the standard only recommends them: a verb without `display`, a timestamp without a time zone, `contextActivities` given as an object instead of a list | Correct them |
+
+What the validation checks (xAPI 1.0.3): the properties a statement may have; `actor` (one identifier, an account with
+`homePage` and `name`, a group's members); `verb.id` an IRI and `display` a language map; the `object` (Activity with an
+IRI, Agent, Group, SubStatement, StatementRef with a UUID); `result` (`score.scaled` from -1 to 1, `raw` between `min`
+and `max`, `min` below `max`, `success` and `completion` true or false, `duration` an ISO 8601 duration); `context`
+(`registration` a UUID, `contextActivities`, `language`, extension keys that are IRIs); `timestamp` and `stored`
+(ISO 8601); `id` a UUID; attachments. A statement with an error is not stored; one with only warnings is.
+
+**cmi5 only**
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| cmi5: the AU fetched the auth token *N* times | warning | The fetch URL is one-time use: the second request gets error 1 ("already returned") | Keep the token after the first fetch |
+| cmi5: The AU sent "*verb*" before "initialized" | error | "initialized" must be the first statement of the session. Order is by `timestamp`, then arrival | Send "initialized" as soon as the AU is ready |
+| cmi5: The AU sent statements but never "initialized" | error | As above, and nothing marks the session as started | Send it |
+| cmi5: The AU sent "*verb*" after "terminated" | error | "terminated" must be the last statement | Send nothing after it |
+| cmi5: The AU sent "*verb*" *N* times | error | "initialized", "completed" and "terminated" are sent once per session | Guard against sending twice (a reload, a second frame) |
+| cmi5: The AU sent both "passed" and "failed" in one session | error | Only one of them is allowed | Decide once |
+| cmi5: statements without the cmi5 category activity | error | `context.contextActivities.category` must hold an activity with the id `https://w3id.org/xapi/cmi5/context/categories/cmi5` | Start each statement's context from the `contextTemplate` in LMS.LaunchData and add the category |
+| cmi5: statements without the session id | error | `context.extensions` must carry the `…/cmi5/context/extensions/sessionid` value from the `contextTemplate` | Copy it |
+| cmi5: statements that don't match the launch | error | The actor, registration and object (the AU's id, the `activityId` parameter) must be the ones the AU was launched with | Use the launch parameters unchanged |
+| cmi5: statements without an id | error | An AU must give every statement a UUID `id` | Generate one |
+| cmi5: statements without a duration | error | "completed", "passed", "failed" and "terminated" must have `result.duration` | Add it |
+| cmi5: statements with the wrong result | error | "completed" has `completion` true, "passed" `success` true, "failed" `success` false, and only "passed" and "failed" have a score | Correct them |
+| cmi5: moveOn *X* isn't satisfied | warning (note if the AU had not terminated) | An LMS counts the AU as done only after the statements `moveOn` asks for ("completed", "passed", both, or either) | Check the AU sends them |
+| cmi5: "*passed*" with a score that disagrees with masteryScore | error | A "passed" score must reach the masteryScore in LMS.LaunchData, a "failed" score must stay below it | Decide pass or fail from the masteryScore |
 
 ## From a run: changed files
 

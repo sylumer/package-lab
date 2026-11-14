@@ -22,7 +22,7 @@ export const shapePrefix = responses => {
 
 // ---- Which requests went to a server ----
 // fetch and XHR requests to the host's root (lab://run/ outside the package and SCORM Lab's pages) or another site.
-const isServer = r => /^(XHR|Fetch)$/.test(r.type) && (/^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(r.url) || /^https?:/.test(r.url))
+const isServer = (r, trace) => /^(XHR|Fetch)$/.test(r.type) && (/^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(r.url) && !(trace?.lrs && /\/__lrs\//.test(r.url)) || /^https?:/.test(r.url))
 // The pattern that answers a request: its path on the host's root (any query), or its address on another site.
 export function requestPattern(url) {
   const u = new URL(url)
@@ -31,7 +31,7 @@ export function requestPattern(url) {
 // [{ match, url, method, from }], one per pattern.
 export function serverRequests(trace) {
   const out = new Map()
-  for (const r of trace.requests ?? []) if (isServer(r)) { const match = requestPattern(r.url); if (!out.has(match)) out.set(match, { match, url: r.url, method: r.method, from: where(r.from?.[0]) }) }
+  for (const r of trace.requests ?? []) if (isServer(r, trace)) { const match = requestPattern(r.url); if (!out.has(match)) out.set(match, { match, url: r.url, method: r.method, from: where(r.from?.[0]) }) }
   return [...out.values()]
 }
 

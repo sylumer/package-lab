@@ -51,7 +51,7 @@ export function matcher(match) {
 }
 // The first response of the list that answers this request, as { response, index }, or null. SCORM Lab's own pages are never answered.
 export function answerFor(responses, url, method = 'GET') {
-  if (!responses?.length || url.startsWith('lab://run/__lab/')) return null
+  if (!responses?.length || /^lab:\/\/run\/__(lab|lrs)\//.test(url)) return null
   for (const [index, response] of responses.entries()) {
     if (response.method && response.method !== String(method).toUpperCase()) continue
     try { if (matcher(response.match)(url)) return { response, index } } catch { /* a bad pattern never matches */ }

@@ -16,6 +16,8 @@ import { normaliseOptions } from '../src/options.js'
 import { parsePinFlag, parseAnswerFlag } from '../src/pins.js'
 import { entryFor } from '../src/overlay.js'
 import { furthest, strip } from '../src/milestones.js'
+import { formatName } from '../src/cmi5.js'
+import { statementSummary } from '../src/xapi.js'
 import { stall } from '../src/stall.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { discover, checkDiscover } from '../src/shape.js'
@@ -230,8 +232,18 @@ function printFindings(findings) {
 function printHeader(pkg, item) {
   const a = pkg.analysis, m = a.manifest
   console.log(paint('1', `SCORM Lab · ${pkg.name}`))
-  console.log(`${m ? `SCORM ${m.version}${m.edition ? ' ' + m.edition + ' edition' : ''}` : 'No manifest'} · ${launchable(a).length} items · ${a.fingerprints.length ? 'made with ' + a.fingerprints.join(', ') : 'authoring tool not recognised'} · ${a.files} files (${(a.size / 1048576).toFixed(1)} MB)`)
+  console.log(`${m ? formatName(a) : a.format === 'scorm' ? 'No manifest' : 'No readable course file'} · ${launchable(a).length} items · ${a.fingerprints.length ? 'made with ' + a.fingerprints.join(', ') : 'authoring tool not recognised'} · ${a.files} files (${(a.size / 1048576).toFixed(1)} MB)`)
   if (item) console.log(`Item: ${item.title || item.id} (${item.type || '?'}) → ${item.res.path ?? item.res.href}`)
+}
+// The statements a cmi5 or Tin Can run sent (trace.lrs), one line each with the problems found in it.
+function printXapi(x) {
+  const n = k => x.statements.filter(s => s.status === k).length
+  console.log(paint('1', '\nxAPI') + `  ${x.statements.length} statements (${n('stored')} stored, ${n('rejected')} rejected) · ${x.calls.length} requests to the LRS${x.format === 'cmi5' ? ` · token fetched ${x.fetches.length} time${x.fetches.length === 1 ? '' : 's'}` : ''}`)
+  for (const s of x.statements.slice(0, 60)) {
+    console.log(`  #${s.n} ${String(((s.t ?? 0) / 1000).toFixed(1)).padStart(5)} s  ${s.by === 'lms' ? 'LMS      ' : s.status === 'rejected' ? SEV.error('rejected ') : 'content  '} ${clean(statementSummary(s))}`)
+    for (const p of s.problems ?? []) console.log(paint('2', `        ${p.sev} ${clean(p.path || 'statement')}: ${clean(p.text)}`))
+  }
+  if (x.documents.length) console.log(paint('2', `  documents: ${x.documents.map(d => `${d.kind} ${clean(d.id)}`).join(', ')}`))
 }
 function printVerdict(findings) {
   const v = verdict(findings), c = counts(findings)
@@ -390,6 +402,7 @@ function runWebkit(pkg, item, o, options, dir, out) {
 const waitingFor = run => { const { pollers, unanswered, listeners, pending, last, stalled } = stall(run.trace, run.milestones); return { stalled, pollers, unanswered, listeners, pending, last } }
 const runJson = (pkg, item, run, out) => ({ package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), launch: run.launch,
   verdict: verdict(run.findings), counts: counts(run.findings, run.trace), milestones: run.milestones ?? null, waitingFor: run.milestones ? waitingFor(run) : null, furthest: run.milestones ? furthest(run.milestones)?.id ?? null : null, findings: run.findings,
+  xapi: run.trace.lrs && { format: run.trace.lrs.format, endpoint: run.trace.lrs.endpoint, registration: run.trace.lrs.registration, tokenFetches: run.trace.lrs.fetches, calls: run.trace.lrs.calls, statements: run.trace.lrs.statements, documents: run.trace.lrs.documents },
   api: run.trace.probe.filter(p => p.type === 'api').slice(0, 200).map(({ call, el, value, result, err }) => ({ call, el, value, result, err })),
   screens: screens(run.trace).map(({ frame, readyState, text, visible, media, loader, hidden, sample }) => ({ frame, readyState, text, visible, media, loader, hidden, sample })),
   out })
@@ -449,7 +462,7 @@ const printGrid = table => {
 const commands = {
   analyze(o) {
     const pkg = openZip(o._[0], o), { item, boot, findings } = check(pkg, o.item), a = pkg.analysis
-    if (o.json) console.log(JSON.stringify({ package: pkg.name, manifest: a.manifest && { version: a.manifest.version, edition: a.manifest.edition, schemaversion: a.manifest.schemaversion, title: a.manifest.title },
+    if (o.json) console.log(JSON.stringify({ package: pkg.name, format: a.format, manifest: a.manifest && { version: a.manifest.version, edition: a.manifest.edition, schemaversion: a.manifest.schemaversion, title: a.manifest.title },
       apiUse: a.apiUse, fingerprints: a.fingerprints, files: a.files, size: a.size, items: launchable(a).map(itemJson), item: itemJson(item, launchable(a).findIndex(i => i.index === item.index)),
       verdict: verdict(findings), counts: counts(findings), findings, boot }, null, 1))
     else { printHeader(pkg, item); printFindings(findings); printVerdict(findings) }
@@ -492,9 +505,10 @@ const commands = {
     else {
       const c = counts(run.findings, run.trace)
       printHeader(pkg, item)
-      console.log(`Ran for ${c.seconds} s · offered ${run.launch.expose === 'both' ? 'both APIs' : run.launch.expose === 'none' ? 'no API' : 'SCORM ' + run.launch.expose} · ${c.apiCalls} API calls · ${c.requests} requests (${c.failedRequests} failed) · ${c.uncaught} uncaught errors`)
+      console.log(`Ran for ${c.seconds} s · offered ${run.trace.lrs ? 'a test LRS (' + (run.trace.lrs.format === 'cmi5' ? 'cmi5' : 'Tin Can') + ')' : run.launch.expose === 'both' ? 'both APIs' : run.launch.expose === 'none' ? 'no API' : 'SCORM ' + run.launch.expose} · ${run.trace.lrs ? c.statements + ' statements' : c.apiCalls + ' API calls'} · ${c.requests} requests (${c.failedRequests} failed) · ${c.uncaught} uncaught errors`)
       for (const d of screens(run.trace)) console.log(paint('2', `Showing in ${d.frame.replace(/^lab:\/\/(?:run|content)\/pkg\//, '')}: ${d.visible} visible elements${d.loader ? ', loading indicator ' + d.loader : ''}, text “${(d.sample ?? '').slice(0, 80)}”`))
       if (run.milestones) console.log(`Milestones: ${strip(run.milestones)}`)
+      if (run.trace.lrs) printXapi(run.trace.lrs)
       printFindings(run.findings); printVerdict(run.findings)
       if (out) console.log(paint('2', `\nRun saved to ${out}`))
     }
@@ -592,7 +606,9 @@ const commands = {
   },
   // Test saving (P2.4): the first run plays the macro and leaves like a learner; the second resumes from what it left.
   cycle(o) {
-    const pkg = openZip(o._[0], o), options = buildOptions(o), item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'scorm-lab-cycle-')), keep = o.out ? resolve(o.out) : null
+    const pkg = openZip(o._[0], o)
+    if (pkg.analysis.format !== 'scorm') fail('The save-and-resume test is for SCORM packages: a cmi5 or Tin Can package saves through its LRS, not the SCORM data model.')
+    const options = buildOptions(o), item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'scorm-lab-cycle-')), keep = o.out ? resolve(o.out) : null
     if (options.browser === 'webkit') { rmSync(dir, { recursive: true, force: true }); fail('The save-and-resume test runs in Chromium only: WebKit runs have no input to replay.') }
     if (keep) mkdirSync(keep, { recursive: true })
     const f1 = join(keep ?? dir, '01-first.json'), f2 = join(keep ?? dir, '02-resumed.json')

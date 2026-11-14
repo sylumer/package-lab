@@ -17,6 +17,7 @@ import { createHmac } from 'node:crypto'
 import { runAnalysis, withProgress } from './launch.js'
 import { staticFindings, runFindings, launchFindings, sortFindings } from './rules.js'
 import { viewportName } from './options.js'
+import { UUID, isTimestamp } from './xapi.js'
 
 const VOCAB = new Set(['completed', 'incomplete', 'not attempted', 'unknown', 'passed', 'failed', 'browse', 'browsed', 'review', 'normal',
   'suspend', 'resume', 'ab-initio', 'logout', 'time-out', 'exit', 'credit', 'no-credit', 'correct', 'wrong', 'unanticipated', 'neutral',
@@ -167,6 +168,27 @@ export function redactRun(input, { names = false, key, map = new Map(), package:
     fix(p, 'launchParams', v => query(v.replace(/^[?&]/, '')))
   }
 
+  // ---- xAPI statements and documents (P4.5): keys stay, and so do ids, times, numbers, booleans, scores and the standard verbs and
+  // categories; every other string (names, activity ids, responses, extension values) becomes a marker. Problem codes and their texts
+  // quote nothing, so they stay.
+  const STD = /^https?:\/\/(?:adlnet\.gov\/expapi|w3id\.org\/xapi|id\.tincanapi\.com|activitystrea\.ms)\//i, FREE_KEY = /^(name|mbox|mbox_sha1sum|openid|response|description|comment)$/
+  const stmt = (v, k = '', free = false) => {
+    if (typeof v === 'string') return isMarker(v) || (!free && !FREE_KEY.test(k) && (UUID.test(v) || isTimestamp(v) || STD.test(v) || kept(v) || k === 'objectType')) ? v : drop(v, 'statements')
+    if (Array.isArray(v)) return v.map(x => stmt(x, k, free))
+    if (v && typeof v === 'object') {
+      // Extension keys are IRIs the content chose: only the standard ones (ADL, cmi5, Tin Can) stay; the others become markers (a repeat gets a number).
+      const seen = new Set(), name = x => { if (k !== 'extensions' || STD.test(x)) return x; let m = marker(x), n = 1; count('statements'); while (seen.has(m)) m = marker(x) + '#' + ++n; seen.add(m); return m }
+      return Object.fromEntries(Object.entries(v).map(([x, y]) => [name(x), stmt(y, x, free || x === 'extensions')]))
+    }
+    return v
+  }
+  const lrsRecord = x => {
+    for (const e of x.statements ?? []) { fix(e, 'statement', v => stmt(v)); if (typeof e.id === 'string' && !UUID.test(e.id)) cut(e, 'id', 'statements') }   // a refused statement's id can be any text
+    for (const d of x.documents ?? []) { cut(d, 'value', 'documents'); cut(d, 'activityId', 'documents'); cut(d, 'agent', 'documents'); if (!/^(LMS\.LaunchData|cmi5LearnerPreferences)$/.test(d.id)) cut(d, 'id', 'documents') }
+    for (const c of x.calls ?? []) if (typeof c.version === 'string' && !/^1\.0(\.\d+)?$/.test(c.version)) cut(c, 'version', 'headers')
+    cut(x, 'activityId', 'statements'); fix(x, 'actor', v => stmt(v))
+  }
+
   const t = r.trace, l = r.launch, o = l?.options
   // ---- Trace ----
   for (const p of t?.probe ?? []) probe(p)
@@ -178,6 +200,7 @@ export function redactRun(input, { names = false, key, map = new Map(), package:
     edit(q, 'answerFailed', browserMsg); fix(q, 'answerMatch', urlish)
   }
   if (t?.cmi) t.cmi = tree(t.cmi)
+  if (t?.lrs) lrsRecord(t.lrs)
   for (const b of t?.exec ?? []) for (const ev of b.events ?? []) if (ev[1] === 3) for (let i = 4; i < ev.length; i++) ev[i] = preview(ev[i])
   for (const s of t?.sites ?? []) {
     if (s.kind !== 'function') cut(s, 'text', 'scripts')
@@ -216,13 +239,14 @@ export function redactRun(input, { names = false, key, map = new Map(), package:
 
   // ---- Analysis: only what the report shows, with the code snippets and titles taken out ----
   if (r.analysis) {
-    const a = r.analysis, m = a.manifest, resource = x => ({ id: x.id, type: x.type, href: pathField(x.href ?? ''), base: pathField(x.base ?? ''), path: x.path == null ? null : pathField(x.path),
+    const a = r.analysis, m = a.manifest, fid = v => a.format && a.format !== 'scorm' ? drop(v, 'ids') : v   // a cmi5 AU or Tin Can activity id is an IRI of the course
+    const resource = x => ({ id: fid(x.id), type: x.type, href: pathField(x.href ?? ''), base: pathField(x.base ?? ''), path: x.path == null ? null : pathField(x.path),
       query: x.query ? '?' + query(x.query.replace(/^\?/, '')) : '', files: (x.files ?? []).map(pathField), deps: x.deps ?? [] })
     let n = 0
-    r.analysis = { files: a.files, size: a.size, root: pathField(a.root ?? ''), apiUse: a.apiUse, tool: a.tool, packs: a.packs, fingerprints: a.fingerprints,
+    r.analysis = { format: a.format, files: a.files, size: a.size, root: pathField(a.root ?? ''), apiUse: a.apiUse, tool: a.tool, packs: a.packs, fingerprints: a.fingerprints,
       problems: (a.problems ?? []).map(p => ({ code: p.code, text: msg(p.text) })),
       ...(m && { manifest: { version: m.version, edition: m.edition, schemaversion: m.schemaversion, resources: (m.resources ?? []).map(resource),
-        items: (m.items ?? []).map(i => { if (i.title) count('titles'); return { id: `item ${++n}`, title: '', depth: i.depth, resource: i.resource, type: i.type, res: i.res ? resource(i.res) : undefined,
+        items: (m.items ?? []).map(i => { if (i.title) count('titles'); return { id: `item ${++n}`, title: '', depth: i.depth, resource: fid(i.resource), type: i.type, res: i.res ? resource(i.res) : undefined,
           params: i.params ? query(i.params.replace(/^[?&]/, '')) : '', launchData: drop(i.launchData, 'values'), mastery: i.mastery, maxTime: i.maxTime, timeLimitAction: i.timeLimitAction, completionThreshold: i.completionThreshold } }) } }),
       scan: Object.fromEntries(Object.entries(a.scan ?? {}).map(([file, s]) => [hashPath(file), Object.fromEntries(Object.entries(s).map(([k, list]) => [k, list.map(x => ({ line: x.line, match: drop(x.match, 'snippets'), text: drop(x.text, 'snippets') }))]))])),
       packFindings: (a.packFindings ?? []).map(finding) }
@@ -260,7 +284,7 @@ export function redactRun(input, { names = false, key, map = new Map(), package:
   const label = () => {
     if (r.kind !== 'package' || !l) return r.label
     const ex = l.expose
-    return [pkgShown ?? '', `item ${(l.itemIndex ?? 0) + 1}`, ex === 'both' ? 'both APIs' : ex === 'none' ? 'no API' : `SCORM ${ex}`,
+    return [pkgShown ?? '', `item ${(l.itemIndex ?? 0) + 1}`, l.format === 'cmi5' ? 'cmi5' : l.format === 'tincan' ? 'Tin Can' : ex === 'both' ? 'both APIs' : ex === 'none' ? 'no API' : `SCORM ${ex}`,
       ...(l.profile?.name && l.profile.name !== 'generic' ? [l.profile.name] : []), ...(l.storage && l.storage !== 'normal' ? [`storage ${l.storage}`] : []),
       ...(l.depth ? [`depth ${l.depth}`] : []), ...(l.opener ? ['window'] : []), ...(l.resume ? ['resumed'] : []),
       ...(o?.browser && o.browser !== 'chromium' ? [o.browser] : []), ...(o?.viewport ? [viewportName(o.viewport)] : [])].filter(Boolean).join(' · ')
