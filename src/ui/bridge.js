@@ -34,6 +34,13 @@ if (!window.lab) {
       document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000)
       return summary
     },
+    // A run's report as HTML (P4.4), saved by the browser; redact takes the course content out. Resolves to the file name.
+    async report(o) {
+      const d = await window.lab.invoke('report-html', o)
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([d.html], { type: 'text/html' })), download: d.name })
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000)
+      return { file: d.name }
+    },
     // Frames of the running content, until the returned function is called.
     live(fn) {
       const s = new EventSource('/api/live')

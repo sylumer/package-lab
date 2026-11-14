@@ -731,6 +731,23 @@ Runs made by the CLI (`scorm-lab run --out`) and the Concierge module (**Downloa
 7. **Its own API object:** the content decided it isn't in an LMS. **Lookups** shows the assignment and the code
    that made it; **Package** lists the mode switches. Find the export setting for an LMS or standalone package.
 
+## Sending a report without the course content
+
+A report can show a vendor what went wrong without the course itself. In the desktop app, select a run, tick **Take
+the course content out** on the Findings tab, and choose **Save report…**. The web interface does the same and
+downloads the file. The CLI does it with `scorm-lab report run.json --redact` ([CLI](cli.md#report)).
+
+What goes: the text the pages show, console messages, the values the course stored (its answers, names and
+bookmarks), suspend data, request and response bodies and headers, anything you typed or recorded as a macro, changed
+file contents, the scripts' text and code snippets, query values and fragments in addresses, local file paths, and the
+item's title. What stays: the verdict, the findings (worked out again from what is left), the milestones, the timeline,
+the API calls with their element names and SCORM's own words (`completed`, `passed`, `suspend`), numbers and times,
+function and property names, the package's name and file paths, and the first part of each error the browser reported (up to its first colon, or the whole message for a known shape such as “x is not defined”; quoted strings always go). Learner ids, names, locations and comments are hidden even when they are numbers. Addresses of other sites keep their host and path, with id-like parts hidden. A banner at the top says what was taken out and what was kept. Check the report before you send
+it: a message from the browser can still hold words the course wrote outside quotes.
+
+The CLI can also replace the file names with hashes (`--redact-names --key-out`). Keep the key file yourself: it is
+the only way to match a hash back to its file.
+
 ## Privacy
 
 SCORM Lab never sends package content anywhere:

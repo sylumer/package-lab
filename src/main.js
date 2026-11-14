@@ -34,6 +34,7 @@ import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
 import { PROFILES, launchProfile } from './profiles.js'
 import { serveRequest, WEBKIT_ORIGINS, launchPlan, withProgress, runAnalysis, savedRun } from './launch.js'
+import { renderReport } from './report.js'
 import { codeViewAsync } from './codeview.js'
 import { timelineView } from './timeline.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
@@ -572,6 +573,15 @@ function sourceOf({ run, url, path }) {
   return (r?.package && r.package === pkg?.name && pkg.files.get(path)?.toString('utf8')) || ''
 }
 
+// A run's report as HTML (P4.4): with redact, the course content is taken out (report.js, redact.js). The desktop saves it with a dialog;
+// the web interface downloads it (report-html).
+function runReport({ run, redact }) {
+  const r = runs.get(+run); if (!r) throw new Error('Choose a run.')
+  const base = String(r.package ?? 'run').replace(/\.zip$/i, '').replace(/[^\w.-]+/g, '_').slice(0, 60)
+  return { name: `${base}${redact ? '-redacted' : ''}-report.html`, html: renderReport({ title: `SCORM Lab: ${r.package ?? r.label}`, subtitle: r.label, run: savedRun(r), redact: !!redact,
+    ...(redact && pkg && r.package === pkg.name && { analysis: pkg.analysis, files: pkg.files }) }) }   // the open package's analysis lets the static findings be redacted at the source too
+}
+
 const handlers = {
   'open-package': async () => {
     const r = await dialog.showOpenDialog(ui, { title: 'Open a SCORM package', filters: [{ name: 'SCORM package', extensions: ['zip'] }], properties: ['openFile'] })
@@ -585,6 +595,14 @@ const handlers = {
     if (r.canceled || !r.filePath) return { ...summary, file: null, cancelled: true }
     writeFileSync(r.filePath, zip)
     return { ...summary, file: basename(r.filePath), path: r.filePath }
+  },
+  'report-html': o => runReport(o),
+  'export-report': async o => {
+    const { name, html } = runReport(o)
+    const r = await dialog.showSaveDialog(ui, { title: 'Save report', defaultPath: join(app.getPath('documents'), name), filters: [{ name: 'HTML report', extensions: ['html'] }] })
+    if (r.canceled || !r.filePath) return { file: null, cancelled: true }
+    writeFileSync(r.filePath, html)
+    return { file: basename(r.filePath) }
   },
   'compare-packages': async () => {
     if (!pkg) throw new Error('Open a package first, then choose the one to compare it with.')

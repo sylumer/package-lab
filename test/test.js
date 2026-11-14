@@ -15,6 +15,7 @@ import { matchByPath, branchDiff, compare, segs } from '../src/diff.js'
 import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
 import { bootGraph, resolveRef } from '../src/bootpath.js'
 import { renderReport, verdict, timelineHtml } from '../src/report.js'
+import { redactRun, kept } from '../src/redact.js'
 import { timelineModel, timelineView } from '../src/timeline.js'
 import { normaliseOptions, cliCommand, VIEWPORTS, viewportName } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
@@ -28,7 +29,7 @@ import { servedBody } from '../src/pins.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, show, traceFindings } from '../src/instrument.js'
 import { stall, stallFinding } from '../src/stall.js'
 import { Recorder, shiftTimes, isBlocked, nameAt } from '../src/recorder.js'
-import { launchPlan, serveRequest, WEBKIT_ORIGINS } from '../src/launch.js'
+import { launchPlan, serveRequest, WEBKIT_ORIGINS, runAnalysis } from '../src/launch.js'
 import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams, storageMode } from '../src/profiles.js'
 import { originFindings, storageFindings } from '../src/rules.js'
 import { cycleFindings, cycleRows, readMacro, macroFromTrace, resumeOptions } from '../src/cycle.js'
@@ -1282,6 +1283,172 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.ok(bad.includes('&lt;img onerror=x&gt;') && !bad.includes('<img'), 'timeline report: text is escaped')
   assert.ok(bad.startsWith('<div class="sl-scroll"><svg class="sl-tl"'), 'timeline report: static SVG')
 }
+
+// Redacted reports (P4.4): a hand-made run with every kind of content in it. None of the content may survive; the diagnosis
+// (vocabulary, numbers, element names, package paths) must. The input is not changed. The findings are worked out again from
+// the redacted run, so they hold nothing the redacted run does not.
+{
+  assert.ok(['completed', 'suspend', 'ab-initio', 'not attempted', '85', '-1.5', 'PT1H30M', '00:10:00'].every(kept) && !kept('Welcome') && !kept('oxygen') && kept(''), 'redact: vocabulary, numbers and times are kept; text is not')
+  const L = 'lab://run/pkg/'
+  const mkTrace = o => ({ label: 'x', duration: 4000, sources: {}, console: [], log: [], exceptions: [], caught: [], requests: [], navigations: [], probe: [], cmi: {}, exec: [], sites: [], scripts: [], coverage: [], targets: [], untraced: [], ...o })
+  const prof = { name: 'Custom LMS', frames: { depth: 0, sandbox: null }, headers: { 'X-Token': 'hdr-secret-value' }, csp: "default-src 'self' https://secret-cdn.example", launchParams: 'user=jsmith&sid=77;flag', limits: {} }
+  const hand = {
+    format: 'scorm-lab-run', version: 1, kind: 'package', label: 'pkg.zip · Lesson title · Part two · SCORM 1.2', package: 'pkg.zip', file: '/Users/someone/runs/a.json',
+    launch: { version: '1.2', expose: '1.2', depth: 0, opener: false, item: 'Lesson title · Part two', itemIndex: 0, itemType: 'sco', url: L + 'lesson.html?learner=jsmith&token=abc123', resume: false, storage: 'normal', profile: prof,
+      options: { files: { 'js/lesson.js': { content: 'var secret = "Wrong answer text"' } }, pins: [{ path: 'cmi.core.student_name', value: 'Sam Learner' }], launchParams: 'user=jsmith&sid=77;flag', profile: prof,
+        responses: [{ match: 'https://example.com/api/*?key=apikey99', status: 200, body: '{"name":"Sam Learner"}', headers: { 'Set-Cookie': 'session=cookie-secret' } }], macro: [{ t: 5, type: 'text', text: 'my typed password' }, { t: 9, type: 'key', key: 'Enter' }] } },
+    findings: [{ sev: 'info', title: 'Said “Welcome to the course text here”', detail: 'Found it on the page', evidence: ['lab://run/pkg/lesson.html', 'LMSSetValue cmi.core.student_name = Sam Learner'] }],
+    milestones: [{ id: 'shown', label: 'Content shown', reached: true, evidence: '42 characters of text, 0 media in lesson.html' }],
+    boot: { start: 'lesson.html', nodes: [{ path: 'lesson.html', kind: 'page', how: 'launch', status: 'ok', depth: 0, ref: 'lesson.html' },
+      { path: 'Course Folder/part two.html', target: 'Course%20Folder/part%20two.html?who=jsmith#frag', ref: 'part%20two.html?who=jsmith#frag', kind: 'page', how: 'tag', status: 'ok', depth: 1, from: 'lesson.html', line: 4 },
+      { target: 'C:\\Users\\Sam Lee\\Course\\x.html', kind: 'page', how: 'tag', status: 'local', depth: 1, from: 'lesson.html', line: 5 }, { target: 'file:///Users/sam/course/y.html', kind: 'page', how: 'tag', status: 'local', depth: 1, from: 'lesson.html', line: 6 }],
+      pages: [{ path: 'lesson.html', bodyText: 'Welcome to the course page', execOrder: [{ name: 'js/lesson.js?v=build77', mode: 'defer', line: 8 }] }],
+      dynamic: [{ file: 'js/lesson.js', line: 3, text: "load('Lesson part two')" }],
+      risks: [{ sev: 'warn', title: 'Scripts navigate the window above them', detail: 'd', evidence: ['js/lesson.js:7  top.location = "https://secret-host.example/start" // passPhrase', 'js/lesson.js:9 is read as "quoted json text"'], fix: '' }] },
+    trace: mkTrace({
+      label: 'x', sources: { 'lab://run/pkg/js/lesson.js': 'var secret = 1' },
+      console: [{ t: 10, sid: 'a', level: 'log', text: 'hello from the course', at: [{ fn: 'show', url: L + 'js/lesson.js', line: 3, col: 5 }] }],
+      log: [{ t: 11, sid: 'a', level: 'error', source: 'network', text: "Failed to load resource: https://example.com/a.js?sid=sess1 'quoted thing'", url: '' }, { t: 12, sid: 'a', level: 'info', source: 'javascript', text: 'content wrote this text', url: '' }],
+      exceptions: [{ t: 11, text: "Uncaught TypeError: Cannot read properties of null (reading 'secretprop')", url: L + 'js/lesson.js', line: 3, at: [] },
+        { t: 12, text: 'Uncaught Error: the answer to ‘ZQ item’ was wrong, it\'s \'it\'s ZQ2\' and unquoted zebra stripes', url: L + 'js/lesson.js', line: 4, at: [] },
+        { t: 13, text: 'Refused to load the script because it violates the following Content Security Policy directive zebra-src', url: '', line: 0, at: [] },
+        { t: 14, text: 'Uncaught ReferenceError: lessonData is not defined', url: '', line: 0, at: [] }],
+      requests: [{ t: 12, sid: 'a', id: '1', url: 'https://example.com/api/x?token=abc123&lang=en#top', method: 'POST', status: 200, postData: 'SECRET=body', from: [] },
+        { t: 13, sid: 'a', id: '2', url: L + 'img/a.png?v=7;secretflag&k', method: 'GET', status: 404, from: [] }],
+      probe: [
+        { type: 'dom', t: 20, frame: L + 'lesson.html', readyState: 'complete', text: 42, sample: 'Welcome to the course text here', loader: 'div#Please-wait-for-the-lesson', media: 0, visible: 3, frames: 0 },
+        { type: 'api', t: 30, version: '1.2', call: 'LMSSetValue', el: 'cmi.core.lesson_status', value: 'completed', result: 'true' },
+        { type: 'api', t: 31, version: '1.2', call: 'LMSSetValue', el: 'cmi.suspend_data', value: '{"q1":"oxygen"}', result: 'true' },
+        { type: 'api', t: 32, version: '1.2', call: 'LMSGetValue', el: 'cmi.core.student_name', result: 'Sam Learner', err: 0 },
+        { type: 'api', t: 33, version: '1.2', call: 'LMSSetValue', el: 'cmi.core.lesson_location', value: '3', result: 'true' },
+        { type: 'api', t: 34, version: '1.2', call: 'LMSSetValue', el: 'cmi.core.lesson_location', value: 'core', result: 'true' },
+        { type: 'input', t: 40, kind: 'text', text: 'my typed password' },
+        { type: 'dialog', t: 41, kind: 'alert', message: 'Lesson complete, well done', leaving: false },
+        { type: 'pin-write', t: 42, path: 'cmi.core.student_name', value: 'Sam Learner', n: 1 },
+        { type: 'shape', t: 43, url: 'https://example.com/api/x?token=abc123', path: 'items.0.title', use: 'read', n: 1 },
+        { type: 'cmi', t: 44, values: { 'cmi.core.student_name': 'Sam Learner', 'cmi.core.lesson_status': 'incomplete' } },
+        { type: 'cmi-now', t: 45, values: { 'cmi.suspend_data': 'resume text here' } },
+        { type: 'api', t: 47, version: '1.2', call: 'LMSSetValue', el: 'cmi.core.score.raw', value: '85', result: 'true' },
+        { type: 'api', t: 48, version: '1.2', call: 'LMSSetValue', el: 'cmi.core.student_id', value: '12345', result: 'true' },
+        { type: 'api', t: 49, version: '1.2', call: 'LMSSetValue', el: 'cmi.core.score.max', value: 'x', result: 'false', err: 405, diag: 'Invalid value: “zq secret ab”' },
+        { type: 'frame', t: 46, frame: L + 'lesson.html', depth: 0, referrer: 'https://lms.example/launch?user=jsmith#x', origin: 'https://lms.example' },
+      ],
+      cmi: { '1.2': { 'cmi.core.lesson_status': 'incomplete', 'cmi.suspend_data': 'xyz is secret text' } },
+      scripts: [{ t: 1, sid: 'a', id: '7', url: L + 'js/lesson.js', hash: 'abc', length: 40 }], untraced: [{ file: 'js/big.js', why: 'too big' }],
+    }),
+  }
+  const forbidden = ['Welcome to the course', 'Please-wait-for-the-lesson', 'hello from the course', 'SECRET=body', 'abc123', 'var secret', 'secret text', 'Wrong answer text', 'Sam Learner', 'my typed password', 'Lesson complete, well done',
+    'oxygen', 'Lesson title', 'Part two', 'Lesson part two', '/Users/', 'Sam Lee', 'C:\\', '#top', '#frag', '#x', 'jsmith', 'hdr-secret-value', 'secret-cdn', 'cookie-secret', 'apikey99', 'sid=77', 'flag', 'secretprop', 'secretflag', 'sess1', 'quoted thing',
+    'content wrote this text', 'passPhrase', 'secret-host', 'quoted json text', 'resume text here', 'build77', 'v=7', 'course/y.html']
+  const red = redactRun(hand), text = JSON.stringify(red)
+  for (const f of forbidden) assert.ok(!text.includes(f), 'redact: nothing of the content survives: ' + f)
+  const T = red.trace, p = T.probe
+  assert.equal(p[1].value, 'completed', 'redact: vocabulary kept')
+  assert.equal(p[4].value, '‹1 characters›', 'redact: lesson_location is free text even when numeric')
+  assert.equal(p[12].value, '85', 'redact: a score stays')
+  assert.equal(p[13].value, '‹5 characters›', 'redact: a numeric learner id goes')
+  assert.equal(p[14].diag, 'Invalid value: ‹12 characters›', 'redact: the rejected value in a diag (curly quotes) goes')
+  assert.equal(p[5].value, '‹4 characters›', 'redact: a short common word is a value too')
+  assert.equal(p[2].value, `‹${'{"q1":"oxygen"}'.length} characters›`, 'redact: suspend data as its length')
+  assert.equal(p[2].el, 'cmi.suspend_data', 'redact: element names kept')
+  assert.equal(p[3].result, `‹${'Sam Learner'.length} characters›`, 'redact: a Get’s result is a value too')
+  assert.deepEqual(p[10].values, { 'cmi.core.student_name': '‹11 characters›', 'cmi.core.lesson_status': 'incomplete' }, 'redact: a cmi probe’s values')
+  assert.deepEqual(p[11].values, { 'cmi.suspend_data': '‹16 characters›' }, 'redact: a cmi-now probe’s values')
+  assert.equal(p[15].referrer, 'https://lms.example/launch?user=‹6 characters›', 'redact: a referrer’s query')
+  assert.equal(T.cmi['1.2']['cmi.core.lesson_status'], 'incomplete', 'redact: cmi vocabulary kept')
+  assert.equal(T.cmi['1.2']['cmi.suspend_data'], `‹${'xyz is secret text'.length} characters›`, 'redact: cmi suspend data as its length')
+  assert.equal(red.label, 'pkg.zip · item 1 · SCORM 1.2 · Custom LMS', 'redact: the label is rebuilt from fields; a title with the separator in it is gone')
+  assert.equal(T.console[0].level, 'log', 'redact: console keeps its level')
+  assert.equal(T.console[0].at[0].url, 'lab://run/pkg/js/lesson.js', 'redact: a package path is kept')
+  assert.equal(T.requests[0].url, `https://example.com/api/x?token=‹6 characters›&lang=‹2 characters›`, 'redact: query values replaced, path kept, fragment dropped')
+  assert.equal(T.requests[1].url, 'lab://run/pkg/img/a.png?v=‹1 characters›;‹10 characters›&‹1 characters›', 'redact: a ;-separated query, and parts without =')
+  assert.ok(!('postData' in T.requests[0]), 'redact: request bodies removed')
+  assert.equal(T.log[0].text, 'Failed to load resource: ‹50 characters›', 'redact: a browser message keeps up to its first colon; the rest goes unless it is a known shape')
+  assert.equal(T.log[1].text, '‹23 characters›', 'redact: log text from the page’s own scripts goes')
+  assert.equal(T.exceptions[0].text, 'Uncaught TypeError: Cannot read properties of null (reading ‹10 characters›)', 'redact: a known message shape is kept whole, its quoted part masked')
+  assert.ok(T.exceptions[1].text.startsWith('Uncaught Error: ‹') && !/ZQ|zebra/.test(T.exceptions[1].text), 'redact: curly and apostrophe-holding quotes, and unquoted text after the colon, go: ' + T.exceptions[1].text)
+  assert.equal(T.exceptions[2].text, 'Refused to load the script because ‹' + 'it violates the following Content Security Policy directive zebra-src'.length + ' characters›', 'redact: a Refused message keeps its words up to because')
+  assert.equal(T.exceptions[3].text, 'Uncaught ReferenceError: lessonData is not defined', 'redact: x is not defined stays')
+  assert.equal(redactRun({ trace: mkTrace({ exceptions: [{ t: 1, text: "bad 'it's ZQ' here", at: [] }], log: [{ t: 1, source: 'security', level: 'error', text: 'a b' }] }), kind: 'reference' }).trace.exceptions[0].text, '‹23 characters›', 'redact: an apostrophe inside a quoted string does not end it (the message has no colon, so it goes whole)')
+  assert.equal(redactRun({ trace: mkTrace({ requests: [{ t: 1, url: 'https://api.example.com/users/12345678/v2/3f2504e0-4f89-11d3-9a0c-0305e82c3301/QmFzZTY0SWRlbnRpZmllcjEy.json', method: 'GET' }] }), kind: 'reference' }).trace.requests[0].url,
+    'https://api.example.com/users/‹8 characters›/v2/‹36 characters›/‹24 characters›.json', 'redact: id-like path parts of another site’s address go; host and the rest stay')
+  assert.equal(p[8].value, `‹${'Sam Learner'.length} characters›`, 'redact: pin values')
+  assert.equal(p[9].url, 'https://example.com/api/x?token=‹6 characters›', 'redact: a shape read’s URL')
+  assert.equal(red.launch.options.files['js/lesson.js'].content, `‹${'var secret = "Wrong answer text"'.length} characters›`, 'redact: changed file contents')
+  assert.equal(red.launch.options.macro[0].text, `‹${'my typed password'.length} characters›`, 'redact: typed text')
+  assert.equal(red.launch.options.launchParams, 'user=‹6 characters›&sid=‹2 characters›;‹4 characters›', 'redact: launch parameters')
+  assert.equal(red.launch.url, 'lab://run/pkg/lesson.html?learner=‹6 characters›&token=‹6 characters›', 'redact: the launch URL’s query')
+  for (const pr of [red.launch.profile, red.launch.options.profile]) assert.deepEqual([pr.headers, pr.csp, pr.launchParams, pr.name], [{ 'X-Token': '‹16 characters›' }, '‹45 characters›', 'user=‹6 characters›&sid=‹2 characters›;‹4 characters›', 'Custom LMS'], 'redact: a custom profile’s headers, policy and parameters')
+  const ans = red.launch.options.responses[0]
+  assert.deepEqual([ans.match, ans.body, ans.headers], ['https://example.com/api/*?key=‹8 characters›', '‹22 characters›', { 'Set-Cookie': '‹21 characters›' }], 'redact: a response’s match query, body and headers')
+  assert.equal(red.launch.item, undefined, 'redact: the item’s title is gone')
+  assert.deepEqual(T.sources, {}, 'redact: script sources removed')
+  assert.equal(red.file, undefined, 'redact: the file the run was saved to is not in the copy')
+  assert.deepEqual(red.boot.nodes.slice(1, 4).map(n => [n.path, n.target, n.ref]), [['Course Folder/part two.html', 'Course%20Folder/part%20two.html?who=‹6 characters›', 'part%20two.html?who=‹6 characters›'], [undefined, '‹local path›', undefined], [undefined, '‹local path›', undefined]], 'redact: boot paths keep folders and lose queries; local paths go')
+  assert.equal(red.boot.pages[0].execOrder[0].name, 'js/lesson.js?v=‹7 characters›', 'redact: a script reference’s query')
+  assert.equal(red.boot.risks[0].evidence[0], `js/lesson.js:7  ‹${'top.location = "https://secret-host.example/start" // passPhrase'.length} characters›`, 'redact: a code snippet in a file finding keeps only its place')
+  assert.ok(red.boot.risks[0].evidence[1].includes('‹16 characters›') && !red.boot.risks[0].evidence[1].includes('quoted json'), 'redact: quotes in a file finding go')
+  assert.equal(red.boot.dynamic[0].text.startsWith('‹'), true, 'redact: dynamic path code goes')
+  // The findings are rebuilt from the redacted run: the saved one (with its quotes of the page) is not carried over.
+  assert.ok(red.findings.length && !red.findings.some(f => /Welcome|Sam Learner/.test(JSON.stringify(f))), 'redact: findings come from the redacted data')
+  assert.ok(red.findings.some(f => /uncaught error/.test(f.title)) && red.findings.some(f => /Scripts navigate the window above them/.test(f.title)), 'redact: the diagnosis (uncaught errors, file findings) is still there')
+  assert.ok(Array.isArray(red.milestones) && JSON.stringify(red.milestones).indexOf('Sam') < 0, 'redact: milestones are worked out again')
+  assert.ok(text.includes('cmi.core.lesson_status') && text.includes('cmi.core.lesson_location'), 'redact: a value like “core” does not break element names')
+  assert.ok(red.redaction.counts.values >= 4 && red.redaction.counts.bodies >= 2 && red.redaction.counts.queries >= 8 && red.redaction.counts.paths >= 2 && red.redaction.counts.quotes >= 2 && !red.redaction.names, 'redact: counts of what was taken out')
+  assert.equal(hand.trace.console[0].text, 'hello from the course', 'redact: the input is not changed')
+
+  // Execution trace: operand previews (and the code text) are the content's; the stall finding is built from the redacted trace.
+  const stallRun = {
+    kind: 'package', label: 'p.zip · T · SCORM 1.2', package: 'p.zip', launch: { version: '1.2', expose: '1.2', depth: 0, itemIndex: 0, itemType: 'sco', storage: 'normal', options: {}, profile: { name: 'generic', frames: { depth: 0, sandbox: null }, limits: {} } },
+    boot: null, trace: mkTrace({ duration: 19200,
+      probe: [{ type: 'timers', t: 19000, sid: 'a', frame: L + 'lesson.html', sites: [`poll (${L}js/lesson.js:5:3)`], list: [['interval', 500, 1, 30, 0, 100]], raf: 0 }],
+      sites: [{ file: 'js/lesson.js', line: 5, col: 3, kind: 'if', text: "answer === 'secret answer text'", args: ["answer", "'secret answer text'"] }, { file: 'js/lesson.js', line: 2, col: 1, kind: 'function', text: 'poll' }],
+      exec: [{ t: 0, sid: 'a', frame: L + 'js/lesson.js', events: [...Array(30)].map((_, i) => [i * 500, 3, 0, 0, ['string', 'secret answer text here', 23], ['number', 5]]).concat([[1, 1, 1]]) }] }) }
+  assert.ok(JSON.stringify(runAnalysis({ kind: 'package', launch: stallRun.launch, trace: stallRun.trace, boot: null, analysis: null })).includes('secret answer text'), 'redact: (the unredacted run does show the preview in its stall finding)')
+  const rs = redactRun(stallRun), rsText = JSON.stringify(rs)
+  assert.ok(!rsText.includes('secret answer') && rs.findings.some(f => /waiting for/.test(f.title)), 'redact: operand previews and decision code are gone, and the stall finding is still made')
+  assert.deepEqual(rs.trace.exec[0].events[0].slice(4), [['string', '‹23 characters›'], ['number', 5]], 'redact: a string preview is its length; a number stays')
+  assert.deepEqual(rs.trace.sites[0].args, ['‹6 characters›', '‹20 characters›'], 'redact: each decision operand is a marker')
+  assert.equal(rs.trace.sites[1].text, 'poll', 'redact: function names kept')
+
+  // Names (--redact-names): stable for one key, different for another; folders, percent-encoded names and every path hashed.
+  const k1 = Buffer.alloc(32, 1), m1 = new Map(), a = redactRun(hand, { names: true, key: k1, map: m1, paths: ['Course Folder/part two.html', 'lesson.html', 'js/lesson.js', 'Other Dir/unused.mp3'] }), b2 = redactRun(hand, { names: true, key: k1 })
+  assert.equal(JSON.stringify(a.trace), JSON.stringify(b2.trace), 'redact names: the same key gives the same output')
+  assert.notEqual(JSON.stringify(a), JSON.stringify(redactRun(hand, { names: true, key: Buffer.alloc(32, 2) })), 'redact names: another key gives other hashes')
+  assert.match(a.trace.console[0].at[0].url, /^lab:\/\/run\/pkg\/f[0-9a-f]{10}\/f[0-9a-f]{10}\.js$/, 'redact names: folder and file name hashed; the extension stays')
+  assert.equal(a.trace.console[0].at[0].url, `lab://run/pkg/${m1.get('js/')}/${m1.get('lesson.js')}`, 'redact names: the table has both hashes')
+  const nt = JSON.stringify(a)
+  for (const n of ['lesson.js', 'lesson.html', 'pkg.zip', 'Course Folder', 'Course%20Folder', 'part two', 'part%20two', 'big.js', 'a.png', 'img/', '/js/']) assert.ok(!nt.includes(n), 'redact names: no file or folder name left in the copy: ' + n)
+  assert.equal(a.boot.nodes[1].path, `${m1.get('Course Folder/')}/${m1.get('part two.html')}`, 'redact names: a path with spaces is hashed by its decoded names')
+  assert.ok(a.boot.nodes[1].target.startsWith(`${m1.get('Course Folder/')}/${m1.get('part two.html')}?who=`), 'redact names: the encoded form of the same path gets the same hash')
+  assert.equal(a.package, m1.get('pkg.zip'), 'redact names: the package name')
+  assert.ok(a.label.startsWith(m1.get('pkg.zip') + ' · item 1'), 'redact names: the label uses the hash')
+  assert.ok(m1.has('Other Dir/') && m1.has('unused.mp3'), 'redact names: a file list given by the caller is in the table')
+  assert.ok(a.findings.some(f => JSON.stringify(f).includes(m1.get('lesson.js'))), 'redact names: the findings use the hashes too')
+  assert.throws(() => redactRun(hand, { names: true }), /key/, 'redact names: needs a key')
+
+  // A report of files only: the static findings are worked out again from the analysis with its code snippets taken out.
+  const analysis = { files: 3, size: 1000, root: '', apiUse: '1.2', tool: null, packs: [], fingerprints: [], problems: [{ code: 'launch-missing', text: "Resource r1 launches Lesson One.html, which isn't in the package." }],
+    manifest: { version: '2004', edition: '4th', schemaversion: '2004 4th Edition', title: 'Course title', resources: [{ id: 'r1', type: 'sco', href: 'Lesson One.html?u=jsmith', base: '', path: 'Lesson One.html', query: '?u=jsmith', files: ['Lesson One.html'], deps: [] }],
+      items: [{ id: 'ITEM-secret', title: 'Lesson title', depth: 0, resource: 'r1', type: 'sco', params: '?p=jsmith', launchData: 'launch secret', mastery: '80' }] },
+    scan: { 'js/lesson.js': { api12: [{ line: 3, match: 'LMSInitialize', text: 'var passPhrase = LMSInitialize("")' }], api04: [], search: [], requests: [], absolute: [], serverPaths: [], hostChecks: [], modeSwitches: [], apiDefine: [] } },
+    packFindings: [{ sev: 'info', title: 'Pack: x', detail: 'saw "secret detail"', evidence: ['js/lesson.js:3  var passPhrase = 1'], fix: '' }] }
+  const sr = redactRun({ analysis, boot: hand.boot, findings: [{ sev: 'error', title: 'old finding Lesson title', evidence: [] }] }, { package: 'pkg.zip' })
+  const st = JSON.stringify(sr)
+  for (const f of ['passPhrase', 'Lesson title', 'Course title', 'jsmith', 'launch secret', 'ITEM-secret', 'secret detail', 'old finding']) assert.ok(!st.includes(f), 'redact static: ' + f)
+  assert.ok(sr.findings.some(f => /manifest says SCORM 2004/.test(f.title) && /js\/lesson\.js:3  ‹\d+ characters›/.test(f.evidence[0])), 'redact static: the finding keeps file and line, not the code')
+  assert.equal(sr.analysis.manifest.items[0].id, 'item 1', 'redact static: item ids are numbers')
+
+  // The report: a banner that says what was taken out, no content, no excerpts; the title is the redacted label.
+  const page = renderReport({ title: 'SCORM Lab: pkg.zip', subtitle: hand.label, run: hand, redact: true })
+  assert.ok(page.includes('Redacted report.') && page.includes('Taken out:') && page.includes('query values') && !page.includes('class="sl-excerpt"') && !page.includes('nothing in this run needed it'), 'redact report: banner, no excerpts')
+  assert.ok(page.includes('<title>SCORM Lab: pkg.zip</title>') && page.includes('up to its first colon') && page.includes('keep their host and path'), 'redact report: the title, and what is kept')
+  for (const f of forbidden) assert.ok(!page.includes(f), 'redact report: nothing of the content in the page: ' + f)
+  assert.ok(!renderReport({ title: 'x', run: hand }).includes('Redacted report.'), 'redact report: a plain report has no banner')
+  const stat = renderReport({ title: 'SCORM Lab: pkg.zip', subtitle: 'Lesson title (lesson.html), from the files only', findings: [], fragment: true, analysis, boot: hand.boot, redact: { package: 'pkg.zip' } })
+  assert.ok(!stat.includes('Lesson title') && !stat.includes('passPhrase') && stat.includes('Redacted report.'), 'redact report: a package report’s titles and code go')
+}
+console.log('redact: unit ok')
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -1404,6 +1571,33 @@ if (!process.argv.includes('--unit')) {
   assert.equal(g.findings[0].sev, 'info')
   assert.match(node(['report', out]).stdout, /<h2>Milestones<\/h2>/, 'report: milestones strip')
   assert.match(node(['report', out]).stdout, /<!doctype html>[\s\S]*What happened/, 'cli report (run)')
+  // Redacted report (P4.4), of the good run saved above: no text the good lesson shows, writes or reads back is in it. Element names
+  // are kept on purpose, so they are taken out before the check; a value the lesson writes can only be in it as its length.
+  const redOut = join(work, 'good-redacted.html'), keyFile = join(work, 'good-key.json')
+  assert.equal(node(['report', out, '--redact', '--out', redOut]).status, 0, 'redact: report')
+  const redHtml = readFileSync(redOut, 'utf8').replace(/cmi\.[\w.]+/g, '')
+  const lessonHtml = readFileSync(join(base, 'lesson.html'), 'utf8'), lessonJs = readFileSync(join(base, 'lesson.js'), 'utf8')
+  const shown = [...lessonHtml.replace(/<(script|style)[\s\S]*?<\/\1>/g, '').matchAll(/>([^<]+)</g)].map(m => m[1].trim())
+    .concat(lessonJs.split('\n').filter(l => /textContent/.test(l)).flatMap(l => [...l.replace(/getElementById\('[^']*'\)/g, '').matchAll(/'([^']*)'/g)].map(m => m[1].trim())))
+  const wrote = saved.trace.probe.filter(p => p.type === 'api').flatMap(p => [p.value, p.result]).filter(v => typeof v === 'string')
+  assert.deepEqual([...shown, ...wrote].filter(x => x.length >= 4 && !kept(x) && redHtml.includes(x)), [], 'redact: no course text in the redacted report')
+  assert.ok(redHtml.includes('Redacted report.') && redHtml.includes('Got as far as'), 'redact: banner, and the findings still there')
+  // File names (--redact-names): hashed in the report; the key file keeps the table; the same key gives the same hashes.
+  assert.equal(node(['report', out, '--redact', '--redact-names', '--key-out', keyFile, '--out', redOut]).status, 0, 'redact names: report')
+  const key = JSON.parse(readFileSync(keyFile, 'utf8'))
+  assert.ok(key.names['lesson.html'] && readFileSync(redOut, 'utf8').includes(key.names['lesson.html']) && !readFileSync(redOut, 'utf8').includes('lesson.html'), 'redact names: hashed, with the table in the key file')
+  assert.equal(node(['report', out, '--redact', '--redact-names', '--key', keyFile, '--out', redOut]).status, 0, 'redact names: report with the key')
+  assert.ok(readFileSync(redOut, 'utf8').includes(key.names['lesson.html']), 'redact names: the same key gives the same hashes')
+  assert.equal(node(['report', out, '--redact-names', '--key-out', keyFile]).status, 2, 'redact: names need --redact')
+  // The key file: it must be a key file; it is written only after the report, and never over another file.
+  const badKey = join(work, 'bad-key.json'), notRun = join(work, 'not-a-run.json'), key2 = join(work, 'key2.json')
+  writeFileSync(badKey, '{"format":"scorm-lab-redaction-key","key":"abc"}'); writeFileSync(notRun, '{}')
+  const bk = node(['report', out, '--redact', '--redact-names', '--key', badKey, '--out', redOut])
+  assert.ok(bk.status === 2 && /isn’t a key file/.test(bk.stderr), 'redact: a key file with the wrong shape is refused: ' + bk.stderr)
+  writeFileSync(badKey, 'not json'); assert.equal(node(['report', out, '--redact', '--redact-names', '--key', badKey, '--out', redOut]).status, 2, 'redact: a key file that is not JSON is refused')
+  assert.equal(node(['report', notRun, '--redact', '--redact-names', '--key-out', key2]).status, 2, 'redact: a report that fails')
+  assert.ok(!existsSync(key2), 'redact: a failed report leaves no key file behind')
+  assert.equal(node(['report', out, '--redact', '--redact-names', '--key-out', keyFile]).status, 2, 'redact: an existing key file is not overwritten')
   const res = run(good, '--resume-from', out)
   // The sample only resumes after exit = suspend, which a timed-out run never sets; what carries over is its status.
   assert.ok(res.launch.resume && res.api.some(a => a.el === 'cmi.core.lesson_status' && a.call === 'LMSGetValue' && a.result === 'incomplete'), 'resume: stored data offered: ' + calls(res))

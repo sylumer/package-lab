@@ -7,6 +7,7 @@ import { milestones } from './milestones.js'
 import { timelineView } from './timeline.js'
 import { excerptor, urlPath } from './codeview.js'
 import { entryBuffer, isText } from './overlay.js'
+import { redactRun } from './redact.js'
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const short = u => String(u ?? '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
@@ -44,6 +45,7 @@ const CSS = `
 .sl .sl-sev { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-right: 6px; color: var(--sl-muted); }
 .sl .error > h3 .sl-sev, .sl .sl-bad { color: var(--sl-err); } .sl .warn > h3 .sl-sev { color: var(--sl-warn); }
 .sl .sl-muted { color: var(--sl-muted); }
+.sl .sl-banner { border: 1px solid var(--sl-warn); border-radius: 8px; padding: 8px 12px; margin: 10px 0; font-size: 13px; }
 .sl .sl-scroll { overflow-x: auto; }
 .sl table { border-collapse: collapse; width: 100%; font-size: 12px; }
 .sl th, .sl td { text-align: left; vertical-align: top; padding: 3px 6px; border-bottom: 1px solid var(--sl-line); }
@@ -163,14 +165,34 @@ function milestoneHtml(list) {
   return `<h2>Milestones</h2><p class="sl-mono">${list.map(s => `<span class="${s.reached ? '' : 'sl-bad'}" title="${esc(s.evidence)}">${s.reached ? '✓' : '✗'} ${esc(s.label)}</span>`).join(' &nbsp; ')}</p>`
 }
 
-// o: { title, subtitle, findings, boot, run (a saved run), analysis, fragment, files (Map path → Buffer: lets file:line in evidence link to an excerpt), excerpts (false: no excerpts, no links) }
-export function renderReport(o) {
+// What a redacted report says it took out (redact.js counts), in words.
+const REMOVED = { dom: 'page text', console: 'console messages', values: 'API and pin values', suspend: 'suspend data', bodies: 'request and response bodies and headers', typed: 'typed and macro text',
+  files: 'changed file contents', scripts: 'code text', snippets: 'code snippets from the files', previews: 'values the code compared', titles: 'item and course titles', headers: 'header and policy values',
+  queries: 'query values and fragments in addresses', paths: 'local file paths', quotes: 'quoted strings in messages', messages: 'message text after the first colon', ids: 'ids in addresses' }
+function redactionBanner({ names, counts }) {
+  const parts = Object.entries(REMOVED).filter(([k]) => counts[k]).map(([k, w]) => `${esc(w)} (${counts[k]})`)
+  return `<div class="sl-banner"><b>Redacted report.</b> Taken out: ${parts.length ? parts.join(', ') : 'nothing in this run needed it'}. Free text is replaced by its length. Kept: element names, SCORM vocabulary (such as completed), numbers and times, ${names ? 'folder and file names as hashes' : 'the package name and the paths of its files'} (a query or fragment is never kept), function and property names, and the first part of each error message (up to its first colon, or the whole message for a known shape such as “x is not defined”; quoted strings are always taken out). Addresses of other sites keep their host and path, with id-like parts (long numbers, UUIDs, long hex or base64) hidden. The findings were worked out again from what is left. Code excerpts and the package diff are not shown.${names ? ' The key file has the table to match the hashes back to names.' : ''}</div>`
+}
+// The report's inputs with the course content taken out, and the findings worked out again from them (redact.js). redact: true, or the options for redactRun (names, key, map).
+function redactInput(o) {
+  const opts = o.redact === true ? {} : o.redact, run = o.run
+  const R = redactRun({ ...(run ?? {}), findings: o.findings ?? run?.findings, boot: o.boot ?? run?.boot, analysis: o.analysis },
+    { ...opts, package: opts.package ?? run?.package ?? undefined, paths: o.files ? [...o.files.keys()] : opts.paths })
+  return { run: run ? R : undefined, title: `SCORM Lab: ${R.package ?? R.label ?? 'report'}`, subtitle: run ? R.label : 'From the files only. Run it to see what actually happens.', findings: R.findings, boot: R.boot, analysis: R.analysis,
+    redaction: R.redaction, excerpts: false, files: undefined, diff: undefined }
+}
+
+// o: { title, subtitle, findings, boot, run (a saved run), analysis, fragment, files (Map path → Buffer: lets file:line in evidence link to an excerpt), excerpts (false: no excerpts, no links),
+//      redact (true, or redactRun's options: the report is redacted, with a banner saying what was taken out; no excerpts, no package diff) }
+export function renderReport(input) {
+  const o = input.redact ? { ...input, ...redactInput(input) } : input
   const run = o.run, findings = o.findings ?? run?.findings ?? [], v = verdict(findings), c = counts(findings)
   const a = o.analysis, m = a?.manifest, ex = o.excerpts !== false && (o.files || run?.trace?.sources || run?.launch?.options?.files) ? excerptor(reportText(o)) : null
   const pkgTable = a ? `<h2>Package</h2>${table(['', ''], [['Manifest', m ? `SCORM ${m.version}${m.edition ? ' ' + m.edition + ' edition' : ''}` : 'none'], ['Scripts use', a.apiUse === 'none' ? 'no SCORM API names' : a.apiUse === 'both' ? 'both APIs' : 'SCORM ' + a.apiUse],
     ['Made with', a.fingerprints.join(', ') || 'not recognised'], ['Files', `${a.files} (${(a.size / 1048576).toFixed(1)} MB)`], ['Items', (m?.items ?? []).map(i => `${i.title || i.id} (${i.type || '?'})`).join('; ')]].map(([k, x]) => [`<b>${esc(k)}</b>`, esc(x)]))}` : ''
   const body = `<div class="sl"><style>${CSS}</style>
 ${o.fragment ? '' : `<h1>${esc(o.title ?? 'SCORM Lab report')}</h1>`}${o.subtitle ? `<p class="sl-muted">${esc(o.subtitle)}</p>` : ''}
+${o.redaction ? redactionBanner(o.redaction) : ''}
 <div class="sl-verdict"><span class="sl-badge ${v.sev}">${v.sev === 'warn' ? 'warning' : v.sev === 'ok' ? 'ok' : 'error'}</span><b>${esc(v.title)}</b><span class="sl-muted">${c.errors} errors · ${c.warnings} warnings · ${c.info} notes</span></div>
 ${run?.kind === 'package' ? milestoneHtml(Array.isArray(run.milestones) ? run.milestones : milestones(run.trace, run.boot)) : ''}${run?.trace ? `<h2>Timeline</h2>${timelineHtml(run.trace, run.milestones ?? undefined)}` : ''}<h2>Findings</h2>${findingsHtml(findings, ex)}
 ${run ? runHtml(run) : ''}

@@ -12,7 +12,7 @@ import { join, extname } from 'node:path'
 import { networkInterfaces } from 'node:os'
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' }
-const DESKTOP_ONLY = new Set(['open-package', 'open-run', 'export-fixed', 'compare-packages', 'check-folder', 'open-batch-row']) // they open file dialogs or open packages on the Mac
+const DESKTOP_ONLY = new Set(['open-package', 'open-run', 'export-fixed', 'export-report', 'compare-packages', 'check-folder', 'open-batch-row']) // they open file dialogs or open packages on the Mac
 const MAX_UPLOAD = 1024 ** 3, MAX_JSON = 20 * 1024 ** 2
 
 export function token(dataDir) {

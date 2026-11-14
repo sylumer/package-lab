@@ -38,8 +38,8 @@ In progress on branch `next`.
 | P3.3 | Comparing two packages | sonnet | done | | One review round. Behaviour comparison is CLI only (`diff --run`) |
 | P4.1 | Code views | sonnet | done | 81722b0 | One review round (formatting in a worker, bounded caches). Big minified files open unformatted first. Six secondary e2e checks moved behind --slow: default suite ~2:24 |
 | P4.2 | Timeline | haiku | done | 2332458 | Resumed once after a usage limit. One review round (pan slider bug, clamping, handler bounds) |
-| P4.3 | Batch checks | haiku | done | | One review round (desktop-only guard for the folder dialog, worker pool hardening). Desktop check is static only |
-| P4.4 | Redacted report | haiku | todo | | |
+| P4.3 | Batch checks | haiku | done | 90ab8c8 | One review round (desktop-only guard for the folder dialog, worker pool hardening). Desktop check is static only |
+| P4.4 | Redacted report | haiku | done | | Escalated to sonnet after the first privacy review found leaks (deny-list design). Reworked to redact by field and rebuild findings; second marker-planting review fixed curly quotes and free-text elements. Error messages keep only their known shape; other sites keep host and path |
 | P4.5 | cmi5 and xAPI | sonnet | todo | | |
 | P5.1 | Concierge module catch-up | sonnet | todo | | |
 | P5.2 | Alfred and CLI polish | haiku | todo | | |

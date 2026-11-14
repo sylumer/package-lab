@@ -2,6 +2,7 @@
 // scorm-lab: the command-line interface. Static analysis runs here in Node; runs, the desktop window and the web
 // interface start Electron (this repo's, or the installed SCORM Lab.app). See docs/cli.md.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, openSync, closeSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { tmpdir, homedir } from 'node:os'
@@ -138,6 +139,12 @@ Options for report
   --open                    Open the report in the browser (written to a temporary file if there's no --out).
   --fragment                An HTML fragment for embedding, not a whole page.
   --run                     Run the package first (with the run options) and report the run.
+  --redact                  Take the course content out: page text, console text, API values, suspend data, bodies,
+                            typed text, file contents and script text (vocabulary, numbers and element names stay).
+  --redact-names            With --redact: hash the file names too. Needs --key-out (or --key) to keep the key.
+  --key-out <file.json>     Write the key and the name table here (new file, mode 600). Keep it: it is the only way to
+                            match hashes back to names, and --key <file.json> reuses it so the hashes stay the same.
+  --key <file.json>         A key file from --key-out, to hash names the same way again.
 
 Options for serve
   --port <n>                Default 4880.
@@ -156,13 +163,28 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'macro', 'profile', 'profile-file', 'tool', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds', 'only', 'csv', 'jobs']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'macro', 'profile', 'profile-file', 'tool', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds', 'only', 'csv', 'jobs', 'key', 'key-out']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
     if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
   return o
 }
 class Fail extends Error {}
+// report --redact (P4.4): the options for redactRun. Names are hashed with a key from --key (a key file) or a new one, which --key-out writes.
+function redactOptions(o) {
+  if (!o.redact) { if (o['redact-names'] || o.key || o['key-out']) fail('--redact-names, --key and --key-out need --redact'); return null }
+  if (!o['redact-names']) { if (o.key || o['key-out']) fail('--key and --key-out need --redact-names'); return { names: false } }
+  if (!o.key && !o['key-out']) fail('--redact-names needs --key-out <file.json> to keep the key (or --key <file.json> to reuse one)')
+  if (o['key-out'] && existsSync(resolve(o['key-out']))) fail(`${o['key-out']} exists: choose a new name, or reuse it with --key`)
+  let key = randomBytes(32)
+  if (o.key) {
+    if (!existsSync(resolve(o.key))) fail(`No such key file: ${o.key}`)
+    let k; try { k = JSON.parse(readFileSync(resolve(o.key), 'utf8')) } catch { k = null }
+    if (k?.format !== 'scorm-lab-redaction-key' || typeof k.key !== 'string' || !/^[0-9a-f]{64}$/.test(k.key) || (k.names !== undefined && (!k.names || typeof k.names !== 'object' || Array.isArray(k.names)))) fail(`${o.key} isn’t a key file from --key-out (JSON with format "scorm-lab-redaction-key" and a 64-digit hex key).`)
+    key = Buffer.from(k.key, 'hex')
+  }
+  return { names: true, key, map: new Map() }
+}
 const fail = msg => { throw new Fail(msg) }
 const tty = process.stdout.isTTY && !process.env.NO_COLOR
 // Text from a package (file names, diff lines, findings quoting them) may hold control characters: drop them before printing (tab stays).
@@ -667,24 +689,29 @@ const commands = {
   report(o) {
     const input = o._[0]
     if (!input) fail('Name a package or a saved run: scorm-lab report <package.zip | run.json>')
+    const red = redactOptions(o)
     let html
     if (/\.json$/i.test(input)) {
       if (!existsSync(input)) fail(`No such file: ${input}`)
       const run = JSON.parse(readFileSync(input, 'utf8'))
       if (!run.trace) fail(`${basename(input)} isn’t a SCORM Lab run.`)
-      html = renderReport({ title: `SCORM Lab: ${run.package ?? run.label}`, subtitle: run.label, run, fragment: !!o.fragment })
+      html = renderReport({ title: `SCORM Lab: ${run.package ?? run.label}`, subtitle: run.label, run, fragment: !!o.fragment, redact: red })
     } else {
       const pkg = openZip(input, o)
       if (o.run) {
         const { run } = runPackage(pkg, { ...o, out: undefined })
-        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: run.label, run, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment })
+        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: run.label, run, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment, redact: red })
       } else {
         const { item, boot, findings } = check(pkg, o.item)
-        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: `${item.title || item.id} (${item.res.path ?? item.res.href}), from the files only. Run it to see what actually happens.`, findings, boot, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment })
+        // The item's title is the package's own text: a redacted report ignores this subtitle and the findings, and works both out again from the redacted boot graph and analysis.
+        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: `${item.title || item.id} (${item.res.path ?? item.res.href}), from the files only. Run it to see what actually happens.`, findings, boot, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment,
+          redact: red && { ...red, package: pkg.name } })
       }
     }
     const out = o.out ? resolve(o.out) : o.open ? join(mkdtempSync(join(tmpdir(), 'scorm-lab-report-')), 'report.html') : null
     if (out) { writeFileSync(out, html); if (!o.open) console.error(`Report written to ${out}`) } else process.stdout.write(html)
+    // The key goes last, and only once the report is out: a failed report leaves no key behind. A new file ('wx'), readable by the owner only.
+    if (red?.names && o['key-out']) writeFileSync(resolve(o['key-out']), JSON.stringify({ format: 'scorm-lab-redaction-key', version: 1, key: red.key.toString('hex'), names: Object.fromEntries(red.map) }, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
     if (o.open && out) spawnSync('open', [out])
     return 0
   },

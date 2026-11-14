@@ -658,6 +658,7 @@ or the options are wrong.
 scorm-lab report course.zip [--item n] [--out report.html] [--open] [--fragment]
 scorm-lab report course.zip --run [run options] [--out report.html] [--open]
 scorm-lab report run.json [--out report.html] [--open] [--fragment]
+scorm-lab report run.json --redact [--redact-names --key-out key.json] [--out report.html]
 ```
 
 Writes a self-contained HTML report. It works in light and dark mode, and has no external files or scripts. It
@@ -673,6 +674,33 @@ contains:
 | `--open` | Opens it in the default browser (a temporary file if there's no `--out`) |
 | `--fragment` | A `<div class="sl">` with scoped styles, for embedding in another page. It picks up the host page's `--err`, `--warn`, `--ok`, `--line` and `--muted` colours if they are defined |
 | `--run` | Runs the package first, with the run options, and reports the run |
+| `--redact` | Takes the course content out, for sending the report to someone else (below) |
+| `--redact-names` | With `--redact`: also replaces the package's file names with hashes |
+| `--key-out <file.json>` | With `--redact-names`: writes the key and the table of names to this new file (mode 600). Keep it: it is the only way back from a hash to a name |
+| `--key <file.json>` | With `--redact-names`: reuses a key from `--key-out`, so the same names get the same hashes in another report |
+
+**Redacted reports.** `--redact` keeps the report's structure and everything it diagnoses, and takes out the course's
+own content: page text, console text, API values (SCORM's vocabulary such as `completed`, `passed`, `suspend` and
+`normal`, numbers and times stay; element names stay), suspend data, request and response bodies and headers, typed
+and macro text, changed file contents, code text and snippets, values the code compared, query values and fragments
+in addresses, local file paths, and the item's and course's titles. Each thing taken out appears as its length, such as
+`‹12 characters›`, and a banner at the top counts what was removed. The findings and milestones are worked out again
+from what is left, so they quote nothing that was removed. Error messages keep only their first part: up to the first colon, or the
+whole message for a known shape such as `x is not defined`. Quoted strings (straight or curly) are always taken out. Free-text elements
+(learner id and name, location, comments, interaction and objective ids, suspend data) are masked even when numeric. Addresses of other
+sites keep their host and path, with id-like parts (4 or more digits, UUIDs, 16 or more hex or base64 characters) hidden. The package name and the paths of its files stay (unless `--redact-names`). Code excerpts are not shown. For a
+run saved on its own, the findings that need the package's files (static findings) are left out: use `report course.zip
+--run --redact` to have them too.
+
+```bash
+scorm-lab report run.json --redact --out report-for-vendor.html
+scorm-lab report run.json --redact --redact-names --key-out ~/keep/course-key.json --out report-for-vendor.html
+```
+
+With `--redact-names`, every folder and file name appears as a hash such as `f4c278f5e9`, and a file keeps its extension
+(`f4c278f5e9.html`). The key file (`scorm-lab-redaction-key`, version 1) holds the secret and the table. It is written
+as a new file after the report is written, so a failed report leaves none. `--key` must name a JSON key file from
+`--key-out`, or the command stops with an error.
 
 ## open
 

@@ -41,13 +41,22 @@ function table(cols, rows) {
 }
 const run = () => st.runs.find(r => r.id === st.sel)
 
+// Save report… (P4.4): this run's report as HTML, redacted (no course content) if the box is ticked.
+const saveReport = (run, redact) => act(async () => {
+  const r = lab.web ? await lab.report({ run, redact }) : await lab.invoke('export-report', { run, redact })
+  say(r.cancelled ? 'Report not saved.' : `Report saved${r.file ? ' as ' + r.file : ''}${redact ? ', redacted' : ''}.`)
+}, 'Writing the report…')
+
 const VIEWS = {
   Findings() {
     const r = run()
     if (!r) return [h('h3', { class: 'section' }, 'Package'), findingsList(st.pkg?.findings ?? [])]
+    const redact = h('input', { type: 'checkbox', id: 'report-redact' })
     return [h('p', { class: 'muted small' }, `${r.label}. Saved to ${r.file || '(not saved)'}.`),
       r.milestones && h('p', { class: 'milestones' }, r.milestones.map(s => h('span', { class: s.reached ? 'ok' : 'bad', title: s.evidence }, `${s.reached ? '✓' : '✗'} ${s.label}`))),
-      findingsList(r.findings)]
+      findingsList(r.findings),
+      h('div', { class: 'row' }, h('label', { class: 'muted small' }, redact, ' Take the course content out'),
+        h('button', { type: 'button', class: 'secondary', title: 'Save this run’s report as HTML. Redacted: no page text, console text, API values, suspend data, bodies or file contents; vocabulary, numbers and element names stay.', onclick: () => saveReport(r.id, redact.checked) }, 'Save report…'))]
   },
   'Boot path'() {
     const r = run(), item = $('item').value

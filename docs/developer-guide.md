@@ -85,7 +85,8 @@ src/
   rules.js              Findings: static, run, launch, comparison
   packs/                Rule packs for authoring tools (index.js registers them; util.js shared readers)
   diff.js               Comparison of two runs
-  report.js             HTML reports, verdict, counts
+  report.js             HTML reports, verdict, counts, the redaction banner
+  redact.js             Redacted reports (P4.4): redactRun, the copy of a run with the course content taken out
   ui/                   The interface (desktop window and web)
     index.html, style.css, app.js
     codeview.js         The shared code view (classic script, window.CodeView; P4.1)
@@ -177,6 +178,8 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | Name | Argument | Returns |
 |---|---|---|
 | `open-package` | — | Package info (desktop only: opens a dialog) |
+| `export-report` | `{ run, redact }` | `{ file }` after a save dialog, or `{ cancelled }` (desktop only) |
+| `report-html` | `{ run, redact }` | `{ name, html }`: a run's report, for the web download (`lab.report` in the bridge) |
 | `state` | — | `{ pkg, runs, running, web }`: everything a new client needs |
 | `boot` | `{ item }` | The boot graph for a manifest item index |
 | `launch` | `{ item, cmi?, …launch options }` (flat; unknown options throw) | `true` |
@@ -1047,6 +1050,49 @@ files. The desktop and web reports aren't built from the interface.
 page, or a `<div class="sl">` fragment with scoped styles. The fragment uses the host page's `--err`, `--warn`, `--ok`,
 `--line`, `--muted` and `--code` if they are defined. Everything interpolated goes through `esc()`. `counts()` and
 `screens()` are shared with the CLI's JSON output.
+
+**Redacted reports (P4.4).** `renderReport(..., { redact: true })`, or `redact: { names, key, map, package }` for the
+options of `redactRun`, passes the run, boot graph, analysis and findings through `redactRun` (`src/redact.js`)
+first, then shows a banner that counts what was taken out (`redactionBanner`). The title and subtitle come from the
+redacted label, not from the caller. Code excerpts are off and the package diff is left out.
+
+`redactRun(input, { names, key, map, package, paths })` is pure: it copies its input through JSON (the input is never
+changed), replaces course content, and **works the findings out again**, then adds `redaction: { names, counts }`. It
+is safe by construction, not by remembering what was removed:
+
+1. **Fields.** Each field that holds course text becomes a length marker, `‹12 characters›`: probe `dom` sample and
+   loader, `dialog` message, `input` text, the `value`, `result` and `values` of `api`, `pin-write`, `watch-write`,
+   `cmi`, `cmi-now` and `post` probes (vocabulary, numbers and times stay: `kept()`), `trace.cmi`, console text, log
+   text from the page's own scripts, request bodies and headers, operand previews in `exec` (a string is its length;
+   numbers and names stay), code text in `sites` (`text` except for functions, and each `args` element) and
+   `boot.dynamic`, `sources`, changed file contents (`launch.options.files`), macro text, response bodies, headers and
+   `match` queries, `launch.options.launchParams`, custom profile `headers`, `csp` and `launchParams` (in
+   `options.profile` and `launch.profile`), the item title (`launch.item`, manifest titles, item ids become `item N`),
+   `boot.pages[].bodyText`, and `analysis.scan` snippets.
+2. **Messages.** Exception, caught-error, `pin-failed` and browser log text (sources that are the browser's own:
+   network, security, violation…) are kept with their quoted strings (`'…'`, `"…"`, `` `…` ``, and curly quotes; an inner quote followed by a letter does not end a string) replaced by markers. Then (`browserMsg`) only the part up to the first `: ` stays, unless the message is a known shape (`SHAPES`: `x is not defined`, `Cannot read properties of null (reading ‹…›)`, `Failed to load resource: … status of N`); a `Refused to … because` message keeps its words up to `because`. Boot
+   risks and rule-pack findings, which come from the files, get the same, and a `file:line  code` evidence line keeps
+   only `file:line`.
+   Free-text elements (`FREE`: student and learner id and name, location, suspend data, responses, comments, interaction and objective ids) are masked whatever the value, numbers included; scores and times stay. A Set's `result` is not a value.
+3. **Strings.** Every other string passes through one scan: `lab://` and `https` URLs (package folders kept; for other sites, host and path stay but id-like path parts, `idLike`, are masked; each query
+   part replaced, fragments dropped), `file:` URLs and local paths (`‹local path›`), and relative references with a
+   query or fragment (`a.html?x=y#z`). Fields known to hold package paths (boot nodes, `sites[].file`, manifest
+   resources, scan file names, changed file names) go through the same rules as a whole.
+4. **Names** (`names: true`, `--redact-names`): each decoded folder name and file name becomes `f` plus 10 hex digits of
+   `HMAC-SHA256(key, name)`, with the extension kept on the last segment. `map` collects `name` (and `folder/`) to hash
+   for the key file; `paths` adds names the caller knows (the package's file list). File names are also replaced, as
+   whole words, in messages.
+5. **Findings.** The label is rebuilt from fields (package, item number, API, profile, storage, depth…). Then
+   `runAnalysis` (the same code a live run uses) runs on the redacted trace, launch, boot graph and analysis (the analysis
+   needs the package, so a run saved on its own gets no static findings; the pack findings it carries are kept, as
+   when it is opened). A report of the files only runs `staticFindings` on the redacted analysis and the redacted boot
+   risks. So every quote in a finding comes from data that is already redacted.
+
+Kept: element names, SCORM vocabulary, numbers and times, package paths (or hashes), function and property names,
+the package name (unless names are hashed), and messages minus their quotes.
+
+Known limit: unquoted text in a message from the browser, or in a boot-risk line that is not `file:line  code`, is kept.
+The user guide tells the user to check the report before sending it.
 
 ## Interfaces
 
