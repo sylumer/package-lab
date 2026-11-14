@@ -5,7 +5,43 @@ Progress on [plan.md](plan.md). The orchestrator updates this file with each wor
 
 ## Summary
 
-In progress on branch `next`.
+**Finished on 2026-11-15.** Every work package is done and none was skipped. SCORM Lab is at 0.2.0 on `main`, and the Concierge module is at 1.1.0 on Concierge's `main`. Nothing is pushed or installed.
+
+**What was built.** All the additions agreed on 2026-11-13:
+- change files and rerun;
+- pin values and answer requests;
+- work out what the content wanted from its server;
+- an instrumented execution trace with an automatic drill-down;
+- why the content stalled;
+- LMS profiles, including content on another origin;
+- blocked storage, WebKit and device sizes;
+- input macros and an automatic save-and-resume cycle;
+- corrected package export;
+- rule packs for eleven authoring tools, with `--tool`;
+- comparing two packages;
+- code views, a timeline and batch checks;
+- a redacted report;
+- cmi5 and xAPI with a local LRS;
+- the Concierge module catch-up, `doctor`, zsh completion, new Alfred actions and a documentation pass with recipes.
+
+**Escalations.**
+- P4.4 (redacted report) went from haiku to sonnet after its first privacy review found leaks.
+- P2.1 was built by opus in one piece instead of sonnet plus opus.
+
+**Limits worth knowing.**
+- **Research.** The authoring-tool and LMS research was thin: most vendor pages couldn't be read, and Xyleme's public documentation says almost nothing about its exports. So most pack rules are `info`, the LMS presets are marked as approximations, and the Xyleme pack relies on what a run shows (server requests, the content's own API) rather than on file layouts.
+- **Interface checks.** Most UI work was checked through handlers and tests, not by eye. A pass through every tab in the web interface found three faults, now fixed. The desktop save dialogs and the folder dialog have no automated test.
+- **Test times.** `npm test` takes about 2.5 minutes, near the 3-minute cap; slower checks are behind `--slow`, which takes about 18 minutes. One `npm test` run during P5.4 failed once and passed three times in a row afterwards, probably because a stopped subagent's process was still running.
+- **Unfinished edges.** Saved discoveries can't be reopened in the UI. Behaviour comparison of two packages is CLI only (`diff --run`). Macros and the cycle are Chromium only. WebKit runs have no live view and no tracing.
+
+**What to try first.**
+1. Install: `cd ~/github/scorm-lab && npm run install-app`, `npm link`, `npm run alfred`, and in Concierge `make modules` (or rsync just `modules/scorm-lab`).
+2. `scorm-lab doctor` to see what this Mac can do.
+3. On the Xyleme package, follow the first recipe in [recipes.md](recipes.md):
+   - `scorm-lab analyze <zip> --tool xyleme`;
+   - then `scorm-lab discover <zip>` to see what it wants from Xyleme's servers;
+   - then `scorm-lab drill <zip>` for why it stops;
+   - then `experiment --preset lms`.
 
 **Phase 4 (everyday use), done.** Code views (formatting in a worker, source maps, coverage and trace markers, links from every file:line), a Timeline tab, folder batch checks (`batch`, desktop and Alfred), a redacted report (`report --redact`, reworked by sonnet after a privacy review) and cmi5/xAPI support with a local LRS. `npm test` ~2:29; `--slow` ~14:30.
 
@@ -16,7 +52,8 @@ In progress on branch `next`.
 **Phase 1 (replacing hand work), done.** Overlays (Files tab, `--override`), pins and answers (`--pin`, `--answer`), server-needs discovery (`discover`), an instrumented execution trace (`--trace`, Execution tab), an automatic drill-down (`drill`) and stall analysis. `npm test` takes about 2:20; `--slow` (with a forced-trace pass) about 7 minutes.
 
 **Phase 0 (foundations), done.** One options model across every interface, milestones and progress on every run, and an experiment runner (CLI `experiment`, Experiments tab) with the `api`, `frames` and `standard` presets. `npm test` takes about 1.5 minutes.
- Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
+
+Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
 
 ## Work packages
 
@@ -46,4 +83,4 @@ In progress on branch `next`.
 | P5.1 | Concierge module catch-up | sonnet | done | 321839b | Concierge commit 5f8ea71 on scorm-lab-next. One review round (limits, no work on GET, options via file). Adds a minimal `doctor` |
 | P5.2 | Alfred and CLI polish | haiku | done | 85183e6 | One review round (Alfred temp files and no-overwrite, doctor's checks list kept for Concierge) |
 | P5.3 | Documentation pass | haiku + sonnet review | done | 5f3a2e7 | Sonnet review fixed about 29 mismatches against the code; adds docs/recipes.md |
-| P5.4 | Final check and release build | sonnet | done | (this commit) | --slow passed (18 min); packaged app ran `good` to committed; Alfred builds; version 0.2.0, module 1.1.0 |
+| P5.4 | Final check and release build | sonnet | done | b37060b | --slow passed (18 min); packaged app ran `good` to committed; Alfred builds; version 0.2.0, module 1.1.0 |
