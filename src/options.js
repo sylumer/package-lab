@@ -10,6 +10,7 @@ const DEFAULTS = Object.freeze({
 const MAX_PIN = 1024 ** 2, MAX_BODY = 10 * 1024 ** 2, MAX_BODIES = 20 * 1024 ** 2, MAX_LIST = 100   // a pin's value, a response's body, entries in pins or responses
 const MAX_FILE = 50 * 1024 ** 2, MAX_TOTAL = 200 * 1024 ** 2   // changed files: per file and in all
 const EXPOSE = ['manifest', 'both', '1.2', '2004', 'none']
+export const STORAGE = ['normal', 'blocked', 'partitioned']
 const bad = (k, why) => { throw new Error(`Option “${k}” ${why}.`) }
 const num = (k, v, min, max) => {
   const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v
@@ -94,7 +95,9 @@ const check = {
     if (typeof v !== 'string' || /[\s#]/.test(v)) bad(k, 'must be query text without spaces or #, like a=1&b=2')
     return v.replace(/^[?&]+/, '')
   },
-  storage: str,                                  // narrowed by the work package that adds storage modes
+  // normal: the run window's storage as it is (it lasts from run to run while the app is open) · blocked: Safari's refusals in
+  // content frames (the probe) · partitioned: the same storage, emptied before the run. The profile's cookies field can block too.
+  storage: (k, v) => str(k, v, STORAGE),
 }
 
 // Returns the full options object for o (missing fields get defaults). Throws on unknown fields and bad values.
@@ -123,7 +126,7 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (wait !== DEFAULTS.wait) a.push('--wait', String(wait))
   // Pins and responses with a flag's worth of settings get one; anything else (frames, headers, a method) goes in the options file.
   const pinFlag = o.pins.every(p => p.frames === 'content' && p.mode === 'force'), answerFlag = o.responses.every(r => !r.method && !Object.keys(r.headers).length)
-  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', 'profile', ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
+  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', 'profile', 'storage', ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
   const rest = Object.keys(DEFAULTS).filter(k => !flagged.includes(k) && JSON.stringify(o[k]) !== JSON.stringify(DEFAULTS[k]))
   // Changed files: --override path=path, which assumes a local copy saved at the same relative path.
   for (const p of Object.keys(o.files)) a.push('--override', quote(`${p}=${p}`))
@@ -131,6 +134,7 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (answerFlag) for (const r of o.responses) a.push('--answer', quote(`${r.match}=${r.status}:${r.body}`))
   if (o.launchParams) a.push('--launch-params', quote(o.launchParams))
   if (o.trace) a.push('--trace')
+  if (o.storage !== DEFAULTS.storage) a.push('--storage', o.storage)
   // A preset by name; a custom profile in a file of its own.
   if (typeof o.profile === 'string' && o.profile !== DEFAULTS.profile) a.push('--profile', o.profile)
   if (typeof o.profile === 'object') a.push('--profile-file', 'profile.json')

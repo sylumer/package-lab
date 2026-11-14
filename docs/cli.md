@@ -99,7 +99,7 @@ scorm-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth
                          [--no-caught] [--show] [--json] [--strict] [--options options.json]
                          [--options-from run.json] [--override path=file …] [--pin name=json …]
                          [--answer pattern=reply …] [--launch-params a=1&b=2] [--trace]
-                         [--profile name] [--profile-file profile.json]
+                         [--storage normal|blocked|partitioned] [--profile name] [--profile-file profile.json]
 ```
 
 Launches the item in a hidden browser, with SCORM Lab's test LMS. It lets the item run for `--wait` seconds (default
@@ -122,6 +122,7 @@ app.
 | `--launch-params` | none | Extra query parameters added to the launch address, like `a=1&b=2` |
 | `--profile` | `generic` | Hosts the content the way an LMS does: `generic` (SCORM Lab's own), `moodle`, `scorm-cloud`, `cornerstone`, `successfactors`, `docebo`, `totara`, `blackboard` or `canvas` (see [Profiles](#profiles)) |
 | `--profile-file` | none | A custom profile from a JSON file (see [Profiles](#profiles)). With `--profile` too, that preset is its base unless the file names one |
+| `--storage` | `normal` | Storage in the content's frames: `blocked` makes `localStorage` and `sessionStorage` throw a `SecurityError`, `document.cookie` read empty and `indexedDB.open` fail, as Safari does for content in another site's page; `partitioned` empties the run window's storage first. With `normal`, a profile whose `cookies` is `third-party-blocked` (`scorm-cloud`) blocks it too. See the [user guide](user-guide.md#storage-blocked-in-the-contents-frames). In an options file: `"storage": "blocked"` |
 | `--trace` | off | Records which functions of the package ran and which way each decision went, with the values (see [Tracing](#tracing)). Keep the run with `--out` to read it |
 | `--out` | none | Keeps the full run (scripts, requests, coverage, sources). Open it in the desktop app with **Open saved…**, or pass it to `report` or `--resume-from` |
 | `--live` | none | See [Live runs](#live-runs) |
@@ -260,7 +261,7 @@ progress goes to standard error.
 
 | Option | Default | What it does |
 |---|---|---|
-| `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), `standard` (both), or `lms` (each [profile](#profiles)) |
+| `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), `standard` (both), `lms` (each [profile](#profiles)), or `storage` (normal and blocked) |
 | `--variants` | none | Your own variants, from a JSON file: a list of `{ "name", "patch" }` or `{ "variants": [...] }`. `patch` is any [launch options](developer-guide.md#launch-options). Not with `--preset` |
 | `--out` | none | A folder; each run is kept in it as a saved run (`01-default.json`, `02-api_both.json`, …) |
 | `--json` | off | Prints JSON (below) instead of a table |

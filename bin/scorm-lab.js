@@ -66,6 +66,8 @@ Options for run (and report --run)
   --profile <name>          Host the content the way an LMS does: generic (default), moodle, scorm-cloud, cornerstone,
                             successfactors, docebo, totara, blackboard or canvas. Presets are approximations.
   --profile-file <x.json>   A custom profile: { "base": "moodle", "contentOrigin": "other", … } (see the user guide).
+  --storage <mode>          Storage in the content's frames: normal (default), blocked (what Safari does for content in another site's
+                            page) or partitioned (empty at the start of the run).
   --trace                   Record which functions ran and which way each decision went (the saved run's trace.exec).
   --out <run.json>          Keep the full run (open it in the desktop app with Open saved…).
   --live <folder>           Write frames to <folder>/frame.jpg and read clicks and keys from <folder>/input/.
@@ -74,7 +76,7 @@ Options for run (and report --run)
 
 Options for experiment (also the run options above, which set the default launch)
   --variants <file.json>    Your own variants: [{ "name": "deep", "patch": { "depth": 2 } }, …].
-  --preset <name>           Built-in variants: standard (default), api, frames, lms (one per LMS profile).
+  --preset <name>           Built-in variants: standard (default), api, frames, lms (one per LMS profile), storage (normal and blocked).
   --out <folder>            Keep each run in <folder> as a saved run.
   --json                    Print JSON instead of a table.
 
@@ -112,7 +114,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
     if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
@@ -235,6 +237,7 @@ function flagOptions(o) {
   if (o.wait !== undefined) f.wait = o.wait
   if (o['launch-params'] !== undefined) f.launchParams = o['launch-params']
   if (o.trace) f.trace = true
+  if (o.storage !== undefined) f.storage = o.storage
   // --profile-file holds a custom profile: { base?, …fields }. With --profile too, that name is its base unless it names one.
   if (o['profile-file'] !== undefined) {
     const p = jsonFile(o['profile-file'], 'a profile, like { "base": "moodle", "contentOrigin": "other" }')

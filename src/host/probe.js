@@ -128,6 +128,38 @@
   const held = pins.map(pin => { const root = pin.path.split('.')[0]; pinAt(window, [root, ...pin.path.split('.').slice(1)], pin); return [pin, root, Object.getOwnPropertyDescriptor(window, root)?.get] })
   // Content that redefines a pinned name (defineProperty, delete, a function declaration) replaces the pin: say so once the page has loaded.
   addEventListener('load', () => { for (const [pin, root, get] of held) if (get && Object.getOwnPropertyDescriptor(window, root)?.get !== get) report({ type: 'pin-failed', path: pin.path, error: 'the content redefined ' + root + ' after the pin was set, so the pin no longer applies' }) })
+  // Blocked storage (P2.2): with window.__labStorage = 'blocked' (the recorder sets it, as it does the pins), content frames get
+  // what Safari gives a third-party frame: localStorage and sessionStorage throw SecurityError when read, document.cookie
+  // reads '' and ignores writes, and indexedDB.open fails with a SecurityError error event. Every access is reported
+  // (throttled like lookups). SCORM Lab's own pages keep their storage.
+  const blockStorage = window.__labStorage === 'blocked' && !ownHost
+  try { delete window.__labStorage } catch (e) { /* kept */ }
+  if (blockStorage) {
+    const noted = new Map(), insecure = () => new DOMException('The operation is insecure.', 'SecurityError')
+    const note = what => {
+      const s = stack(1), key = what + s.join('|'), n = (noted.get(key) || 0) + 1
+      noted.set(key, n)
+      if (n <= 3 || n % 100 === 0) report({ type: 'storage-blocked', what, n, stack: s })
+    }
+    const fail = (name, f) => { try { f() } catch (e) { report({ type: 'probe-failed', name, error: String(e) }) } }
+    for (const name of ['localStorage', 'sessionStorage'])
+      fail(name, () => Object.defineProperty(window, name, { configurable: true, enumerable: true, get() { note(name); throw insecure() } }))
+    fail('cookie', () => Object.defineProperty(Document.prototype, 'cookie', { configurable: true, enumerable: true,
+      get() { note('document.cookie (read)'); return '' }, set(v) { note('document.cookie (write)') } }))
+    // ponytail: the request is a plain EventTarget with the IDBOpenDBRequest fields, enough for onerror and addEventListener handlers; a real request object would need a second page.
+    fail('indexedDB', () => Object.defineProperty(IDBFactory.prototype, 'open', { configurable: true, writable: true, value: function open() {
+      note('indexedDB.open')
+      const req = new EventTarget()
+      Object.assign(req, { readyState: 'pending', result: undefined, error: null, source: null, transaction: null, onerror: null, onsuccess: null, onupgradeneeded: null, onblocked: null })
+      queueMicrotask(() => {
+        req.readyState = 'done'; req.error = insecure()
+        const ev = new Event('error', { bubbles: true, cancelable: true })
+        req.dispatchEvent(ev)
+        if (typeof req.onerror === 'function') req.onerror.call(req, ev)
+      })
+      return req
+    } }))
+  }
   for (const name of ['API', 'API_1484_11']) {
     let value = wrap(name, window[name])
     try {

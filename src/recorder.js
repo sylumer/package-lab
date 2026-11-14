@@ -26,13 +26,17 @@ export function nameAt(source, line, col) {
 export const shiftTimes = (list, items, off) => items.map(x => ({ ...x, ...(x.t === undefined ? {} : { t: x.t + off }),
   ...(list === 'exec' ? { events: x.events.map(e => Array.isArray(e) ? [e[0] + off, ...e.slice(1)] : e) } : {}) }))
 
+// What the probe is told about storage (P2.2): only blocking needs anything from here; partitioned is done by the main process.
+export const storagePrefix = mode => mode === 'blocked' ? "globalThis.__labStorage = 'blocked';\n" : ''
+
 export class Recorder {
   // pins and responses are the run's launch options (pins.js): pins go into the probe, responses are served through the Fetch domain.
   // Responses answered with @probe (shape.js) also put shape-probe.js, with their patterns, ahead of the probe.
+  // storage: the run's effective mode (profiles.js storageMode); 'blocked' puts a line ahead of the probe that makes it block storage.
   // trace (a traced run, P1.4) puts trace-probe.js ahead of the probe too; its reports go to trace.exec.
-  constructor(wc, { label, caught = true, pins = [], responses = [], trace = false } = {}) {
+  constructor(wc, { label, caught = true, pins = [], responses = [], trace = false, storage = 'normal' } = {}) {
     this.wc = wc; this.dbg = wc.debugger; this.caught = caught; this.t0 = Date.now(); this.sessions = new Set([''])
-    this.probe = pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + (trace ? TRACE + ';\n' : '') + PROBE; this.userAgent = userAgentPin(pins); this.responses = responses; this.answered = new Map()
+    this.probe = storagePrefix(storage) + pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + (trace ? TRACE + ';\n' : '') + PROBE; this.userAgent = userAgentPin(pins); this.responses = responses; this.answered = new Map()
     this.traced = trace; this.execCount = 0
     this.trace = { label, started: new Date().toISOString(), targets: [], scripts: [], requests: [], navigations: [], console: [], exceptions: [],
       caught: [], log: [], probe: [], exec: [], coverage: [], sources: {}, truncated: {} }

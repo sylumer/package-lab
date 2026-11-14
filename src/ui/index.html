@@ -36,6 +36,8 @@
     <summary>More options</summary>
     <p class="muted small">The options this launch will use. To set the others, use a file with <code>--options</code> on the command line.</p>
     <div class="row"><label>Launch parameters <input id="launch-params" type="text" placeholder="a=1&amp;b=2" spellcheck="false" title="Extra query parameters added to the launch address"></label>
+      <label>Storage <select id="storage" title="Storage in the content’s frames. Blocked: what Safari does for content inside another site’s page. Partitioned: empty at the start of the run. Normal: the profile’s Cookies field decides.">
+        <option value="normal">Normal</option><option value="blocked">Blocked (Safari-like)</option><option value="partitioned">Partitioned (empty)</option></select></label>
       <label class="check" title="Record which functions ran and which way each decision went, with the values. The content runs a little slower."><input type="checkbox" id="trace"> Trace the code</label></div>
     <h3 class="section">Profile fields</h3>
     <p class="muted small" id="profile-notes"></p>

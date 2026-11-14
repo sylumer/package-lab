@@ -84,7 +84,7 @@ export function runFindings(trace, launch = {}) {
       evidence: [...contentAssigns.slice(0, 4).map(a => `${a.name} = ${a.kind} {${a.keys.join(', ')}} in ${short(a.frame)} from ${a.stack?.[0] ?? '?'}`),
         ...shim.slice(0, 4).map(c => `${c.call}(${c.el}) → ${c.result} on the content’s own object`)],
       fix: 'Find the setting that makes the content create it (often a preview, offline or standalone flag) and turn it off in the export.' })
-  if (launch.kind === 'package') out.push(...originFindings(probe, launch.profile))
+  if (launch.kind === 'package') out.push(...originFindings(probe, launch.profile), ...storageFindings(trace))
   for (const f of probe.filter(p => p.type === 'frame' && !isLab(p.frame)).slice(0, 3))
     if (!f.topReachable) out.push({ sev: 'info', title: 'The content’s top window is on another site', detail: 'Wrappers that search window.top fail here.', evidence: [short(f.frame)], fix: '' })
 
@@ -137,6 +137,18 @@ export function originFindings(probe, profile) {
     evidence: [...sandbox !== null ? [`sandbox="${sandbox}"`] : [], ...opaque.slice(0, 3).map(f => `${short(f.frame)} has origin null`)],
     fix: 'Add allow-same-origin and allow-scripts to the sandbox in the LMS’s settings or player template, or remove the sandbox.' })
   return out
+}
+// Storage the browser can block (P2.2): the accesses the probe refused in a run with storage blocked (a `storage-blocked`
+// probe report each, with the stack), and, of the uncaught errors, those they caused.
+export function storageFindings(trace) {
+  const hits = (trace.probe ?? []).filter(p => p.type === 'storage-blocked')
+  if (!hits.length) return []
+  const kinds = [...new Set(hits.map(h => h.what))], thrown = (trace.exceptions ?? []).filter(e => /SecurityError|operation is insecure/.test(e.text))
+  return [{ sev: 'warn', title: 'The content needs storage the browser can block',
+    detail: `This run blocked storage in the content’s frames, as Safari and some other browsers do for content that sits inside another site’s page (an LMS on another domain): ${kinds.join(', ')}. The content asked for it, so it may not work there.` +
+      (thrown.length ? ` ${thrown.length} uncaught error${thrown.length > 1 ? 's' : ''} came from it, so the content stopped at the first.` : ' It handled the refusal, or it didn’t need the result.'),
+    evidence: [...new Set(hits.map(h => `${h.what} in ${short(h.frame)} at ${h.stack?.[0] ?? '?'}`))].slice(0, 8),
+    fix: 'Keep the course’s state in the LMS (cmi.suspend_data) instead of the browser, or wrap each use of localStorage, sessionStorage, cookies and indexedDB in try/catch with a fallback in memory. Run the content again with Storage set to normal to see the difference.' }]
 }
 const originOf = u => /^[a-z][\w+.-]*:\/\/[^/]*/i.exec(u ?? '')?.[0] ?? 'unknown'
 

@@ -28,7 +28,7 @@ import { PRESETS, planVariants, runResult, summarise, experimentFindings } from 
 import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
 import { stall, stallFinding } from './stall.js'
-import { PROFILES, launchProfile, apiAt, fillParams } from './profiles.js'
+import { PROFILES, launchProfile, apiAt, fillParams, storageMode } from './profiles.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -167,25 +167,30 @@ function addRun(kind, label, launch, trace, boot) {
 const savedRun = r => ({ format: 'scorm-lab-run', version: 1, kind: r.kind, label: r.label, package: r.package, launch: r.launch, trace: r.trace, boot: r.boot, findings: r.findings, milestones: r.milestones })
 
 // Popups (window-opener profiles, or content that opens itself in a new window) get their own recorder, merged at the end.
-function watchPopups(wc, extra, ropts, wins) {
+function watchPopups(wc, extra, ropts, wins, top = true) {
   wc.on('did-create-window', child => {
     const rec = new Recorder(child.webContents, ropts)
     rec.onProbe = p => emit('probe', p)
     extra.push(rec); wins.push(child)
-    rec.start().catch(() => {})
-    watchPopups(child.webContents, extra, ropts, wins)
+    // The LMS page opens the content's window blank, and goes on to the content once the recorder is attached: a window
+    // that starts loading at once is half loaded before the debugger is there, so its requests and probe are missed.
+    // Only the run window holds SCORM Lab's LMS page; a window the content opens isn't scripted into.
+    rec.start().catch(() => {}).then(() => top && wc.executeJavaScript('window.__labPopupReady?.()').catch(() => {}))
+    watchPopups(child.webContents, extra, ropts, wins, false)
     child.on('close', e => { if (!rec.stopped) { e.preventDefault(); rec.stop().finally(() => child.destroy()) } })
   })
 }
 
-async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace, headers }) {
+async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace, headers, storage = 'normal' }) {
   await finish()
+  // partitioned: the run's storage starts empty. (Otherwise it lasts from run to run while the app is open: it is one in-memory partition.)
+  if (storage === 'partitioned') await session.fromPartition(partition).clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'websql', 'cachestorage', 'serviceworkers', 'filesystem'] })
   served = files ?? null   // only now: the previous run may have been using the old set
   pkgHeaders = headers ?? {}
   tracing = trace ? { files: new Map(), untraced: new Map(), sites: pkg.sites } : null
   const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
-  const ropts = { caught, pins, responses, trace: !!trace }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
+  const ropts = { caught, pins, responses, trace: !!trace, storage }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
   rec.onProbe = p => emit('probe', p)
   win.webContents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { show: SHOW_RUNS, webPreferences: { partition, sandbox: true, backgroundThrottling: false } } }))
   watchPopups(win.webContents, extra, ropts, wins)
@@ -328,10 +333,10 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
   config = { expose, depth: prof.frames.depth, opener: prof.launch === 'popup', launch: url, cmi, frames: prof.frames, popupDelay: prof.popupDelay, apiDelay: prof.apiDelay, apiAt: apiAt(prof),
     runtime: { edition: m.edition === '2nd' ? '2nd edition' : '', learner, credit: 'credit', mode: 'normal', limits: prof.limits, commit: prof.commit, slowMs: prof.slowMs,
       launchData: item.launchData, mastery: item.mastery, maxTime: item.maxTime, timeLimitAction: item.timeLimitAction, completionThreshold: item.completionThreshold } }
-  const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o, profile: prof }
+  const launch = { version: m.version, expose, depth: config.depth, opener: config.opener, item: item.title || item.id, itemIndex, itemType: item.type, url, resume: !!cmi, options: o, profile: prof, storage: storageMode(o) }
   const headers = { ...prof.headers, ...(prof.csp ? { 'Content-Security-Policy': prof.csp } : {}) }
-  await begin({ kind: 'package', label: `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${prof.name !== 'generic' ? ' · ' + prof.name : ''}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}`,
-    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers })
+  await begin({ kind: 'package', label: `${pkg.name} · ${item.title || item.id} · ${expose === 'both' ? 'both APIs' : expose === 'none' ? 'no API' : 'SCORM ' + expose}${prof.name !== 'generic' ? ' · ' + prof.name : ''}${launch.storage !== 'normal' ? ' · storage ' + launch.storage : ''}${config.depth ? ' · depth ' + config.depth : ''}${config.opener ? ' · window' : ''}${cmi ? ' · resumed' : ''}`,
+    url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers, storage: launch.storage })
   return true
 }
 

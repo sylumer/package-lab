@@ -12,7 +12,7 @@ const GENERIC = {
   csp: null, headers: {},                                      // on package responses
   commit: 'ok', slowMs: 0,                                     // ok | fail | slow (each commit takes slowMs)
   limits: { suspend12: null, suspend2004: null },              // suspend_data characters; null: the standard's
-  cookies: 'normal',                                           // normal | third-party-blocked (P2.2)
+  cookies: 'normal',                                           // normal | third-party-blocked (blocks storage in content frames, as the storage option does)
 }
 const FIELDS = Object.keys(GENERIC)
 // Presets other than generic are approximations of what each LMS does by default, from its public documentation.
@@ -123,6 +123,10 @@ export function launchProfile(options = {}) {
   if (kind === 'frameset' && (sandbox !== null || p.frames.allow !== GENERIC.frames.allow)) bad('frames.kind', 'frameset can’t have a sandbox or allow attribute (a <frame> has neither); use iframe')
   return p
 }
+
+// How storage behaves in a run's content frames (P2.2): the option `storage` (normal | blocked | partitioned), where
+// normal means "as the profile says": a profile whose cookies are third-party-blocked blocks it. Takes normalised options.
+export const storageMode = o => o.storage !== 'normal' ? o.storage : resolveProfile(o.profile).cookies === 'third-party-blocked' ? 'blocked' : 'normal'
 
 // Where the test LMS puts the API: 0 is its own page (host.html); n is the LMS frame wrap.html#n (n frames above the
 // content, counting down: wrap.html#1 is the content's parent).

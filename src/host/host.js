@@ -27,7 +27,12 @@
   const depth = n ? n - 1 : cfg.depth, next = depth > 0 ? 'wrap.html#' + depth : cfg.launch
   if (!n && cfg.opener) {
     document.body.textContent = 'The content is in its own window (window-opener profile).'
-    setTimeout(() => window.open(next, 'content', 'width=1024,height=768'), cfg.popupDelay || 0)
+    // Opened blank; main.js calls __labPopupReady once the run's recorder is attached to the new window, and only then does it load.
+    setTimeout(() => {
+      const w = window.open('about:blank', 'content', 'width=1024,height=768')
+      window.__labPopupReady = () => { window.__labPopupReady = null; if (w) w.location.href = next }
+      setTimeout(() => window.__labPopupReady?.(), 3000)   // in case the recorder never attaches
+    }, cfg.popupDelay || 0)
     return
   }
   // The frames' kind, and on the content's own frame the sandbox and allow attributes.

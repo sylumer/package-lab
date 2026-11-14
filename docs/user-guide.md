@@ -230,7 +230,7 @@ Choosing another profile clears your changes.
 | **CSP**, **Headers** | A `Content-Security-Policy` header, and other headers (a JSON object), on every package file |
 | **Commit**, **Slow commit** | **ok**; **fail**: `LMSCommit`/`Commit` returns false with error 101 (1.2) or 391 (2004); **slow**: each commit blocks for the given time, like a slow synchronous save |
 | **Suspend data 1.2**, **2004** | The LMS's own limit on `cmi.suspend_data`, in characters. Empty means the standard's (4,096 and 64,000) |
-| **Cookies** | **normal** or **third-party-blocked**. Accepted and saved with the run; it has no effect yet |
+| **Cookies** | **normal** or **third-party-blocked**. With **third-party-blocked**, storage in the content's frames is blocked, as **Storage: blocked** does (below). The **scorm-cloud** preset sets it |
 
 The findings explain what a profile breaks. Content on another origin that looks for the API through its parents gets
 "The content can't reach the LMS from another origin", with each refused lookup and the line that made it. A sandbox
@@ -239,6 +239,29 @@ API calls that failed. The run's label names the profile when it isn't generic, 
 in `launch.options.profile`, and with every field filled in, in `launch.profile`).
 
 To try every preset at once, run the **lms** experiment (see below).
+
+## Storage blocked in the content's frames
+
+A course that works in Chrome can fail in Safari or on an iPad. Those browsers refuse storage to content that sits
+inside another site's page, which is how most LMSs show a course. If the content keeps something in the browser (the
+learner's place, a flag saying it has started), the refusal can stop it. SCORM Lab can reproduce this.
+
+Under **More options**, **Storage** sets what the content's frames get:
+
+| Storage | What happens |
+|---|---|
+| **Normal** | The storage of SCORM Lab's run window, as it is. It lasts from one run to the next while the app is open, and all packages share it. The profile's **Cookies** field can still block it |
+| **Blocked (Safari-like)** | Reading `localStorage` or `sessionStorage` throws a `SecurityError`. `document.cookie` reads as empty and ignores writes. `indexedDB.open` fails with an error. Only the content's frames: SCORM Lab's own pages keep their storage |
+| **Partitioned (empty)** | Nothing is refused, but the storage is emptied before the run starts, so nothing left by an earlier run or another package is there. Use it to see how the content behaves on a learner's first visit. (A browser's partitioned storage also keeps one site's data apart from another's. SCORM Lab's run window already does that; the difference you can see is the empty start) |
+
+If the content used what was blocked, the Findings tab says "The content needs storage the browser can block", with the
+line of code for each use. If it also stopped, the run's other findings show where (often "The content never looked
+for the SCORM API"). To compare, run the **storage** experiment: it runs the item as it is, then with storage blocked,
+and says "With storage blocked, the content gets less far" when that makes a difference.
+
+The fix is usually to keep the course's state in the LMS (`cmi.suspend_data`) and wrap any browser storage in
+`try/catch`, so the course carries on without it. The label of the run says "storage blocked", and the saved run keeps the
+mode in `launch.options.storage` (and, with the profile's cookies taken into account, in `launch.storage`).
 
 ## Changing files and running again
 
@@ -307,6 +330,7 @@ one after another. Each run lasts as long as **Stop after** (10 seconds if that 
 | **frames** | Frame depth 0, 1, 2 and 3, and a new window |
 | **standard** | Both of the above (a variant that matches the default is left out) |
 | **lms** | Each LMS profile in turn (see [profiles](#running-it-the-way-an-lms-does-profiles)) |
+| **storage** | Storage normal and blocked (see [storage](#storage-blocked-in-the-contents-frames)) |
 
 The table fills in as each run finishes: how far it got, API calls, errors, the verdict, and how it compares with the
 default. Click a row to open that run. **Stop** ends the run in progress and skips the rest. The run it cut short is left out of the table and the findings (it is still in the Runs list). A run that fails to finish shows as such and the experiment carries on. Variants you list yourself on the command line are all run, even ones that repeat the default; the built-in sets leave those out.

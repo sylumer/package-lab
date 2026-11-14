@@ -4,14 +4,15 @@
 import { normaliseOptions } from './options.js'
 import { furthest, progress, runCounts } from './milestones.js'
 import { verdict } from './report.js'
-import { PROFILE_NAMES } from './profiles.js'
+import { PROFILE_NAMES, storageMode } from './profiles.js'
 
 const api = ['manifest', 'both', '1.2', '2004', 'none'].map(v => ({ name: `api ${v}`, patch: { expose: v } }))
 const frames = [...[0, 1, 2, 3].map(n => ({ name: `depth ${n}`, patch: { depth: n } })), { name: 'new window', patch: { opener: true } }]
 const union = (...lists) => { const seen = new Set(); return lists.flat().filter(v => { const k = JSON.stringify(v.patch); return !seen.has(k) && seen.add(k) }) }
-// lms: one variant per LMS profile (P2.1). P2.2 adds storage; P2.3 adds browsers.
+// lms: one variant per LMS profile (P2.1). storage: normal and blocked (P2.2; the one the default already is is left out). P2.3 adds browsers.
 const lms = PROFILE_NAMES.map(n => ({ name: `lms ${n}`, patch: { profile: n } }))
-export const PRESETS = { api, frames, standard: union(api, frames), lms }
+const storage = ['normal', 'blocked'].map(v => ({ name: `storage ${v}`, patch: { storage: v } }))
+export const PRESETS = { api, frames, standard: union(api, frames), lms, storage }
 
 // { base: options, variants: [{ name, patch }] } → [{ name, options }], the base first as “default”. A variant that
 // ends up with the same options as an earlier one is left out, unless dedupe is false (variants the user wrote).
@@ -51,6 +52,16 @@ export function experimentFindings(results) {
     out.push({ sev: 'warn', title: `${r.name} gets further than the default: reached ${furthest(r.milestones)?.label ?? 'nothing'}`,
       detail: `With the default settings the run got as far as “${furthest(base.milestones)?.label ?? 'nothing'}”. Changing the settings below got it further, so they matter.`,
       evidence: settingsDiff(base.options, r.options), fix: 'Check what the real LMS offers for these settings, or what the content assumes about them.' })
+  }
+  // Storage blocked (P2.2): a variant with it blocked that gets less far than the default, which doesn't.
+  for (const r of rest) {
+    if (storageMode(r.options) !== 'blocked' || storageMode(base.options) === 'blocked') continue
+    const p = progress(base, r)
+    if (p.better >= 0) continue
+    out.push({ sev: 'warn', title: 'With storage blocked, the content gets less far',
+      detail: `With storage normal the run got as far as “${furthest(base.milestones)?.label ?? 'nothing'}”. With it blocked, as Safari does for content inside another site’s page, it ${p.summary}.`,
+      evidence: [...p.steps.filter(s => s.a && !s.b).map(s => `Not reached with storage blocked: ${s.label}`), ...settingsDiff(base.options, r.options)],
+      fix: 'Look at the “The content needs storage the browser can block” finding of the blocked run for where the content uses storage, and keep its state in the LMS instead.' })
   }
   if (!out.length) out.push({ sev: 'info', title: 'Nothing tried made a difference', detail: `None of the ${rest.length} variants got further than the default.`, evidence: [], fix: '' })
   return out

@@ -24,8 +24,8 @@ import { servedBody } from '../src/pins.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, show, traceFindings } from '../src/instrument.js'
 import { stall, stallFinding } from '../src/stall.js'
 import { Recorder, shiftTimes, isBlocked, nameAt } from '../src/recorder.js'
-import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams } from '../src/profiles.js'
-import { originFindings } from '../src/rules.js'
+import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams, storageMode } from '../src/profiles.js'
+import { originFindings, storageFindings } from '../src/rules.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import vm from 'node:vm'
 
@@ -104,6 +104,19 @@ const polling = fixture('polling', d => {
 `)
   sub(d, 'lesson.html', /<script/, '<script src="boot.js"></script><script')
   sub(d, 'lesson.js', /scorm\.start\(\)/g, 'true')
+})
+
+// stored: keeps the learner's place in localStorage and only starts when that worked, which it never does where storage
+// is blocked (Safari, content in another site's frame): the lesson never starts, so it never looks for the LMS.
+const stored = fixture('stored', d => {
+  writeFileSync(join(d, 'boot.js'), `// Restores the learner's place from localStorage before the lesson starts.
+var saved = JSON.parse(localStorage.getItem('lab-state') || '{}')
+saved.visits = (saved.visits || 0) + 1
+localStorage.setItem('lab-state', JSON.stringify(saved))
+window.labState = saved
+`)
+  sub(d, 'lesson.html', '<script src="lesson.js" defer>', '<script src="boot.js"></script><script src="lesson.js" defer>')
+  sub(d, 'lesson.js', /\nstart\(\)\s*$/, '\nif (window.labState) start()\n')
 })
 
 // pinned: a mode flag the content sets itself (a pin holds it), a settings object, a frozen object, and the user agent.
@@ -308,7 +321,14 @@ for (const f of [{ 'a.js': {} }, { 'a.js': { content: 'x', base64: 'AA==' } }, {
   assert.throws(() => normaliseOptions({ files: f }), /files/, 'options: files value ' + JSON.stringify(f))
 assert.equal(cliCommand(dflt, { zip: 'a b.zip', item: 2 }), "scorm-lab run 'a b.zip' --item 2")
 assert.equal(cliCommand({ expose: 'both', depth: 2, opener: true, caught: false, auto: 20, trace: true }), 'scorm-lab run package.zip --api both --depth 2 --window --no-caught --wait 20 --trace')
-assert.equal(cliCommand({ storage: 'blocked' }), 'scorm-lab run package.zip --options options.json', 'cliCommand: a field without a flag goes to the options file')
+assert.equal(cliCommand({ viewport: { width: 390, height: 844 } }), 'scorm-lab run package.zip --options options.json', 'cliCommand: a field without a flag goes to the options file')
+// Storage (P2.2): the three modes, the flag, and the profile's cookies field.
+for (const s of ['normal', 'blocked', 'partitioned']) assert.equal(normaliseOptions({ storage: s }).storage, s, 'storage: ' + s)
+assert.throws(() => normaliseOptions({ storage: 'nope' }), /storage.*one of normal, blocked, partitioned/, 'storage: other words are refused')
+assert.equal(cliCommand({ storage: 'blocked' }), 'scorm-lab run package.zip --storage blocked', 'cliCommand: --storage')
+assert.deepEqual(['normal', 'blocked', 'partitioned'].map(storage => storageMode(normaliseOptions({ storage }))), ['normal', 'blocked', 'partitioned'], 'storageMode: the option')
+assert.deepEqual([{}, { profile: 'scorm-cloud' }, { profile: 'scorm-cloud', storage: 'partitioned' }, { profile: { cookies: 'third-party-blocked' } }, { profile: 'moodle' }].map(o => storageMode(normaliseOptions(o))),
+  ['normal', 'blocked', 'partitioned', 'blocked', 'normal'], 'storageMode: normal means the profile’s cookies field says')
 // Experiments: planning, summary, findings.
 const planned = planVariants({ base: {}, variants: PRESETS.standard })
 assert.deepEqual(planned.map(p => p.name), ['default', 'api both', 'api 1.2', 'api 2004', 'api none', 'depth 1', 'depth 2', 'depth 3', 'new window'], 'experiments: standard drops variants equal to the default')
@@ -333,6 +353,16 @@ const exNo = experimentFindings([exBase, exRes('same', dflt, 4), exNone])
 assert.equal(exNo.length, 1); assert.equal(exNo[0].sev, 'info'); assert.match(exNo[0].title, /Nothing tried made a difference/)
 assert.equal(experimentFindings([exBase, exRes('tie', dflt, 4)])[0].sev, 'info', 'experiments: a tie is not further')
 assert.deepEqual(experimentFindings([]), [])
+// The storage preset (P2.2): normal and blocked; the one equal to the default is skipped. Blocked getting less far is a finding.
+assert.deepEqual(planVariants({ base: {}, variants: PRESETS.storage }).map(p => p.name), ['default', 'storage blocked'], 'experiments: storage preset, normal is the default')
+assert.deepEqual(planVariants({ base: { storage: 'blocked' }, variants: PRESETS.storage }).map(p => p.name), ['default', 'storage normal'], 'experiments: storage preset from a blocked base')
+assert.deepEqual(planVariants({ base: { profile: 'scorm-cloud' }, variants: PRESETS.storage }).map(p => p.name), ['default', 'storage blocked'], 'experiments: a profile that blocks cookies')
+const exBlocked = exRes('storage blocked', normaliseOptions({ storage: 'blocked' }), 2), exSt = experimentFindings([exRes('default', dflt, 8), exBlocked])
+assert.equal(exSt.length, 1); assert.equal(exSt[0].title, 'With storage blocked, the content gets less far'); assert.equal(exSt[0].sev, 'warn')
+assert.ok(exSt[0].evidence.includes('Not reached with storage blocked: Looked for the API') && exSt[0].evidence.includes('storage: "normal" → "blocked"'), 'experiments: what was lost, and the setting: ' + exSt[0].evidence)
+assert.match(exSt[0].detail, /got less far/)
+assert.equal(experimentFindings([exRes('default', dflt, 4), exRes('storage blocked', normaliseOptions({ storage: 'blocked' }), 4)])[0].sev, 'info', 'experiments: blocked that makes no difference is no finding')
+assert.equal(experimentFindings([exRes('default', normaliseOptions({ storage: 'blocked' }), 8), exBlocked]).some(f => /storage blocked/.test(f.title)), false, 'experiments: not when the default is blocked too')
 const exRun = runResult('v', dflt, { milestones: mkSteps(2), trace: trace(), findings: [{ sev: 'error', title: 'bad' }] }, { runId: 3 })
 assert.equal(exRun.errors, 1); assert.equal(exRun.verdict.title, 'bad'); assert.equal(exRun.runId, 3); assert.equal(summarise([exRun])[0].runId, 3)
 // LMS profiles (P2.1): presets validate, a custom profile goes over its base, fields that don't fit together are refused.
@@ -470,6 +500,42 @@ assert.deepEqual(watchPins({ pins: [{ path: 'a', value: 1, frames: 'content', mo
   assert.deepEqual(reports.filter(r => r.type === 'watch-write').map(r => `${r.path}=${r.value}`), ['config={}', 'config={"a":1}', 'config.cdn=c', 'player={"ready":true}'], 'watch: writes reported')
   assert.ok(reports.some(r => r.type === 'watch-read' && r.path === 'config.cdn'), 'watch: reads reported')
 }
+{
+  // Blocked storage (P2.2) under vm: the probe's refusals, and that SCORM Lab's own pages and other modes are left alone.
+  const probeSrc = readFileSync(new URL('../src/host/probe.js', import.meta.url), 'utf8')
+  const sandbox = (href, mode) => {
+    const reports = [], ctx = vm.createContext({ location: { href }, document: { referrer: '', addEventListener() {} }, addEventListener() {}, setTimeout() {}, DOMException, Event, EventTarget, queueMicrotask,
+      Document: { prototype: {} }, IDBFactory: { prototype: { open() { return 'real' } } }, __labReport: x => reports.push(JSON.parse(x)) })
+    vm.runInContext('window = { localStorage: "real" };' + (mode ? ` window.__labStorage = ${JSON.stringify(mode)};` : ''), ctx)
+    vm.runInContext(probeSrc, ctx)
+    return { reports, ctx, run: code => vm.runInContext(code, ctx) }
+  }
+  const b = sandbox('lab://run/pkg/a.html', 'blocked')
+  assert.equal(b.run("try { window.localStorage; 'no error' } catch (e) { e.name + ': ' + e.message }"), 'SecurityError: The operation is insecure.', 'storage probe: localStorage throws SecurityError')
+  assert.equal(b.run("try { window.sessionStorage; 'no error' } catch (e) { e.name }"), 'SecurityError', 'storage probe: sessionStorage too')
+  assert.equal(b.run("var d = Object.create(Document.prototype); d.cookie = 'a=1'; d.cookie"), '', 'storage probe: cookies read empty and writes are ignored')
+  b.run("var req = IDBFactory.prototype.open('db', 1); globalThis.out = []; req.onerror = function (e) { out.push('onerror ' + req.error.name + ' ' + req.readyState) }; req.addEventListener('error', function () { out.push('listener') }); globalThis.req = req")
+  assert.equal(b.run('req.readyState'), 'pending', 'storage probe: the request is pending until the error')
+  await Promise.resolve()
+  assert.equal(b.run("out.join()"), 'listener,onerror SecurityError done', 'storage probe: indexedDB.open errors, to both kinds of handler')
+  assert.deepEqual(b.reports.filter(r => r.type === 'storage-blocked').map(r => r.what), ['localStorage', 'sessionStorage', 'document.cookie (write)', 'document.cookie (read)', 'indexedDB.open'], 'storage probe: each access is reported')
+  assert.ok(b.reports.find(r => r.what === 'localStorage').stack, 'storage probe: with a stack')
+  assert.equal(b.run('window.__labStorage'), undefined, 'storage probe: the setting is removed from the page')
+  for (const [href, mode] of [['lab://run/__lab/host.html', 'blocked'], ['lab://run/pkg/a.html', 'partitioned'], ['lab://run/pkg/a.html', undefined]]) {
+    const s = sandbox(href, mode)
+    assert.equal(s.run('window.localStorage'), 'real', `storage probe: ${href} with ${mode} keeps storage`)
+    assert.equal(s.run("IDBFactory.prototype.open('x')"), 'real')
+  }
+}
+// The finding, and what it says about uncaught errors it caused.
+const stBlocked = [{ type: 'storage-blocked', what: 'localStorage', frame: 'lab://run/pkg/lesson.html', stack: ['get localStorage (lab://run/pkg/boot.js:2:20)'] }, { type: 'storage-blocked', what: 'localStorage', frame: 'lab://run/pkg/lesson.html', stack: ['get localStorage (lab://run/pkg/boot.js:2:20)'] }, { type: 'storage-blocked', what: 'document.cookie (read)', frame: 'lab://run/pkg/lesson.html', stack: ['f (lab://run/pkg/a.js:9:1)'] }]
+const stF = storageFindings(trace({ probe: stBlocked, exceptions: [{ text: 'SecurityError: The operation is insecure.', at: [] }] }))
+assert.equal(stF.length, 1); assert.equal(stF[0].title, 'The content needs storage the browser can block'); assert.equal(stF[0].sev, 'warn')
+assert.deepEqual(stF[0].evidence, ['localStorage in lesson.html at get localStorage (lab://run/pkg/boot.js:2:20)', 'document.cookie (read) in lesson.html at f (lab://run/pkg/a.js:9:1)'], 'storage finding: evidence has the stacks, once each')
+assert.match(stF[0].detail, /localStorage, document\.cookie \(read\)/); assert.match(stF[0].detail, /1 uncaught error came from it/)
+assert.match(storageFindings(trace({ probe: stBlocked }))[0].detail, /handled the refusal/, 'storage finding: no uncaught errors')
+assert.deepEqual(storageFindings(trace({ probe: [{ type: 'api' }] })), [], 'storage finding: none without a blocked access')
+assert.ok(runFindings(trace({ probe: stBlocked }), { kind: 'package', itemType: 'asset' }).some(f => /needs storage/.test(f.title)), 'storage finding: runFindings includes it')
 assert.deepEqual(pinFindings(trace(), {}), []); assert.deepEqual(pinFindings(trace(), normaliseOptions()), [], 'pins: none set, nothing said')
 assert.ok(runFindings(pinTrace, { kind: 'package', itemType: 'asset', options: pinOpts }).some(f => /tried to change a pinned value/.test(f.title)), 'pins: runFindings includes them')
 assert.ok(!runFindings(pinTrace, { kind: 'reference', options: pinOpts }).some(f => /pinned/.test(f.title)), 'pins: not for a reference')
@@ -990,6 +1056,29 @@ if (!process.argv.includes('--unit')) {
   }
   console.log('profiles: ok')
 
+  // A window launch (--window): the recorder has to be attached before the window loads, or its requests and probe are missed.
+  const winRun = run(good, '--window', '--wait', '2')
+  assert.ok(!winRun.findings.some(f => /was never requested|never got as far as showing anything/.test(f.title)) && calls(winRun).includes('LMSInitialize '), 'window: the launch page is matched in the trace: ' + titles(winRun))
+  assert.ok(idx(winRun.furthest) >= idx('wrote') && winRun.screens.some(s => /lesson\.html/.test(s.frame) && s.text > 20), 'window: content shown and data written: ' + winRun.furthest)
+
+  // Blocked storage (P2.2): stored works as it is, and with storage blocked (by the option, or a profile) it never starts and says why.
+  assert.ok(calls(run(stored, '--wait', '2')).includes('LMSInitialize '), 'storage: stored works with normal storage')
+  const stOut = join(work, 'stored-blocked.json'), stRun = run(stored, '--storage', 'blocked', '--wait', '2', '--out', stOut), stSaved = JSON.parse(readFileSync(stOut, 'utf8')), stf = stRun.findings.find(f => f.title === 'The content needs storage the browser can block')
+  assert.ok(stf && stf.sev === 'warn' && stf.evidence.some(e => /^localStorage in lesson\.html at .*boot\.js:2:/.test(e)) && /1 uncaught error came from it/.test(stf.detail), 'storage: blocked is explained: ' + titles(stRun))
+  assert.ok(stRun.api.length === 0 && stRun.findings.some(f => /never looked for the SCORM API/.test(f.title)) && stSaved.launch.storage === 'blocked' && stSaved.launch.options.storage === 'blocked', 'storage: it never reaches the LMS, and the mode is saved: ' + titles(stRun))
+  assert.ok(stSaved.trace.exceptions.some(e => /SecurityError/.test(e.text)) && stSaved.trace.probe.some(p => p.type === 'storage-blocked' && p.what === 'localStorage' && p.stack.length), 'storage: the refusal is in the trace')
+  const stPart = run(stored, '--storage', 'partitioned', '--wait', '2')
+  assert.ok(calls(stPart).includes('LMSInitialize ') && !stPart.findings.some(f => /needs storage/.test(f.title)), 'storage: partitioned keeps storage')
+  assert.equal(node(['run', good, '--storage', 'nope']).status, 2, 'storage: a bad mode fails')
+  if (slow) {
+    assert.ok(titles(run(stored, '--profile', 'scorm-cloud', '--wait', '2')).some(t => /needs storage the browser can block/.test(t)), 'storage: the scorm-cloud profile blocks it too')
+    assert.ok(!run(good, '--storage', 'blocked', '--wait', '2').findings.some(f => /needs storage/.test(f.title)), 'storage: good doesn’t use any, so nothing is said')
+    const sx = JSON.parse(node(['experiment', stored, '--preset', 'storage', '--wait', '2', '--json']).stdout)
+    assert.deepEqual(sx.variants.map(v => v.name), ['default', 'storage blocked'], 'storage experiment: the variants')
+    assert.ok(sx.findings.some(f => f.title === 'With storage blocked, the content gets less far'), 'storage experiment: less far: ' + sx.findings.map(f => f.title))
+  }
+  console.log('storage: ok')
+
   // Tracing (P1.4): hosted, traced, records its failed configuration check and startCourse, keeps the original source,
   // and finds what the untraced run found.
   const forced = process.env.SCORM_LAB_FORCE_TRACE === '1'
@@ -1177,7 +1266,8 @@ if (!process.argv.includes('--unit')) {
     // An experiment through the handlers: two runs (default and one variant), announced as 'experiment' events.
     const evs = await fetch(base + '/api/events', { headers: H }), evReader = evs.body.getReader()
     let evText = ''
-    assert.equal((await invoke('experiment-presets')).join(), 'api,frames,standard,lms', 'web: presets')
+    assert.equal((await invoke('experiment-presets')).join(), 'api,frames,standard,lms,storage', 'web: presets')
+    assert.match((await invoke('options', { storage: 'blocked' })).command, / --storage blocked$/, 'web: the storage option in the CLI line')
     assert.deepEqual(Object.keys(await invoke('profiles')), PROFILE_NAMES, 'web: profiles')
     assert.match((await invoke('options', { profile: { base: 'docebo', apiDelay: 100 } })).command, / --profile-file profile\.json$/, 'web: a custom profile in options')
     await assert.rejects(invoke('experiment-start', { item: 0, preset: 'nope' }), /No preset/, 'web: unknown preset')

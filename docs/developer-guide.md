@@ -147,7 +147,7 @@ and a line in the guides. The shape:
   wait (s, headless runs), profile: 'generic' | preset name | { base?, notes?, …profile fields } (see LMS profiles), browser: 'chromium', viewport: null | { width, height },
   files: { path: { content } | { base64 } },
   pins: [{ path, value (JSON), frames: 'content'|'all', mode: 'force' } | { path, frames, mode: 'watch' }],
-  responses: [{ match, method?, status, headers, body }], launchParams: 'a=1&b=2', storage: 'normal', trace: false }
+  responses: [{ match, method?, status, headers, body }], launchParams: 'a=1&b=2', storage: 'normal'|'blocked'|'partitioned' (see Storage), trace: false }
 ```
 
 `launchItem` takes `{ item, cmi?, ...options }`, normalises the options and saves them in `launch.options` (the older
@@ -226,7 +226,9 @@ LMS frame `wrap.html#n`, n frames above the content (`wrap.html#1` is its parent
 its log reports every call wherever they are; `wrap.html#n` asks for them with `__labPlace(window)` on `host.html` (its
 `top`, or its `top.opener` in a popup). Then it frames the content through `wrap.html#<depth>` (each `wrap.html#n`,
 which runs `host.js` too, frames `wrap.html#<n-1>`, and `wrap.html#1` the content), or after `popupDelay` opens the
-first of those (or the content) with `window.open`. With `frames.kind: 'frameset'` each level is a `frame` in a
+first of those (or the content) with `window.open`. The window is opened at `about:blank`, and the page goes on to the
+address only when `main.js` calls `window.__labPopupReady()` on it, once the popup's recorder is attached (see
+[Popups](#the-recorder)). With `frames.kind: 'frameset'` each level is a `frame` in a
 `frameset` that replaces the page's body; otherwise an `iframe` with `allow`, and the content's own iframe gets
 `sandbox` when there is one. Every call is reported
 through `__labReport` as `{ type: 'api', version, call, el, value, result, err, diag }`. `window.__labCmi()` returns
@@ -246,7 +248,7 @@ LMS):
   csp: null | text, headers: { name: text },       // on package responses
   commit: 'ok' | 'fail' | 'slow', slowMs: 0,
   limits: { suspend12: null | n, suspend2004: null | n },   // null: the standard's (4,096; 64,000, or 4,000 in 2004 2nd edition)
-  cookies: 'normal' | 'third-party-blocked' }      // validated and saved; P2.2 implements it
+  cookies: 'normal' | 'third-party-blocked' }      // third-party-blocked blocks storage in content frames (see Storage)
 ```
 
 A preset adds `notes`, `sources` (URLs of the public documents used) and `approximation` (true for every preset but
@@ -280,6 +282,24 @@ the presets' research is pending, `PRESET_SOURCES_PENDING` in `test/test.js` ski
 needs: its value in `GENERIC`, a check in `check`, its use in `launchItem` or `host.js`, a line in the UI's `PF`
 list (`app.js`), and the user guide's table.
 
+**Storage (P2.2).** `options.storage` is `normal`, `blocked` or `partitioned`. `storageMode(options)` (`profiles.js`) is
+the mode a run uses: `normal` means "as the profile says", so a profile whose `cookies` is `third-party-blocked` gives
+`blocked`; an explicit `partitioned` or `blocked` wins. `launchItem` saves it as `launch.storage` (new; `launch.options.storage`
+is the option as given), passes it to `begin`, and the run's label says it when it isn't normal.
+- **blocked:** the recorder puts `globalThis.__labStorage = 'blocked'` ahead of the probe (`storagePrefix`). The probe
+  reads and deletes it, and, in content frames only (not SCORM Lab's `lab://run/__lab/` pages), defines accessors that
+  throw `DOMException('The operation is insecure.', 'SecurityError')` for `window.localStorage` and `sessionStorage`
+  (Safari's refusal), on `Document.prototype.cookie` (reads `''`, writes ignored) and replaces `IDBFactory.prototype.open`
+  with a function returning a stand-in request whose `error` is that `SecurityError`, fired to `onerror` and error
+  listeners in a microtask. Each use is a `storage-blocked` report. Workers aren't covered (the probe isn't in them).
+- **partitioned:** `begin` calls `session.fromPartition('lab').clearStorageData()` before the run. The run window's
+  partition is one in-memory partition, so with `normal` storage lasts from run to run while the app is open, and is
+  shared by every package (all are `lab://run/`); a headless CLI run starts from nothing anyway. A browser's partitioned
+  storage also keys storage by the top-level site; the run window has one top site, so the difference you can see is the
+  empty start. Nothing is refused.
+- `storageFindings(trace)` in `rules.js` (called from `runFindings` for package runs) makes "The content needs storage the
+  browser can block" from the `storage-blocked` reports; `experimentFindings` makes "With storage blocked, the content gets less far".
+
 ## The probe
 
 `host/probe.js` is added to every frame before its own scripts (`Page.addScriptToEvaluateOnNewDocument`, on every
@@ -291,6 +311,7 @@ auto-attached target too). It reports through the `__labReport` binding:
 | `{ type: 'lookup', name, found, n, stack }` | Each read of `window.API` or `window.API_1484_11` (an accessor property). Throttled to the first three per call site, then every hundredth, because content polls |
 | `{ type: 'assign', name, kind, keys, stack }` | Each assignment to those names |
 | `{ type: 'lookup-blocked', name, frame, stack, uncaught }` | Made by the recorder, not the probe (P2.1): a read of a property of another origin's window that the browser refused. `name` is read from the code at the throwing position (`w.API`, `w["API"]`; `''` if it can't be), `frame` is the address of the frame that tried, `stack` lines are `fn (url:line:col)` |
+| `{ type: 'storage-blocked', what, n, stack }` | From the probe in a run with storage blocked (P2.2), in content frames only: a refused use of `localStorage`, `sessionStorage`, `document.cookie (read)`, `document.cookie (write)` or `indexedDB.open` (`what`). Throttled like lookups |
 | `{ type: 'api', …, host: true }` | Calls to an API object the probe wrapped: one on a real LMS (references), or content's own object in a package run |
 | `{ type: 'pin-read', path, n, stack }` | Each read of a pinned value (an accessor property). Throttled like lookups |
 | `{ type: 'pin-write', path, value, n, stack }` | Each assignment to a pinned name; the pin ignores it. `value` is a short text preview |
@@ -317,7 +338,7 @@ run stops.
 ## The recorder
 
 `Recorder` (`src/recorder.js`) attaches the Chrome DevTools Protocol to a window's `webContents.debugger`. It
-auto-attaches to every frame, worker and popup target (flattened, paused until set up, so nothing is missed). For each
+auto-attaches to every frame and worker target (flattened, paused until set up, so nothing is missed); popups get a recorder of their own (below). For each
 session it enables:
 
 | Domain | Records |
@@ -330,6 +351,15 @@ session it enables:
 | Page | Navigations, and adds the probe (ahead of it, the run's pins, `shape-probe.js` with its patterns if a response is `@probe`, and `trace-probe.js` in a traced run) |
 | Fetch | Only when the run has `responses`: every request is paused; those a response matches are fulfilled, the rest continue |
 | Emulation | Only with a `navigator.userAgent` pin: `setUserAgentOverride` |
+
+**Popups.** A window the test LMS opens (a profile with `launch: popup`, or `--window`) or the content opens gets its
+own `Recorder` (`watchPopups` in `main.js`), merged into the run's trace at the end with its times moved onto the run's
+clock (`shiftTimes`) and `sid`s prefixed `popup:`. Chromium doesn't auto-attach a page's session to its popups, and the
+debugger can only be attached after the window exists, so a popup that starts loading at once is half loaded before
+the recorder is there: its requests and probe are missed (the launch page then looked "never requested"). The test LMS
+therefore opens its popup at `about:blank` and loads the content when `watchPopups` has attached the recorder and calls
+`window.__labPopupReady()` on the opener (`host.js`). A window the *content* opens by itself is still recorded from the
+moment the debugger attaches. (ponytail: a popup the content opens with a URL can miss its first requests.)
 
 `stop()` takes coverage and script sources from every session still open (in a traced run, it first asks every frame
 of every session to send its pending trace events: `Runtime.evaluate` with `silent`, so a cross-origin frame's refusal
@@ -661,13 +691,13 @@ gives `waitingFor` (the same result).
 ## Experiments
 
 `src/experiments.js` is pure. `PRESETS` maps a name to a list of `{ name, patch }`: `api`, `frames`, `standard`, and
-`lms` (P2.1: `lms <name>` with `{ profile: name }` for each LMS profile; P2.2 and P2.3 add `storage` and `browsers` here). `planVariants({ base, variants })` returns `[{ name, options }]`: the base first, named
+`lms` (P2.1: `lms <name>` with `{ profile: name }` for each LMS profile), and `storage` (P2.2: `storage normal` and `storage blocked`; the one equal to the default is dropped; P2.3 adds `browsers`). `planVariants({ base, variants })` returns `[{ name, options }]`: the base first, named
 `default`, then each variant's patch merged over it with `normaliseOptions`; a variant whose options equal an earlier
 one's is dropped (unless `dedupe: false`, used for variants the user wrote), and bad patches throw with the variant's name. `runResult(name, options, savedRun, extra)` keeps what
 a table needs: `{ name, options, milestones, counts (runCounts), errors, verdict, …extra }`. `summarise(results)` makes
 the rows (`results[0]` is the base; each other row has `progress` and `better` from `progress()`), and
 `experimentFindings(results)` returns the "gets further" warnings (only when the furthest step is later, not for a tie
-on step count) or the "Nothing tried" note.
+on step count) or the "Nothing tried" note. It also adds "With storage blocked, the content gets less far" for a variant whose `storageMode` is `blocked` when the base's isn't and `progress()` says it got less far.
 
 Running is up to the caller. The CLI calls `runPackage` for each plan entry (a fresh Electron each time, saved runs in
 `--out`). `main.js` runs the plan inside one process: `experimentStart` launches each variant with `auto` set to its
@@ -837,6 +867,7 @@ The end-to-end part covers:
   the API on the content's parent two frames down, fails commits and fills in the launch parameters; bad profiles exit
   with status 2. The unit checks validate every preset (and their sources, once `PRESET_SOURCES_PENDING` is false), the
   checks and combinations, `apiAt`, placeholders, `nameAt`, and the findings over hand-made probes.
+- **Storage (P2.2):** `stored` (boot.js reads and writes `localStorage` and only starts the lesson if that worked) works as it is and with `--storage partitioned`; with `--storage blocked` (and, with `--slow`, `--profile scorm-cloud`), it never starts, so it never looks for the API, and gets "The content needs storage the browser can block", whose evidence names the line in `boot.js`, with the one uncaught `SecurityError` it caused; with `--slow`, `good` (which uses no storage) gets no such finding, and the `storage` experiment says "With storage blocked, the content gets less far". The unit checks run the probe under `vm` (localStorage and sessionStorage throw `SecurityError`, cookies read empty, `indexedDB.open` fails to both `onerror` and listeners, SCORM Lab's own pages and the other modes are untouched), and cover `storageMode`, `storageFindings` and the experiment finding. A `--window` run of `good` is matched in the trace (the popup bug above).
 - **Drill-down:** `drill hosted --json` names the failed `/api/player/config` request, with one run (the operand is a local).
   The unit checks cover operand paths, the branch not taken, the dead end, static assignments, the probe's watch pins
   under `vm`, and the whole chain for `levels` and `hosted` over hand-made traces.
