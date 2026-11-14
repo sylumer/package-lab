@@ -27,7 +27,8 @@ import { PRESETS, planVariants, runResult, summarise, experimentFindings } from 
 import { discover, checkDiscover } from '../src/shape.js'
 import { drill, watchPins } from '../src/drilldown.js'
 import { overlayFiles } from '../src/overlay.js'
-import { renderReport, verdict, counts, screens } from '../src/report.js'
+import { renderReport, verdict, counts, screens, experimentHtml } from '../src/report.js'
+import { COMMANDS, zshCompletion } from '../src/completion.js'
 import { launchPlan, runAnalysis, savedRun, WEBKIT_ORIGINS } from '../src/launch.js'
 import { comparePackages, compareBehaviour } from '../src/pkgdiff.js'
 import { readMacro, cycleFindings, cycleRows, resumeOptions } from '../src/cycle.js'
@@ -59,8 +60,10 @@ Commands
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
   serve                     Start the web interface, to use SCORM Lab from another device.
+  completion zsh            A zsh completion script: scorm-lab completion zsh > ~/.zfunc/_scorm-lab.
   help                      This help. Also: scorm-lab <command> --help.
   version                   The version.
+  Every command takes --json, except serve, which takes it with --url only.
 
 Options for analyze, run and report
   --item <n | id>           The item to check or launch (a number from 'items', or its identifier). Default: the first SCO.
@@ -102,6 +105,10 @@ Options for doctor
   --port <n>                The port to check is free. Default 4880.
   --json                    Print JSON instead of text: the checks, what this Mac can do, and the names the options accept.
 
+Options for completion, help, version, open
+  --json                    Print JSON instead of text. open: which app it opened (installed or repo) and its path.
+  (completion takes the shell: scorm-lab completion zsh)
+
 Options for fix
   --only <id,…>             Only these fixes (default: all): ${FIX_IDS.join(', ')}.
   --override <path>=<file>  Put a changed file in the corrected package (as for run). Repeatable.
@@ -111,7 +118,7 @@ Options for fix
 Options for experiment (also the run options above, which set the default launch)
   --variants <file.json>    Your own variants: [{ "name": "deep", "patch": { "depth": 2 } }, …].
   --preset <name>           Built-in variants: standard (default), api, frames, lms (one per LMS profile), storage (normal and blocked), browsers (chromium and webkit).
-  --out <folder>            Keep each run in <folder> as a saved run, and the result as experiment.json.
+  --out <folder>            Keep each run in <folder> as a saved run, the result as experiment.json, and an HTML report.html.
   --json                    Print JSON instead of a table.
 
 Options for discover (also the run options above, which set every round's launch)
@@ -156,6 +163,8 @@ Options for report
   --key-out <file.json>     Write the key and the name table here (new file, mode 600). Keep it: it is the only way to
                             match hashes back to names, and --key <file.json> reuses it so the hashes stay the same.
   --key <file.json>         A key file from --key-out, to hash names the same way again.
+  --json                    Print JSON instead of text: the verdict, counts and findings, and the HTML to --out (needs --out or
+                            --open). With --redact the JSON has no findings or verdict title.
 
 Options for serve
   --port <n>                Default 4880.
@@ -163,6 +172,7 @@ Options for serve
   --window                  Open the desktop window as well.
   --show-runs               Show content windows on this Mac while they run.
   --url                     Print the address (with its access token) and exit.
+  --json                    With --url: print { url }. A running server has no JSON output (it runs until stopped).
 
 Exit status: 0 done, 1 errors found with --strict, 2 the command failed.
 `
@@ -257,6 +267,12 @@ function printXapi(x) {
 function printVerdict(findings) {
   const v = verdict(findings), c = counts(findings)
   console.log(`\n${SEV[v.sev === 'ok' ? 'ok' : v.sev](v.sev === 'ok' ? 'OK' : v.sev === 'warn' ? 'WARNING' : 'ERROR')}  ${v.title}  ${paint('2', `(${c.errors} errors, ${c.warnings} warnings, ${c.info} notes)`)}`)
+}
+
+// The version of an installed app, from its Info.plist (plutil ships with macOS). null if it can't be read.
+function appVersion(app) {
+  const r = spawnSync('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', join(app, 'Contents', 'Info.plist')], { encoding: 'utf8' })
+  return r.status === 0 ? r.stdout.trim() || null : null
 }
 
 // ---- Electron ----
@@ -517,12 +533,23 @@ const commands = {
     const bindable = host => new Promise(done => { const s = createServer(); s.once('error', () => done(false)); s.listen({ port, host, exclusive: true }, () => s.close(() => done(true))) })
     const free = (await bindable('127.0.0.1')) && (await bindable('0.0.0.0'))
     add('port', `Port ${port} free, for serve`, free, free ? `Nothing is listening on ${port}.` : `Something is already listening on ${port}: use serve --port.`)
+    // The installed desktop app is reported as the top-level `app`, not as a check: packages run without it, and the Concierge module reads checks[].
+    const installed = [INSTALLED, join(homedir(), 'Applications', 'SCORM Lab.app')].find(p => existsSync(p)) ?? null, version = installed ? appVersion(installed) : null
+    const appDetail = installed ? `${installed}${version ? `, version ${version}` : ''}` : 'Not installed: npm run install-app puts it in /Applications. Packages run from this repo’s Electron without it.'
     const json = { version: VERSION, ok: checks.every(c => c.ok), checks, capabilities: { analyze: major >= 20, run: !!app, webkit },
-      profiles: PROFILE_NAMES, tools: PACKS.map(p => p.id), viewports: Object.keys(VIEWPORTS), presets: Object.keys(PRESETS), fixes: FIX_IDS.map(id => ({ id, label: FIXES[id].label })) }
+      profiles: PROFILE_NAMES, tools: PACKS.map(p => p.id), viewports: Object.keys(VIEWPORTS), presets: Object.keys(PRESETS), fixes: FIX_IDS.map(id => ({ id, label: FIXES[id].label })),
+      app: installed ? { path: installed, version } : null }
     if (o.json) console.log(JSON.stringify(json, null, 1))
     else {
       console.log(paint('1', `SCORM Lab ${VERSION} · doctor`))
       for (const c of checks) console.log(`${c.ok ? SEV.ok('ok   ') : SEV.warn('check')} ${c.label}${paint('2', ` · ${clean(c.detail)}`)}`)
+      console.log(`${installed ? SEV.ok('ok   ') : paint('2', 'no   ')} SCORM Lab.app, the installed desktop app${paint('2', ` · ${clean(appDetail)}`)}`)
+      // What to do next, from the checks that failed.
+      const tips = []
+      if (!app) tips.push('Packages can’t be run yet: npm install in the scorm-lab folder (or npm run install-app for the desktop app).')
+      if (!webkit) tips.push('WebKit runs are optional: npm i -D playwright && npx playwright install webkit, in the scorm-lab folder.')
+      if (!free) tips.push(`serve needs a free port: use serve --port with another number, or stop what is using ${port}.`)
+      console.log(tips.length ? `\nTo do:\n${tips.map(t => `  · ${t}`).join('\n')}` : '\nReady: this Mac can check and run SCORM packages.')
     }
     return 0
   },
@@ -573,13 +600,16 @@ const commands = {
     }
     const rows = summarise(results).map((r, i) => ({ ...r, options: results[i].options, out: results[i].out })), findings = experimentFindings(results)
     const json = { package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), base: options, variants: rows, findings }
-    if (dir) writeFileSync(join(dir, 'experiment.json'), JSON.stringify(json, null, 1))
+    if (dir) {
+      writeFileSync(join(dir, 'experiment.json'), JSON.stringify(json, null, 1))
+      writeFileSync(join(dir, 'report.html'), renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: `${item.title || item.id}: ${rows.length} variants, the default first`, findings, analysis: pkg.analysis, extra: experimentHtml(rows) }))
+    }
     if (o.json) console.log(JSON.stringify(json, null, 1))
     else {
       printHeader(pkg, item)
       printRows(rows)
       printFindings(findings)
-      if (dir) console.log(paint('2', `\nRuns saved in ${dir}`))
+      if (dir) console.log(paint('2', `\nRuns saved in ${dir}, with report.html`))
     }
     return 0
   },
@@ -742,45 +772,63 @@ const commands = {
   report(o) {
     const input = o._[0]
     if (!input) fail('Name a package or a saved run: scorm-lab report <package.zip | run.json>')
+    // With --json the HTML goes to a file (--out, or the temporary one --open makes), and the JSON to standard output.
+    if (o.json && !o.out && !o.open) fail('report --json needs --out or --open: the HTML report goes to a file, and the JSON to standard output.')
     const red = redactOptions(o)
-    let html
+    let html, findings = [], trace
     if (/\.json$/i.test(input)) {
       if (!existsSync(input)) fail(`No such file: ${input}`)
       const run = JSON.parse(readFileSync(input, 'utf8'))
       if (!run.trace) fail(`${basename(input)} isn’t a SCORM Lab run.`)
       html = renderReport({ title: `SCORM Lab: ${run.package ?? run.label}`, subtitle: run.label, run, fragment: !!o.fragment, redact: red })
+      findings = run.findings ?? []; trace = run.trace
     } else {
       const pkg = openZip(input, o)
       if (o.run) {
         const { run } = runPackage(pkg, { ...o, out: undefined })
         html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: run.label, run, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment, redact: red })
+        findings = run.findings; trace = run.trace
       } else {
-        const { item, boot, findings } = check(pkg, o.item)
+        const checked = check(pkg, o.item)
+        const { item, boot } = checked
+        findings = checked.findings
         // The item's title is the package's own text: a redacted report ignores this subtitle and the findings, and works both out again from the redacted boot graph and analysis.
         html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: `${item.title || item.id} (${item.res.path ?? item.res.href}), from the files only. Run it to see what actually happens.`, findings, boot, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment,
           redact: red && { ...red, package: pkg.name } })
       }
     }
     const out = o.out ? resolve(o.out) : o.open ? join(mkdtempSync(join(tmpdir(), 'scorm-lab-report-')), 'report.html') : null
-    if (out) { writeFileSync(out, html); if (!o.open) console.error(`Report written to ${out}`) } else process.stdout.write(html)
+    if (out) { writeFileSync(out, html); if (!o.open && !o.json) console.error(`Report written to ${out}`) } else process.stdout.write(html)
     // The key goes last, and only once the report is out: a failed report leaves no key behind. A new file ('wx'), readable by the owner only.
     if (red?.names && o['key-out']) writeFileSync(resolve(o['key-out']), JSON.stringify({ format: 'scorm-lab-redaction-key', version: 1, key: red.key.toString('hex'), names: Object.fromEntries(red.map) }, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
     if (o.open && out) spawnSync('open', [out])
+    // A redacted report's JSON leaves out the findings and the verdict's title: they quote the course's own text.
+    // With --redact-names the file names are hashed, so the paths (input and out) are left out of the JSON as well.
+    const paths = red?.names ? {} : { input, out }
+    if (o.json) console.log(JSON.stringify(red ? { ...paths, redacted: true, verdict: { sev: verdict(findings).sev }, counts: counts(findings, trace) }
+      : { ...paths, verdict: verdict(findings), counts: counts(findings, trace), findings }, null, 1))
     return 0
   },
   open(o) {
     const zip = o._[0] ? resolve(o._[0]) : null
     if (zip && !existsSync(zip)) fail(`No such file: ${zip}`)
-    if (existsSync(INSTALLED) && !process.env.SCORM_LAB_ELECTRON) { spawnSync('open', ['-a', INSTALLED, ...(zip ? [zip] : [])]); return 0 }
-    const [bin, pre] = electron()
-    spawn(bin, [...pre, ...(zip ? [zip] : [])], { detached: true, stdio: 'ignore' }).unref()
+    let app, path
+    if (existsSync(INSTALLED) && !process.env.SCORM_LAB_ELECTRON) { spawnSync('open', ['-a', INSTALLED, ...(zip ? [zip] : [])]); app = 'installed'; path = INSTALLED }
+    else {
+      const [bin, pre] = electron()
+      spawn(bin, [...pre, ...(zip ? [zip] : [])], { detached: true, stdio: 'ignore' }).unref()
+      app = 'repo'; path = bin
+    }
+    if (o.json) console.log(JSON.stringify({ app, path, package: zip }, null, 1))
     return 0
   },
   serve(o) {
+    if (o.json && !o.url) fail('serve --json needs --url: a running server has no JSON output (it runs until stopped). For the address as JSON, use serve --url --json.')
     if (o.url) {
       const t = join(DATA_DIR, 'web-token')
       if (!existsSync(t)) fail('The web interface hasn’t been started yet, so there is no address. Run scorm-lab serve.')
-      console.log(`http://${o.host && o.host !== '0.0.0.0' ? o.host : o.host ? 'localhost' : '127.0.0.1'}:${o.port ?? 4880}/?token=${readFileSync(t, 'utf8').trim()}`)
+      const url = `http://${o.host && o.host !== '0.0.0.0' ? o.host : o.host ? 'localhost' : '127.0.0.1'}:${o.port ?? 4880}/?token=${readFileSync(t, 'utf8').trim()}`
+      console.log(o.json ? JSON.stringify({ url }, null, 1) : url)
       return 0
     }
     const [bin, pre] = electron()
@@ -791,8 +839,21 @@ const commands = {
     child.on('exit', code => process.exit(code ?? 0))
     return null
   },
-  version() { console.log(VERSION); return 0 },
-  help() { console.log(HELP); return 0 },
+  version(o) { console.log(o.json ? JSON.stringify({ version: VERSION }, null, 1) : VERSION); return 0 },
+  help(o) {
+    if (o.json) console.log(JSON.stringify({ version: VERSION, commands: COMMANDS.map(({ name, summary }) => ({ name, summary })) }, null, 1))
+    else console.log(HELP)
+    return 0
+  },
+  // The zsh completion script (src/completion.js): commands, flags, file completion for packages.
+  completion(o) {
+    const shell = o._[0]
+    if (shell !== 'zsh') fail('Name the shell: scorm-lab completion zsh')
+    const script = zshCompletion()
+    if (o.json) console.log(JSON.stringify({ shell, script }, null, 1))
+    else process.stdout.write(script)
+    return 0
+  },
 }
 
 const o = parse(process.argv.slice(2)), name = o._.shift() ?? 'help'

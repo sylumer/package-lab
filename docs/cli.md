@@ -17,6 +17,7 @@ Concierge module use it too.
 - [doctor](#doctor)
 - [open](#open)
 - [serve](#serve)
+- [completion](#completion)
 - [Exit statuses](#exit-statuses)
 - [JSON output](#json-output)
 - [Live runs](#live-runs)
@@ -49,17 +50,18 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `fix <package.zip>` | Writes a corrected copy of the package: the mechanical fixes, and any `--override` files |
 | `items <package.zip>` | Lists the items that can be launched, numbered |
 | `run <package.zip>` | Launches an item in a hidden browser, records it, and reports what went wrong |
-| `experiment <package.zip>` | Runs the same launch several ways, one after another, and prints how far each got |
+| `experiment <package.zip>` | Runs the same launch several ways, one after another, and prints how far each got. `--out` also keeps an HTML report |
 | `discover <package.zip>` | Works out what the content wants from its server: the fields it reads from each answer, and a stand-in response |
 | `drill <package.zip>` | Why it stopped: the decisions that led to the dead end, their values, and where each `undefined` came from |
 | `cycle <package.zip>` | Tests saving: runs, leaves the way a learner does, then resumes from what it left, and checks the content saved and read its place |
 | `diff <a.zip> <b.zip>` | What changed between two packages: files with text diffs, manifest, loading path and findings; with `--run`, how far each got |
 | `batch <folder \| zips…>` | Checks every package in a folder (or the zips named): one row each, with its verdict. `--run` runs each one too. [Details](#batch) |
-| `doctor` | Checks this Mac can run SCORM Lab (Node, Electron, Playwright and WebKit, the data folder, port 4880) and lists the names the options accept |
+| `doctor` | Checks this Mac can run SCORM Lab (Node, Electron, Playwright and WebKit, the data folder, port 4880, the installed app) and lists the names the options accept. Says what to do next |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run. Each `file:line` in a finding's evidence links to a read-only excerpt (±20 lines) of that file, from the package or the saved run's sources |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
-| `help`, `version` | Help and the version. `scorm-lab <command> --help` shows the help too |
+| `completion zsh` | Prints a zsh completion script. [Details](#completion) |
+| `help`, `version` | Help and the version. `scorm-lab <command> --help` shows the help too. All take `--json` ([JSON output](#json-output)) |
 
 ## Choosing an item
 
@@ -318,7 +320,7 @@ progress goes to standard error.
 |---|---|---|
 | `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), `standard` (both), `lms` (each [profile](#profiles)), `storage` (normal and blocked), or `browsers` (Chromium and WebKit) |
 | `--variants` | none | Your own variants, from a JSON file: a list of `{ "name", "patch" }` or `{ "variants": [...] }`. `patch` is any [launch options](developer-guide.md#launch-options). Not with `--preset` |
-| `--out` | none | A folder; each run is kept in it as a saved run (`01-default.json`, `02-api_both.json`, …) as it finishes, and at the end the result (the same as `--json`) as `experiment.json` |
+| `--out` | none | A folder; each run is kept in it as a saved run (`01-default.json`, `02-api_both.json`, …) as it finishes, and at the end the result (the same as `--json`) as `experiment.json`, and an HTML report of the variants and findings as `report.html` |
 | `--json` | off | Prints JSON (below) instead of a table |
 
 ```json
@@ -701,6 +703,7 @@ contains:
 | `--redact-names` | With `--redact`: also replaces the package's file names with hashes |
 | `--key-out <file.json>` | With `--redact-names`: writes the key and the table of names to this new file (mode 600). Keep it: it is the only way back from a hash to a name |
 | `--key <file.json>` | With `--redact-names`: reuses a key from `--key-out`, so the same names get the same hashes in another report |
+| `--json` | Prints `{ input, out, verdict, counts, findings }` instead of the text. The HTML goes to `--out`, or to the temporary file `--open` makes, so one of them is needed. With `--redact` it prints `{ input, out, redacted: true, verdict: { sev }, counts }`: the findings and the verdict's title quote the course, so they are left out. With `--redact-names` the paths `input` and `out` are left out too |
 
 **Redacted reports.** `--redact` keeps the report's structure and everything it diagnoses, and takes out the course's
 own content: page text, console text, API values (SCORM's vocabulary such as `completed`, `passed`, `suspend` and
@@ -742,6 +745,7 @@ itself fails. The checks:
 | `webkit` | Playwright is installed with its WebKit: `--browser webkit` works |
 | `data` | SCORM Lab's data folder (`SCORM_LAB_DATA`, or the default) exists |
 | `port` | The port (default 4880, or `--port`, a whole number from 1 to 65535: anything else is an error, status 2) is free for `serve`, both on this Mac only (127.0.0.1) and on every address (0.0.0.0) |
+| *(not a check)* | The installed app is reported as the top-level `app`, not in `checks`, so the list stays as the Concierge module reads it. The text output shows it on its own line |
 
 `doctor --json`:
 
@@ -751,12 +755,13 @@ itself fails. The checks:
   "checks": [{ "id": "electron", "label": "Electron, to run packages", "ok": true, "detail": "/path/to/Electron" }, "…"],
   "capabilities": { "analyze": true, "run": true, "webkit": false },
   "profiles": ["generic", "moodle", "…"], "tools": ["xyleme", "…"], "viewports": ["iphone", "ipad", "android-phone"],
-  "presets": ["standard", "api", "…"], "fixes": [{ "id": "manifest-case", "label": "Rename the manifest to imsmanifest.xml" }, "…"]
+  "presets": ["standard", "api", "…"], "fixes": [{ "id": "manifest-case", "label": "Rename the manifest to imsmanifest.xml" }, "…"],
+  "app": { "path": "/Applications/SCORM Lab.app", "version": "0.2.0" }
 }
 ```
 
-`ok` is true when every check passes. `capabilities.run` needs Electron; `capabilities.webkit` needs Playwright and its WebKit (a WebKit run uses no Electron). The lists are the names `--profile`, `--tool`, `--viewport`, `experiment --preset` and
-`fix --only` accept. The full `doctor` (the installed app, a text summary with advice) is P5.2's.
+`ok` is true when every check passes. `app` is `null` when SCORM Lab.app isn't in `/Applications` or `~/Applications`, else `{ path, version }` (the version from its `Info.plist`). `capabilities.run` needs Electron; `capabilities.webkit` needs Playwright and its WebKit (a WebKit run uses no Electron). The lists are the names `--profile`, `--tool`, `--viewport`, `experiment --preset` and
+`fix --only` accept. The installed app is shown too, but it isn't a check: a Mac that runs packages from this repo's Electron is fine without it. `doctor` ends with a **To do** list (or *Ready*) for the checks that failed.
 
 ## open
 
@@ -783,6 +788,20 @@ Starts the [web interface](web.md) and prints its address with the access token.
 | `--window` | Also opens the desktop window, sharing the same session |
 | `--show-runs` | Shows content windows on this Mac while they run (they're hidden otherwise) |
 | `--url` | Prints the address (from the saved token) and exits |
+| `--json` | With `--url`: prints `{ url }`. Without `--url` it is refused (status 2): a running server has no JSON output |
+
+## completion
+
+```bash
+scorm-lab completion zsh > ~/.zfunc/_scorm-lab
+```
+
+Prints a zsh completion script: the commands, each one's flags (with the choices for `--api`, `--browser`, `--preset`,
+`--profile`, `--tool`, `--viewport` and `--storage`), and file completion for packages (`*.zip`), JSON files and folders.
+To use it, save it as `_scorm-lab` in a folder on your `fpath` (`fpath=(~/.zfunc $fpath)` before `compinit` in
+`~/.zshrc`), then start a new shell. Or source it: `source <(scorm-lab completion zsh)`. Only `zsh` is supported. With
+`--json` it prints `{ shell, script }`. The script is made from the command table in `src/completion.js`, which the
+tests check against the help text.
 
 ## Exit statuses
 
@@ -793,6 +812,19 @@ Starts the [web interface](web.md) and prints its address with the access token.
 | 2 | The command failed: bad arguments, a missing or unreadable file, or a run that didn't finish. `batch` with no package to check |
 
 ## JSON output
+
+Every command takes `--json`, except that `serve` only has it with `--url`. The shapes below are the ones this section
+and the others give. The new ones (P5.2):
+
+| Command | `--json` prints |
+|---|---|
+| `open` | `{ app: "installed" \| "repo", path, package }`: the app it opened, its path, and the package (absolute) or `null` |
+| `report` | `{ input, out, verdict: { sev, title }, counts, findings }`; with `--redact`, `{ input, out, redacted: true, verdict: { sev }, counts }` |
+| `serve --url` | `{ url }` |
+| `help` | `{ version, commands: [{ name, summary }] }` |
+| `version` | `{ version }` |
+| `completion zsh` | `{ shell, script }` |
+| `experiment` | the same JSON as below, and `report.html` is written too when `--out` is given |
 
 `analyze --json`:
 

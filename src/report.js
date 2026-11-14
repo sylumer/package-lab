@@ -197,9 +197,11 @@ function redactInput(o) {
 }
 
 // o: { title, subtitle, findings, boot, run (a saved run), analysis, fragment, files (Map path → Buffer: lets file:line in evidence link to an excerpt), excerpts (false: no excerpts, no links),
-//      redact (true, or redactRun's options: the report is redacted, with a banner saying what was taken out; no excerpts, no package diff) }
+//      redact (true, or redactRun's options: the report is redacted, with a banner saying what was taken out; no excerpts, no package diff),
+//      extra (HTML from this module's helpers, such as experimentHtml, shown under the verdict) }
 export function renderReport(input) {
-  const o = input.redact ? { ...input, ...redactInput(input) } : input
+  // extra is HTML built by our helpers from unredacted rows, so a redacted report never shows it (its findings and tables are rebuilt from what is left).
+  const o = input.redact ? { ...input, ...redactInput(input), extra: undefined } : input
   const run = o.run, findings = o.findings ?? run?.findings ?? [], v = verdict(findings), c = counts(findings)
   const a = o.analysis, m = a?.manifest, ex = o.excerpts !== false && (o.files || run?.trace?.sources || run?.launch?.options?.files) ? excerptor(reportText(o)) : null
   const pkgTable = a ? `<h2>Package</h2>${table(['', ''], [[a.format && a.format !== 'scorm' ? 'Course file' : 'Manifest', formatName(a)], ['Scripts use', a.apiUse === 'none' ? 'no SCORM API names' : a.apiUse === 'both' ? 'both APIs' : 'SCORM ' + a.apiUse],
@@ -208,6 +210,7 @@ export function renderReport(input) {
 ${o.fragment ? '' : `<h1>${esc(o.title ?? 'SCORM Lab report')}</h1>`}${o.subtitle ? `<p class="sl-muted">${esc(o.subtitle)}</p>` : ''}
 ${o.redaction ? redactionBanner(o.redaction) : ''}
 <div class="sl-verdict"><span class="sl-badge ${v.sev}">${v.sev === 'warn' ? 'warning' : v.sev === 'ok' ? 'ok' : 'error'}</span><b>${esc(v.title)}</b><span class="sl-muted">${c.errors} errors · ${c.warnings} warnings · ${c.info} notes</span></div>
+${o.extra ?? ''}
 ${run?.kind === 'package' ? milestoneHtml(Array.isArray(run.milestones) ? run.milestones : milestones(run.trace, run.boot)) : ''}${run?.trace ? `<h2>Timeline</h2>${timelineHtml(run.trace, run.milestones ?? undefined)}` : ''}<h2>Findings</h2>${findingsHtml(findings, ex)}
 ${run ? runHtml(run) : ''}
 ${o.boot ?? run?.boot ? `<h2>Loading path</h2>${bootHtml(o.boot ?? run.boot, run?.trace)}` : ''}
@@ -215,4 +218,11 @@ ${pkgTable}
 ${o.diff ? diffHtml(o.diff) : ''}
 <p class="sl-muted">Made by SCORM Lab on ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))}. Everything here was worked out on this computer.</p></div>`
   return o.fragment ? body : `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(o.title ?? 'SCORM Lab report')}</title><style>${PAGE_CSS}</style></head><body><main>${body}</main></body></html>`
+}
+
+// An experiment's variants (experiment --out writes report.html with this): the same columns as the text table. rows are summarise()'s rows.
+export function experimentHtml(rows = []) {
+  const verdictText = r => r.verdict.sev === 'ok' ? 'OK' : r.verdict.sev.toUpperCase()
+  return `<h2>Variants</h2>${table(['Variant', 'Furthest', 'API calls', 'Errors', 'Verdict', 'Against the default'],
+    rows.map(r => [r.name, r.furthestLabel, r.apiCalls, r.errors, verdictText(r), r.progress].map(c => esc(c))))}`
 }

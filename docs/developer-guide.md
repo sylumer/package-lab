@@ -89,7 +89,8 @@ src/
   rules.js              Findings: static, run, launch, comparison
   packs/                Rule packs for authoring tools (index.js registers them; util.js shared readers)
   diff.js               Comparison of two runs
-  report.js             HTML reports, verdict, counts, the redaction banner
+  report.js             HTML reports, verdict, counts, the redaction banner, the experiment's variants table (experimentHtml, P5.2)
+  completion.js         The command table (names, summaries, flags, value kinds) and the zsh completion script (P5.2)
   redact.js             Redacted reports (P4.4): redactRun, the copy of a run with the course content taken out
   ui/                   The interface (desktop window and web)
     index.html, style.css, app.js
@@ -99,6 +100,7 @@ scripts/
   package.js            Builds SCORM Lab.app (and --install)
   icon.cjs              Renders build/icon.svg to build/icon.png
   alfred.js             Builds the Alfred workflow
+  alfred-scripts.js     The shell the workflow's script actions run; exported so the tests run it (P5.2)
 build/icon.svg          The app icon
 test/test.js            Tests; test/fixtures/base is the sample package
 test/packs.js           Rule pack tests (imported by test.js): synthetic packages and hand-made traces
@@ -1122,7 +1124,14 @@ files. The desktop and web reports aren't built from the interface.
 `renderReport({ title, subtitle, findings, boot, run, analysis, fragment, files })` (`src/report.js`) returns a full HTML
 page, or a `<div class="sl">` fragment with scoped styles. The fragment uses the host page's `--err`, `--warn`, `--ok`,
 `--line`, `--muted` and `--code` if they are defined. Everything interpolated goes through `esc()`. `counts()` and
-`screens()` are shared with the CLI's JSON output.
+`screens()` are shared with the CLI's JSON output. `renderReport` takes `extra` (trusted HTML from this module's helpers, such as
+`experimentHtml(rows)`, shown under the verdict): `experiment --out` writes its `report.html` that way.
+
+`src/completion.js` keeps the CLI's command table: each command's name, summary, positional argument and flags, and the
+kind of each flag's value (a file kind, `text`, or a list of choices, which can come from a module such as `PRESETS`).
+`zshCompletion()` turns it into the zsh script. The table is separate from the help text, which is prose; the tests check
+every command and flag name appears in `help`, so the two can't drift apart silently. A new flag goes in `F` and in the
+commands that take it.
 
 **Redacted reports (P4.4).** `renderReport(..., { redact: true })`, or `redact: { names, key, map, package }` for the
 options of `redactRun`, passes the run, boot graph, analysis and findings through `redactRun` (`src/redact.js`)
@@ -1350,6 +1359,14 @@ The end-to-end part covers:
   Discover, Test saving and Try variants end to end.
 - **doctor (P5.1):** the check ids in order, capabilities following the checks, the name lists, `SCORM_LAB_NO_PLAYWRIGHT`
   turning WebKit off, and a busy port reported. `experiment --out` also keeps `experiment.json`.
+- **CLI and Alfred (P5.2):** unit checks cover the command table (every command has `--json`), the zsh script (its header,
+  every command's case, every flag, the preset choices), and `experimentHtml` (escaped, above the findings). The CLI checks
+  (no Electron) cover every command and flag in `help`, `help`/`version`/`completion` JSON, `zsh -n` on the script when zsh
+  is installed, `report --json` (and its redacted form), `serve --url --json` and `open --json` (pointed at `/usr/bin/true`
+  with `SCORM_LAB_ELECTRON`, so nothing opens), the doctor's top-level `app` (a fake home with an `Info.plist`; it is not one of `checks`), and
+  the Alfred build: `plutil -lint`, the ⇧↩ and Fix and folder actions in the plist, `bash -n` on each script, and the Fix
+  script run on a file with a space in its name (`-fixed`, `-fixed-2`, `-fixed-3`, and no file when nothing needs fixing).
+  The default suite runs no new Electron: `experiment --out`'s `report.html` is covered by the unit check of its HTML.
 
 - **Browsers and device sizes (P2.3):** unit checks cover the options (presets, `WxH`, the saved `{ width, height }`, bad values), `cliCommand`,
   the `browsers` preset, `launchPlan` and `serveRequest`, and every reader of a trace with no coverage, caught errors, sources, scripts or log.
@@ -1384,12 +1401,14 @@ LaunchServices. It isn't notarised: for other Macs, sign it with a Developer ID 
 `scripts/alfred.js` writes the workflow's `info.plist` from JavaScript objects (as JSON, then `plutil -convert xml1`),
 adds the icon, zips it to `dist/SCORM Lab.alfredworkflow` and opens it. Its objects are:
 - keywords `scormlab` and `scormweb`;
-- a file filter `scorm` (zip archives), with ↩, ⌘ and ⌥ connections;
-- three File Actions;
+- a file filter `scorm` (zip archives), with ↩, ⌘, ⇧ and ⌥ connections;
+- four File Actions on a .zip (open, check, run and report, fix) and one on a folder (the batch check);
 - bash Run Script actions (argv input) and notifications.
 
-The workflow variables `node`, `cli` and `wait` are filled in at build time. To change what it does, edit the scripts
-in `alfred.js` and run `npm run alfred` again; Alfred replaces the old copy on import.
+The shell of the script actions is in `scripts/alfred-scripts.js`, exported so the tests can run it (`bash -n`, and the
+Fix naming on a real file). Every variable in it is quoted. The workflow variables `node`, `cli` and `wait` are filled in at
+build time. To change what it does, edit the scripts in `alfred-scripts.js` (or the objects in `alfred.js`) and run
+`npm run alfred` again; Alfred replaces the old copy on import.
 
 ## The Concierge module
 

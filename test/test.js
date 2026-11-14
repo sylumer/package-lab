@@ -4,7 +4,7 @@
 // package from toolbox. See docs/developer-guide.md.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:net'
@@ -15,7 +15,9 @@ import { analyze, pkgPath } from '../src/analyze.js'
 import { matchByPath, branchDiff, compare, segs } from '../src/diff.js'
 import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
 import { bootGraph, resolveRef } from '../src/bootpath.js'
-import { renderReport, verdict, timelineHtml } from '../src/report.js'
+import { renderReport, verdict, timelineHtml, experimentHtml } from '../src/report.js'
+import { COMMANDS, zshCompletion } from '../src/completion.js'
+import { OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB } from '../scripts/alfred-scripts.js'
 import { redactRun, kept } from '../src/redact.js'
 import { timelineModel, timelineView } from '../src/timeline.js'
 import { normaliseOptions, cliCommand, VIEWPORTS, viewportName } from '../src/options.js'
@@ -1452,6 +1454,26 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.ok(!stat.includes('Lesson title') && !stat.includes('passPhrase') && stat.includes('Redacted report.'), 'redact report: a package report’s titles and code go')
 }
 console.log('redact: unit ok')
+
+// P5.2: the command table, the zsh completion script, and the experiment's HTML report (escaped).
+{
+  const names = COMMANDS.map(c => c.name), z = zshCompletion()
+  assert.equal(new Set(names).size, names.length, 'completion: command names are unique')
+  assert.deepEqual(COMMANDS.filter(c => !c.flags.includes('json')).map(c => c.name), [], 'json: every command has --json (serve: with --url)')
+  assert.ok(z.startsWith('#compdef scorm-lab\n') && z.includes('_files -g "*.zip"') && z.includes('compdef _scorm_lab scorm-lab'), 'completion: header, package files, compdef')
+  for (const c of COMMANDS) {
+    assert.ok(z.includes(`    '${c.name}:`) && z.includes(`\n    ${c.name})\n`), `completion: ${c.name} is listed and has a case`)
+    for (const f of c.flags) assert.ok(z.includes(`'--${f}[`), `completion: --${f} of ${c.name}`)
+  }
+  assert.ok(z.includes("'1:package or saved run:_files'") && z.includes("'1:package:_files -g \"*.zip\"'"), 'completion: positional arguments are quoted')
+  assert.match(z, /'--preset\[The built-in variants\]:preset:\(api frames standard lms storage browsers\)'/, 'completion: preset choices come from PRESETS')
+  const rep = renderReport({ title: 'SCORM Lab: x.zip', subtitle: 'sub', findings: [], extra: experimentHtml([{ name: '<img src=x onerror=1>', furthestLabel: 'Wrote data', apiCalls: 3, errors: 0, verdict: { sev: 'ok', title: 'ok' }, progress: 'the default' }]) })
+  assert.ok(rep.includes('<h2>Variants</h2>') && rep.includes('&lt;img src=x onerror=1&gt;') && !rep.includes('<img src=x'), 'experiment report: the variants table, escaped')
+  assert.ok(rep.indexOf('<h2>Variants</h2>') < rep.indexOf('<h2>Findings</h2>') && rep.includes('<td>Wrote data</td>'), 'experiment report: the variants come above the findings')
+  assert.ok(!renderReport({ title: 'x', findings: [] }).includes('Variants'), 'experiment report: a plain report has no variants table')
+  assert.ok(!renderReport({ title: 'x', findings: [], redact: { package: 'pkg.zip' }, extra: experimentHtml([]) }).includes('Variants'), 'experiment report: a redacted report never shows extra HTML')
+}
+console.log('completion and experiment report: unit ok')
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -1536,6 +1558,77 @@ if (!process.argv.includes('--unit')) {
   const ovFile = join(work, 'ov.txt'); writeFileSync(ovFile, 'note')
   const ov = node(['fix', good, '--override', 'notes/ov.txt=' + ovFile, '--out', join(work, 'ov.zip')]); assert.equal(ov.status, 0, ov.stderr); assert.equal(unzip(readFileSync(join(work, 'ov.zip'))).get('notes/ov.txt').toString(), 'note', 'cli fix: --override files go in')
   assert.equal(node(['fix', join(work, 'nope.zip')]).status, 2, 'cli fix: missing file is status 2')
+
+  // P5.2, without Electron. Help and version: JSON, and every command and flag in the help text.
+  {
+    const hj = JSON.parse(node(['help', '--json']).stdout), helpText = node(['help']).stdout
+    assert.deepEqual(hj.commands.map(c => c.name), COMMANDS.map(c => c.name), 'json: help lists every command')
+    for (const c of COMMANDS) { assert.match(helpText, new RegExp(`^  ${c.name}\\b`, 'm'), 'help: command ' + c.name); for (const f of c.flags) assert.ok(helpText.includes('--' + f), `help: --${f} of ${c.name}`) }
+    assert.match(JSON.parse(node(['version', '--json']).stdout).version, /^\d+\.\d+\.\d+/, 'json: version')
+    const cz = node(['completion', 'zsh']); assert.equal(cz.status, 0, cz.stderr); assert.equal(cz.stdout, zshCompletion(), 'completion: the script on standard output')
+    assert.equal(JSON.parse(node(['completion', 'zsh', '--json']).stdout).shell, 'zsh', 'json: completion')
+    assert.equal(node(['completion', 'bash']).status, 2, 'completion: only zsh'); assert.match(node(['completion']).stderr, /Name the shell/)
+    const zfile = join(work, '_scorm-lab'); writeFileSync(zfile, cz.stdout)
+    if (spawnSync('zsh', ['-c', 'true']).status === 0) { const zn = spawnSync('zsh', ['-n', zfile], { encoding: 'utf8' }); assert.equal(zn.status, 0, 'completion: zsh -n accepts it: ' + zn.stderr) }
+    else console.log('completion: zsh not installed, syntax check skipped')
+    // open: where it went, as JSON. SCORM_LAB_ELECTRON names /usr/bin/true, so nothing opens.
+    assert.deepEqual(JSON.parse(node(['open', '--json'], { env: { ...process.env, SCORM_LAB_ELECTRON: '/usr/bin/true' } }).stdout), { app: 'repo', path: '/usr/bin/true', package: null }, 'json: open')
+    // report: JSON with the HTML in a file; a redacted report's JSON has no findings or verdict title.
+    const rj = JSON.parse(node(['report', good, '--json', '--out', join(work, 'static.html')]).stdout)
+    assert.ok(rj.out && rj.verdict && Array.isArray(rj.findings) && rj.counts && existsSync(join(work, 'static.html')), 'json: report')
+    const rn = JSON.parse(node(['report', good, '--redact', '--redact-names', '--key-out', join(work, 'names-key.json'), '--json', '--out', join(work, 'static-names.html')]).stdout)
+    assert.ok(!('input' in rn) && !('out' in rn) && rn.redacted, 'json: --redact-names leaves out the paths')
+    const rr = JSON.parse(node(['report', good, '--redact', '--json', '--out', join(work, 'static-redacted.html')]).stdout)
+    assert.ok(rr.redacted && !('findings' in rr) && !('title' in rr.verdict) && rr.verdict.sev === rj.verdict.sev, 'json: a redacted report keeps no findings or titles')
+    assert.equal(node(['report', good, '--json']).status, 2, 'json: report needs --out or --open'); assert.match(node(['report', good, '--json']).stderr, /needs --out or --open/)
+    const sj = node(['serve', '--json']); assert.equal(sj.status, 2, 'json: serve --json without --url is refused'); assert.match(sj.stderr, /serve --json needs --url/)
+    // serve --url: the address with its token, as text or JSON. The token file is in a fake home.
+    const fakeHome = mkdtempSync(join(work, 'home-')), env = { ...process.env, HOME: fakeHome }, tokenDir = join(fakeHome, 'Library', 'Application Support', 'SCORM Lab')
+    mkdirSync(tokenDir, { recursive: true }); writeFileSync(join(tokenDir, 'web-token'), 'tok123\n')
+    assert.equal(node(['serve', '--url', '--port', '4999'], { env }).stdout.trim(), 'http://127.0.0.1:4999/?token=tok123', 'serve --url')
+    assert.deepEqual(JSON.parse(node(['serve', '--url', '--port', '4999', '--json'], { env }).stdout), { url: 'http://127.0.0.1:4999/?token=tok123' }, 'json: serve --url')
+
+    // doctor: the installed app is an optional check (last, and not part of ok); its version comes from Info.plist.
+    const dj = JSON.parse(node(['doctor', '--json'], { env }).stdout)
+    assert.ok(!dj.checks.some(c => c.id === 'app') && 'app' in dj, 'doctor: the app is reported at the top level, not in checks')
+    assert.equal(dj.ok, dj.checks.every(c => c.ok), 'doctor: ok is the checks')
+    const appDir = join(fakeHome, 'Applications', 'SCORM Lab.app', 'Contents')
+    mkdirSync(appDir, { recursive: true })
+    writeFileSync(join(appDir, 'Info.plist'), '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>9.8.7</string></dict></plist>\n')
+    const withApp = JSON.parse(node(['doctor', '--json'], { env }).stdout)
+    if (!existsSync('/Applications/SCORM Lab.app')) assert.deepEqual(withApp.app, { path: join(fakeHome, 'Applications', 'SCORM Lab.app'), version: '9.8.7' }, 'doctor: ~/Applications is found, with its version')
+    assert.match(node(['doctor'], { env }).stdout, /SCORM Lab\.app, the installed desktop app/)
+    const noApp = JSON.parse(node(['doctor', '--json'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout)
+    if (!existsSync('/Applications/SCORM Lab.app')) assert.ok(noApp.app === null, 'doctor: no app is reported as null')
+    assert.match(node(['doctor'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout, /no +SCORM Lab\.app/, 'doctor: text shows the app as not installed')
+    assert.match(node(['doctor']).stdout, /Ready:|To do:/, 'doctor: text summary with advice')
+
+    // Alfred (P5.2): the build lints, the ⇧↩ action runs the standard experiment, the scripts are valid shell, and Fix never overwrites.
+    const alf = spawnSync(process.execPath, [join(root, 'scripts', 'alfred.js'), '--no-open'], { encoding: 'utf8' }); assert.equal(alf.status, 0, 'alfred build: ' + alf.stderr)
+    const info = join(root, 'dist', 'alfred', 'info.plist')
+    assert.equal(spawnSync('plutil', ['-lint', info], { encoding: 'utf8' }).status, 0, 'alfred: plutil -lint')
+    const wf = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', info], { encoding: 'utf8' }))
+    const filterUid = wf.objects.find(o => o.type === 'alfred.workflow.input.filefilter' && o.config.keyword === 'scorm').uid
+    const shift = wf.connections[filterUid].find(c => c.modifiers === 131072), target = wf.objects.find(o => o.uid === shift?.destinationuid)
+    assert.ok(target && /experiment "\$1" --preset standard/.test(target.config.script), 'alfred: shift-return on scorm runs the standard experiment')
+    assert.ok(wf.objects.some(o => o.type === 'alfred.workflow.trigger.action' && o.config.name === 'Fix with SCORM Lab'), 'alfred: the fix action')
+    assert.ok(wf.objects.some(o => o.type === 'alfred.workflow.trigger.action' && o.config.filetypes?.includes('public.folder')), 'alfred: the folder batch action')
+    for (const [n, body] of Object.entries({ OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB })) { const sh = spawnSync('/bin/bash', ['-n', '-c', body], { encoding: 'utf8' }); assert.equal(sh.status, 0, `alfred ${n} is valid shell: ${sh.stderr}`) }
+    const fixDir = mkdtempSync(join(work, 'alfred-fix-')), pkgCopy = join(fixDir, 'my course.zip')
+    cpSync(blank, pkgCopy)
+    const fixRun = file => spawnSync('/bin/bash', ['-c', FIX, 'bash', file], { encoding: 'utf8', env: { PATH: process.env.PATH, node: process.execPath, cli } })
+    const symDir = mkdtempSync(join(work, 'alfred-sym-')), symPkg = join(symDir, 'c.zip'), symTarget = join(symDir, 'target.txt')
+    cpSync(blank, symPkg); writeFileSync(symTarget, 'keep me'); symlinkSync(symTarget, join(symDir, 'c-fixed.zip'))
+    assert.equal(spawnSync('/bin/bash', ['-c', FIX, 'bash', symPkg], { encoding: 'utf8', env: { PATH: process.env.PATH, node: process.execPath, cli } }).stdout.trim(), 'Wrote c-fixed-2.zip', 'alfred fix: a symlink at the name is not followed or replaced')
+    assert.equal(readFileSync(symTarget, 'utf8'), 'keep me', 'alfred fix: the symlink target is untouched')
+    assert.equal(fixRun(pkgCopy).stdout.trim(), 'Wrote my course-fixed.zip', 'alfred fix: the first copy')
+    assert.equal(fixRun(pkgCopy).stdout.trim(), 'Wrote my course-fixed-2.zip', 'alfred fix: never overwrites, -2')
+    assert.equal(fixRun(pkgCopy).stdout.trim(), 'Wrote my course-fixed-3.zip', 'alfred fix: -3')
+    assert.ok(existsSync(join(fixDir, 'my course-fixed-3.zip')) && readFileSync(join(fixDir, 'my course-fixed.zip')).equals(readFileSync(join(fixDir, 'my course-fixed-2.zip'))), 'alfred fix: the copies are written next to the original')
+    const quiet = join(fixDir, 'good.zip'); cpSync(good, quiet)
+    assert.equal(fixRun(quiet).stdout.trim(), 'Nothing to fix in good.zip', 'alfred fix: nothing to change writes no file'); assert.ok(!existsSync(join(fixDir, 'good-fixed.zip')))
+    assert.deepEqual(readdirSync(fixDir).filter(f => f.startsWith('.scorm-lab-fix')), [], 'alfred fix: no temporary file is left behind')
+  }
 
   // Batch checks (P4.3), without Electron: every fixture in one folder, and a file that isn't a ZIP. One row each, with the verdict
   // analyze gives its package; a CSV and an HTML report are written. The static checks run in worker threads (--jobs 3).

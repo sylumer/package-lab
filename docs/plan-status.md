@@ -43,7 +43,7 @@ In progress on branch `next`.
 | P4.3 | Batch checks | haiku | done | 90ab8c8 | One review round (desktop-only guard for the folder dialog, worker pool hardening). Desktop check is static only |
 | P4.4 | Redacted report | haiku | done | 1b7da04 | Escalated to sonnet after the first privacy review found leaks (deny-list design). Reworked to redact by field and rebuild findings; second marker-planting review fixed curly quotes and free-text elements. Error messages keep only their known shape; other sites keep host and path |
 | P4.5 | cmi5 and xAPI | sonnet | done | 7d374e8 | One review round (LRS limits, CORS, SCORM results kept unchanged, token masking, redaction). No cycle for these formats; no LMS satisfied/abandoned statements |
-| P5.1 | Concierge module catch-up | sonnet | done | | Concierge commit 5f8ea71 on scorm-lab-next. One review round (limits, no work on GET, options via file). Adds a minimal `doctor` |
-| P5.2 | Alfred and CLI polish | haiku | todo | | |
+| P5.1 | Concierge module catch-up | sonnet | done | 321839b | Concierge commit 5f8ea71 on scorm-lab-next. One review round (limits, no work on GET, options via file). Adds a minimal `doctor` |
+| P5.2 | Alfred and CLI polish | haiku | done | | One review round (Alfred temp files and no-overwrite, doctor's checks list kept for Concierge) |
 | P5.3 | Documentation pass | haiku + sonnet review | todo | | |
 | P5.4 | Final check and release build | sonnet | todo | | |
