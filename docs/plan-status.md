@@ -7,6 +7,8 @@ Progress on [plan.md](plan.md). The orchestrator updates this file with each wor
 
 In progress on branch `next`.
 
+**Phase 2 (what a local run can't see yet), done.** LMS profiles with eight approximate presets and content on another origin, blocked storage, WebKit runs and device sizes, input macros and the save-and-resume cycle (`cycle`). Popups are now recorded from their first request. `npm test` takes about 2:48, close to the 3:00 cap; later phases put their end-to-end checks behind `--slow`, which takes about 13 minutes.
+
 **Phase 1 (replacing hand work), done.** Overlays (Files tab, `--override`), pins and answers (`--pin`, `--answer`), server-needs discovery (`discover`), an instrumented execution trace (`--trace`, Execution tab), an automatic drill-down (`drill`) and stall analysis. `npm test` takes about 2:20; `--slow` (with a forced-trace pass) about 7 minutes.
 
 **Phase 0 (foundations), done.** One options model across every interface, milestones and progress on every run, and an experiment runner (CLI `experiment`, Experiments tab) with the `api`, `frames` and `standard` presets. `npm test` takes about 1.5 minutes.
@@ -27,8 +29,8 @@ In progress on branch `next`.
 | P1.6 | Why it stalled | sonnet | done | 29708c5 | One review round. Also fixed milestone times being absolute. No new tab: the finding carries it |
 | P2.1 | LMS profiles and other-origin content | sonnet / opus | done | 5634744 | Built by opus in one piece; reviewed by the orchestrator. Presets from thin haiku research (most vendor pages unreadable), marked approximations. Popup bug fixed in P2.2 |
 | P2.2 | Blocked storage and cookies | sonnet | done | 1342563 | One review round (fixes by the orchestrator: popup timeout, no script in content popups). Fixed popup launches being recorded late |
-| P2.3 | WebKit and device sizes | sonnet | done | | One review round (network confinement, timeouts). Playwright and WebKit installed; WebKit checks are in --slow. Default suite now ~2:41 |
-| P2.4 | Save-and-resume cycle | sonnet | todo | | |
+| P2.3 | WebKit and device sizes | sonnet | done | 12a984b | One review round (network confinement, timeouts). Playwright and WebKit installed; WebKit checks are in --slow. Default suite now ~2:41 |
+| P2.4 | Save-and-resume cycle | sonnet | done | | Resumed once after a usage limit. One review round (typed text now kept only with --record-input; passwords never). Macros are Chromium only |
 | P3.1 | Corrected package export | sonnet | todo | | |
 | P3.2 | Authoring tool rule packs | sonnet + haiku research | todo | | |
 | P3.3 | Comparing two packages | sonnet | todo | | |

@@ -520,10 +520,49 @@ usual but its runs aren't counted.
 1. Launch with **Stop after: I stop it**. Go part-way through, then leave the course the normal way. The API tab
    should show suspend data and location being set, exit set to `suspend`, a commit, and `LMSFinish` or `Terminate`.
 2. Stop and analyse. Check the progress findings and the stored values at the bottom of **API**.
-3. Tick **Resume last run's data** and launch again. On resume, the content should read `cmi.core.entry` or
-   `cmi.entry` (`resume`), `lesson_location` or `location`, and `suspend_data`, and return to where you were.
+3. Tick **Resume last run's data** and launch again (or let [**Test saving**](#testing-that-progress-is-saved-and-resumed)
+   do both runs). On resume, the content should read `cmi.core.entry` or `cmi.entry` (`resume`), `lesson_location` or `location`, and `suspend_data`, and return to where you were.
 
 If it starts from the beginning, look in the second run's **API** tab: did it read those values, and did it use them?
+
+## Testing that progress is saved and resumed
+
+**Test saving** does the steps above for you. It needs a macro only if the course saves its place when the learner
+moves, not at start-up.
+
+1. Click through the course once and make a macro of it (below), or write one (see [Macros](cli.md#macros)).
+2. Choose **Test saving**. It runs the course and plays the macro. Then it leaves the way a learner closing the window
+   does: the course is sent to a blank page, which makes it run its `beforeunload`, `pagehide` and `unload`
+   handlers, and the window is closed. SCORM Lab keeps the data model the LMS held at that point.
+3. It runs the course again with that data, as a resume, and checks that the first run saved something and ended the
+   session, that the LMS offered a resume, that the course read its saved place and used it, and that suspend data
+   carried on from where it was.
+
+The **Test saving** tab shows the two runs side by side (entry offered, location and suspend data read and saved,
+exit, whether the session was ended) with the findings (see [From a save-and-resume test](findings.md#from-a-save-and-resume-test)).
+Each run is in the Runs list too, so you can open its API tab. Each run lasts as long as **Stop after** (10 s if that
+is “I stop it”). It runs in Chromium only.
+
+**Macros.** A macro is a list of clicks, keys and typed text with the time of each. Three ways to make one:
+
+- **Live view** (the web interface): choose **Record clicks** over the Live tab, use the course, then **Save macro**.
+  Everything sent through the picture is recorded with its time into the run.
+- **A run in the desktop app**: clicks made directly in the course window can't be seen from outside, so the probe
+  records them in the course's frames instead. Choose a run, then **Use this run's clicks** under More options.
+  Clicks in a frame on another origin are placed relative to that frame.
+- **A file**: `--macro file.json` on the command line, or the `macro` option.
+
+What is kept in a saved run: the probe records click positions and named keys (Enter, Tab, the arrows…) in the course's
+frames. It records **typed text** only if **Keep typed text in runs (for macros)** (More options) was ticked for that
+run, and never from a password field or a field whose `autocomplete` names a password, a card detail or a one-time code
+(only the length of what was typed is kept, and no keys). Without the tick, a run holds no typed text. Text you type
+through the Live view while **Record clicks** is on is kept in the macro, so don't type secrets there.
+Recording drops pointer moves, and stops with a message at 2,000 events or 100 KB of text.
+A click made in a frame from another origin is marked approximate and is not replayed (the run's trace says how many were skipped).
+
+The macro is kept with your other options (**More options** shows how many events it has, with **Clear**), is played
+at the start of every launch from then on, and is saved in each run's launch options. **Use this run's clicks** and
+**Record clicks** replace the macro you had. Macros need Chromium; with WebKit chosen, the launch says so.
 
 ## Comparing with a working copy (optional)
 

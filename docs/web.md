@@ -95,6 +95,8 @@ Everything works as in the [user guide](user-guide.md), except:
 - The **Profile** list and the **Profile fields** under More options work as in the desktop app. Changed fields are kept in the page, so reloading it clears them; the CLI line then says `--profile-file profile.json` (save the custom profile from the options JSON shown above it).
 - **Storage** (under More options) and the **storage** experiment work as in the desktop app; the CLI line says `--storage blocked`.
 - **Browser** and **Device size** (under More options) work as in the desktop app; the CLI line says `--browser webkit --viewport iphone`. A WebKit run happens on the Mac in a Node process, shows in the Runs list like any run, and has no live view. If Playwright isn't installed, the page shows the message that says how to install it. With a device size, the **Live** view shows the page at that size.
+- **Test saving** (the button next to Launch, and its tab) works as in the desktop app: both runs happen on the Mac, in the same slot as experiments, and the tab shows the two runs side by side with the findings when the second ends. Like the Experiments table, a page opened midway shows only what happens after it joined.
+- **Macro** (under More options) shows the macro the page holds, with **Clear** and **Use this run's clicks** (the clicks the probe saw in the selected run). The macro is kept in the page, so reloading clears it; the CLI line says `--macro macro.json`.
 - A **Live** tab shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** tab selected.
 
@@ -107,6 +109,9 @@ While a run is going, the **Live** tab shows the course window, updated about ev
 - **Keys:** click the picture to focus it, then type. Letters go to the course as text; Enter, Tab, Escape, Backspace,
   Delete, Space, the arrows, Page Up/Down, Home and End go as keys. ⌘ and Ctrl shortcuts stay with your browser.
 - The text box and **Type** send a whole string, which is easier on a phone. The buttons send single keys.
+- **Record clicks** keeps every click, key and piece of text you send through the picture, with its time into the run;
+  **Save macro** stops recording and keeps them as the page's macro, which is played at the start of every launch and by
+  **Test saving**. Recording starts fresh each time, drops pointer moves, and stops with a message at 2,000 events or 100 KB of text. Text typed here is kept in the macro, so don't type secrets.
 - **Stop and analyse** ends the run.
 
 The picture is a few hundred milliseconds behind, so wait for it to update before the next click. Courses that open a

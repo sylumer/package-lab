@@ -11,8 +11,8 @@ const short = u => (u || '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
 const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
-const st = { pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', 'Server needs', ...(lab.web ? ['Live'] : [])]
+const st = { macro: [], cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Errors', 'Console', 'Frames', 'Compare', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
@@ -287,6 +287,26 @@ function runRows(rows, busy, first = 'Variant', against = 'the default') {
         : [r.name, r.furthestLabel, r.apiCalls, r.errors, h('span', { class: r.verdict.sev === 'ok' ? 'ok' : 'bad' }, r.verdict.sev === 'ok' ? 'OK' : r.verdict.title), h('span', { class: r.better > 0 ? 'ok' : r.better < 0 ? 'bad' : null }, r.progress)].map(c => h('td', {}, c))))))
 }
 
+// ---- Test saving: leave like a learner, resume, check (src/cycle.js); the two runs side by side ----
+VIEWS['Test saving'] = () => {
+  const x = st.cyc, off = x.busy || !!st.running || !st.pkg?.items.length
+  const open = id => id && st.runs.some(q => q.id === id) ? h('button', { type: 'button', class: 'link', onclick: () => { st.sel = id; st.tab = 'API'; render() } }, 'open run') : ''
+  return [h('p', { class: 'muted small' }, 'Runs the item with the settings above and plays the macro (More options). Then it leaves the way a learner closing the window does, and runs the item again with the data that was saved, to see whether the content saved its place and went back to it. Each run lasts as long as “Stop after” (10 s if that is “I stop it”). Chromium only.'),
+    h('div', { class: 'row' }, h('button', { type: 'button', disabled: off, onclick: startCycle }, 'Test saving'),
+      h('button', { type: 'button', class: 'secondary', disabled: !x.busy, onclick: () => act(() => lab.invoke('cycle-stop')) }, 'Stop'),
+      h('span', { class: 'muted small' }, `${x.note} Macro: ${st.macro.length ? st.macro.length + ' events' : 'none (nothing will be clicked)'}.`)),
+    x.rows.length ? h('table', {}, h('thead', {}, h('tr', {}, ['', 'Run 1: leaves', 'Run 2: resumes'].map(c => h('th', {}, c)))),
+      h('tbody', {}, x.rows.map(r => h('tr', {}, h('th', {}, r.label), h('td', {}, r.a), h('td', {}, r.b))), h('tr', {}, h('td', {}), h('td', {}, open(x.runs[0])), h('td', {}, open(x.runs[1]))))) : null,
+    x.findings.length ? [h('h3', { class: 'section' }, 'Findings'), findingsList(x.findings)] : null]
+}
+function startCycle() {
+  const x = st.cyc
+  act(async () => {
+    Object.assign(x, { busy: true, note: 'Starting…', rows: [], findings: [], runs: [] }); st.tab = 'Test saving'; render()
+    try { await lab.invoke('cycle-start', { item: +$('item').value, ...launchOptions(), wait: +$('auto').value || 10 }) } catch (e) { x.busy = false; x.note = ''; throw e }
+  })
+}
+
 // ---- Server needs: what the content wants from its server, found by answering its requests and watching what it reads ----
 st.disc = { rounds: 5, rows: [], result: null, busy: false, note: '' }
 const host = u => (u || '').replace(/^lab:\/\/(?:run|content)(?=\/)/, '')
@@ -362,6 +382,10 @@ VIEWS['Drill-down'] = () => {
 
 // ---- Live view (web interface only): the running content, with clicks and keys sent back to it ----
 const KEYS = { Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', PageUp: 'PageUp', PageDown: 'PageDown', Home: 'Home', End: 'End' }
+// Record clicks (macros, P2.4): what is sent through the picture is kept, with its time into the run, until Save macro.
+const recordBtn = h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => recording(await lab.invoke('macro-record', { on: !st.recording }))) }, 'Record clicks')
+const liveMacro = h('span', { class: 'muted small' })
+const recording = on => { st.recording = on; recordBtn.textContent = on ? 'Stop recording (not saved)' : 'Record clicks'; liveMacro.textContent = on ? 'Recording: use the picture, then Save macro.' : '' }
 const liveInput = e => lab.invoke('live-input', e).catch(() => {})
 const liveImg = h('img', { class: 'live-frame', alt: 'The running content', tabindex: '0' })
 const liveInfo = h('p', { class: 'muted small' }, 'Waiting for the first frame…')
@@ -370,7 +394,8 @@ const livePanel = h('div', { class: 'live' },
   h('p', { class: 'muted small' }, 'The course is running on the Mac. Click the picture to click the course; with the picture focused, keys go to the course too.'),
   liveImg, liveInfo,
   h('div', { class: 'row' }, liveText, h('button', { type: 'button', onclick: () => { if (liveText.value) { liveInput({ type: 'text', text: liveText.value }); liveText.value = '' } } }, 'Type'),
-    ...['Enter', 'Tab', 'Escape', 'Backspace', 'Space', 'Up', 'Down', 'Left', 'Right'].map(k => h('button', { type: 'button', class: 'secondary', onclick: () => liveInput({ type: 'key', key: k }) }, k))))
+    ...['Enter', 'Tab', 'Escape', 'Backspace', 'Space', 'Up', 'Down', 'Left', 'Right'].map(k => h('button', { type: 'button', class: 'secondary', onclick: () => liveInput({ type: 'key', key: k }) }, k))),
+  h('div', { class: 'row' }, recordBtn, h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => { st.macro = await lab.invoke('macro-save'); recording(false); showMacro(); showOptions(); say(`Macro saved: ${st.macro.length} events. It plays at the start of each launch.`) }) }, 'Save macro'), liveMacro))
 const at01 = e => ({ x: e.offsetX / liveImg.clientWidth, y: e.offsetY / liveImg.clientHeight })
 liveImg.addEventListener('click', e => { liveImg.focus(); liveInput({ type: 'click', ...at01(e) }) })
 let wheelAt = 0
@@ -396,6 +421,7 @@ function render() {
     h('label', { title: 'The run that fails' }, h('input', { type: 'radio', name: 'fail', checked: st.fail === r.id, onclick: e => { e.stopPropagation(); st.fail = r.id; render() } }), h('span', { class: 'tag' }, 'F')),
     h('span', { class: 'lbl' }, r.label, h('span', { class: 'kind' }, `${r.findings.filter(f => f.sev === 'error').length} errors · ${r.trace.probe.filter(p => p.type === 'api').length} API calls · ${r.trace.requests.length} requests`)))))
   $('compare').disabled = !(st.ref && st.fail && st.ref !== st.fail)
+  showMacro()
 }
 
 async function act(fn, busy) {
@@ -407,7 +433,7 @@ function showPackage(p) {
   $('pkg-name').textContent = p.name
   $('item').replaceChildren(...p.items.map(i => h('option', { value: i.index }, `${'· '.repeat(i.depth)}${i.title} (${i.type || '?'})`)))
   const firstSco = p.items.find(i => i.type === 'sco'); if (firstSco) $('item').value = firstSco.index
-  $('item').disabled = !p.items.length; $('launch').disabled = !p.items.length
+  $('item').disabled = !p.items.length; $('launch').disabled = !p.items.length; $('cycle').disabled = !p.items.length
   say(`${p.name}: before running, ${p.findings.filter(f => f.sev === 'error').length} errors and ${p.findings.filter(f => f.sev === 'warn').length} warnings.`)
   st.tab = 'Findings'; render()
 }
@@ -459,9 +485,16 @@ lab.invoke('profiles').then(p => {
   showProfile()
 }).catch(() => {})
 $('profile').addEventListener('change', () => { st.profileEdits = {}; showProfile() })
-const launchOptions = () => ({ expose: $('expose').value, profile: profileOption(), depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
+const launchOptions = () => ({ macro: st.macro, recordInput: $('record-input').checked, expose: $('expose').value, profile: profileOption(), depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
   pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim(), trace: $('trace').checked, storage: $('storage').value,
   browser: $('browser').value, viewport: $('viewport').value === 'custom' ? `${+$('viewport-w').value}x${+$('viewport-h').value}` : $('viewport').value || null })
+// The Macro box under More options: how long it is, the clicks the selected run's probe saw, and Clear.
+function showMacro() {
+  const r = run(), seen = r ? r.trace.probe.filter(p => p.type === 'input').length : 0
+  $('macro').replaceChildren(h('p', { class: 'muted small' }, st.macro.length ? `${st.macro.length} events over ${(st.macro.at(-1).t / 1000).toFixed(1)} s. They play at the start of every launch, and are saved in each run’s options.` : 'None. Record clicks in the Live view (web interface), or take the clicks of a run.'),
+    h('div', { class: 'row' }, h('button', { type: 'button', class: 'secondary', disabled: !seen, title: 'The clicks, keys and typing the probe saw in the course’s frames during the selected run', onclick: () => act(async () => { st.macro = await lab.invoke('macro-from-run', { run: r.id }); showMacro(); showOptions(); say(`Macro made from the selected run: ${st.macro.length} events.`) }) }, seen ? `Use this run’s clicks (${seen})` : 'Use this run’s clicks'),
+      h('button', { type: 'button', class: 'secondary', disabled: !st.macro.length, onclick: () => { st.macro = []; showMacro(); showOptions() } }, 'Clear')))
+}
 async function showOptions() {
   try {
     const n = st.pkg?.items.findIndex(i => i.index === +$('item').value) + 1
@@ -469,9 +502,10 @@ async function showOptions() {
     $('options-json').textContent = JSON.stringify(r.options, null, 2); $('cli-line').textContent = r.command
   } catch (e) { $('options-json').textContent = e.message; $('cli-line').textContent = '' }
 }
-for (const id of ['item', 'expose', 'profile', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params', 'trace', 'storage', 'browser', 'viewport', 'viewport-w', 'viewport-h']) $(id).addEventListener('change', showOptions)
+for (const id of ['item', 'expose', 'profile', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params', 'trace', 'record-input', 'storage', 'browser', 'viewport', 'viewport-w', 'viewport-h']) $(id).addEventListener('change', showOptions)
 $('viewport').addEventListener('change', () => { $('viewport-custom').hidden = $('viewport').value !== 'custom' })
 $('more').addEventListener('toggle', showOptions)
+$('cycle').onclick = startCycle
 $('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeText($('cli-line').textContent); say('Copied.') })
 $('launch').onclick = () => act(async () => {
   st.live = []
@@ -493,14 +527,23 @@ $('filter').oninput = () => render()
 $('item').onchange = () => render()
 let pending = false
 lab.on('probe', p => { st.live.push(p); if (!run() && !pending) { pending = true; setTimeout(() => { pending = false; if (!run()) render() }, 300) } })
-lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; st.runs.push(r); if (!st.exp.busy && !st.disc.busy && !st.drill.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
-lab.on('state', s => { st.running = s.running ? s : null; if (!s.running && st.tab === 'Live') st.tab = 'Findings'; render(); $('stop').disabled = !s.running; $('launch').disabled = !!s.running || !st.pkg?.items.length; $('ref').disabled = !!s.running; if (s.running) say(`Recording ${s.label}. ${s.auto ? `It stops by itself after ${s.auto} s, or` : 'Use the course, then'} Stop and analyse${lab.web ? '' : ' (or close its window)'}.`) })
+lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; st.runs.push(r); if (!st.exp.busy && !st.disc.busy && !st.drill.busy && !st.cyc.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
+lab.on('state', s => { st.running = s.running ? s : null; if (!s.running && st.tab === 'Live') st.tab = 'Findings'; render(); $('stop').disabled = !s.running; $('launch').disabled = !!s.running || !st.pkg?.items.length; $('cycle').disabled = !!s.running || !st.pkg?.items.length; $('ref').disabled = !!s.running; if (s.running) say(`Recording ${s.label}. ${s.auto ? `It stops by itself after ${s.auto} s, or` : 'Use the course, then'} Stop and analyse${lab.web ? '' : ' (or close its window)'}.`) })
 lab.on('experiment', e => {
   const x = st.exp
   if (e.state === 'start') { x.names = e.names; x.rows = []; x.findings = []; x.busy = true }
   else if (e.state === 'result') { x.rows[e.index] = e.row; x.note = `Finished ${e.index + 1} of ${x.names.length}.` }
   else if (e.state === 'done') { x.rows = e.rows; x.findings = e.findings; x.busy = false; x.note = e.stopped ? 'Stopped.' : 'Done.' }
   else { x.busy = false; x.note = e.message }
+  render()
+})
+lab.on('macro', e => { if (e.state === 'full') { recording(false); say(e.message) } })
+lab.on('cycle', e => {
+  const x = st.cyc
+  if (e.state === 'start') Object.assign(x, { busy: true, rows: [], findings: [], runs: [], note: 'Run 1: playing the macro and leaving…' })
+  else if (e.state === 'run') { x.runs[e.index] = e.run; x.note = e.index ? 'Done.' : 'Run 2: resuming…' }
+  else if (e.state === 'done') Object.assign(x, { busy: false, rows: e.rows, findings: e.findings, runs: e.runs, note: 'Done.' })
+  else Object.assign(x, { busy: false, note: e.message })
   render()
 })
 lab.on('discover', e => {

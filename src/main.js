@@ -26,6 +26,7 @@ import { normaliseOptions, cliCommand, packagePath } from './options.js'
 import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
+import { cycleFindings, cycleRows, macroFromTrace, resumeOptions } from './cycle.js'
 import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
 import { PROFILES, launchProfile } from './profiles.js'
@@ -140,7 +141,7 @@ function watchPopups(wc, extra, ropts, wins, top = true) {
   })
 }
 
-async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace, headers, storage = 'normal', viewport = null }) {
+async function begin({ kind, label, url, launch, partition, caught, boot, auto, files, pins, responses, trace, headers, storage = 'normal', viewport = null, leave = false, recordInput = false }) {
   await finish()
   // partitioned: the run's storage starts empty. (Otherwise it lasts from run to run while the app is open: it is one in-memory partition.)
   if (storage === 'partitioned') await session.fromPartition(partition).clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'websql', 'cachestorage', 'serviceworkers', 'filesystem'] })
@@ -151,11 +152,11 @@ async function begin({ kind, label, url, launch, partition, caught, boot, auto, 
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
   // A device size (P2.3): the window is that size too, so the live view shows (and clicks land on) the emulated page.
   if (viewport) win.setContentSize(viewport.width, viewport.height)
-  const ropts = { caught, pins, responses, trace: !!trace, storage, viewport }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
+  const ropts = { caught, pins, responses, trace: !!trace, storage, viewport, recordInput }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
   rec.onProbe = p => emit('probe', p)
   win.webContents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { show: SHOW_RUNS, webPreferences: { partition, sandbox: true, backgroundThrottling: false } } }))
   watchPopups(win.webContents, extra, ropts, wins)
-  active = { win, wins, rec, extra, kind, label, launch, boot, tracing, started: Date.now() }
+  active = { win, wins, rec, extra, kind, label, launch, boot, tracing, started: Date.now(), leave }
   win.on('close', e => { if (active?.win === win) { e.preventDefault(); finish() } })
   if (auto > 0) { const a = active; a.timer = setTimeout(() => { if (active === a) finish() }, auto * 1000) }
   // The debugger needs a renderer: start one on a blank page, attach, then go to the content.
@@ -177,8 +178,10 @@ async function finishActive(a) {
   clearTimeout(a.timer)
   live.restart()
   if (a.webkit) return (a.run = await finishWebkit(a))
+  if (a.leave) await leaveLikeLearner(a)
+  // The LMS page's data model; if that page is gone (the run window was navigated away), what it last reported.
   let cmi = null
-  if (a.kind === 'package') cmi = await a.rec.send('Runtime.evaluate', { expression: 'JSON.stringify(window.__labCmi?.() ?? null)', returnByValue: true }).then(r => JSON.parse(r.result.value)).catch(() => null)
+  if (a.kind === 'package') cmi = (await a.rec.send('Runtime.evaluate', { expression: 'JSON.stringify(window.__labCmi?.() ?? null)', returnByValue: true }).then(r => JSON.parse(r.result.value)).catch(() => null)) ?? a.rec.lastCmi ?? null
   const trace = await a.rec.stop()
   for (const r of a.extra) {
     const t = await r.stop()
@@ -198,6 +201,30 @@ async function finishActive(a) {
   for (const w of a.wins) if (!w.isDestroyed()) w.destroy()
   emit('state', { running: null })
   return (a.run = addRun(a.kind, a.label, a.launch, trace, a.boot))
+}
+
+// Leaving the way a learner closing the window does (P2.4): the content window goes to about:blank, which runs beforeunload,
+// pagehide and unload with the recorders attached, and is then closed (a popup now; the run window with the rest). In the run
+// window the content is a frame of the test LMS's page, and a page that is itself leaving can't report to the recorder, so the
+// content's own frame is the one sent to about:blank: the LMS page stays up to take the API calls the handlers make, and its
+// data model is read afterwards. With no frame to find, the whole window goes.
+async function leaveLikeLearner(a) {
+  const w = a.wins.filter(x => !x.isDestroyed()).at(-1)
+  if (!w) return
+  // Only now do the recorders accept a beforeunload prompt and the windows let a prompt through: as a learner confirming would.
+  a.rec.leaving = true; for (const r of a.extra) r.leaving = true
+  for (const x of a.wins) if (!x.isDestroyed()) x.webContents.on('will-prevent-unload', e => e.preventDefault())
+  a.rec.push('probe', { type: 'leave', t: a.rec.t(), sid: '' })   // where the leave starts in the trace (cycle.js)
+  const wait = ms => new Promise(r => setTimeout(r, ms))
+  const goBlank = () => Promise.race([w.webContents.loadURL('about:blank').catch(() => {}), wait(3000)])
+  if (w !== a.win) await goBlank()
+  else {
+    const framed = await a.rec.send('Runtime.evaluate', { returnByValue: true, expression: `(() => { try { let el = document.querySelector('iframe, frame'); while (el && /\\/__lab\\/wrap\\.html$/.test(el.contentWindow.location.pathname)) el = el.contentDocument.querySelector('iframe, frame'); if (!el) return false; el.src = 'about:blank'; return true } catch (e) { return false } })()` })
+      .then(r => r.result.value === true).catch(() => false)
+    if (framed) await wait(800); else await goBlank()
+  }
+  await wait(400)   // the last reports
+  if (w !== a.win && !w.isDestroyed()) w.destroy()
 }
 
 // ---- Live view: frames of the content window for remote viewers, and their clicks and keys sent back ----
@@ -229,8 +256,8 @@ const live = {
       }
     } finally { this.busy = false }
   },
-  // e: { type: 'click' | 'move' | 'wheel' | 'key' | 'text', x, y (0–1 across the frame), dy, key, text }
-  input(e) {
+  // e: { type: 'click' | 'move' | 'wheel' | 'key' | 'text', x, y (0–1 across the frame), dy, key, text }. replay: an event of a macro (not recorded again).
+  input(e, replay = false) {
     const w = this.target()
     if (!w || !e) return false
     const wc = w.webContents, [cw, ch] = w.getContentSize()
@@ -247,10 +274,25 @@ const live = {
       wc.sendInputEvent({ type: 'keyUp', keyCode: e.key })
     } else if (e.type === 'text' && typeof e.text === 'string') wc.insertText(e.text.slice(0, 2000))
     else return false
-    setTimeout(() => this.capture().catch(() => {}), 150)
+    if (!replay && macro.recording && active && e.type !== 'move') {   // moves are not recorded: they would fill the limit
+      const text = e.type === 'text' ? e.text.slice(0, 2000) : ''
+      if (macro.events.length >= MACRO_MAX || macro.text + text.length > MACRO_TEXT_MAX) {
+        macro.recording = false
+        emit('macro', { state: 'full', message: `Recording stopped: a macro holds at most ${MACRO_MAX} events and ${MACRO_TEXT_MAX / 1024} KB of text. Save what was recorded, or start again.` })
+      } else if (e.type !== 'text' || text) {
+        const clamp = n => Math.min(1, Math.max(0, +n || 0)); macro.text += text.length
+        macro.events.push({ t: Date.now() - active.started, type: e.type, ...(e.type === 'click' || e.type === 'wheel' ? { x: clamp(e.x), y: clamp(e.y) } : {}), ...(e.type === 'wheel' ? { dy: Math.max(-10000, Math.min(10000, +e.dy || 0)) } : {}), ...(e.type === 'key' ? { key: e.key } : {}), ...(e.type === 'text' ? { text } : {}) })
+      }
+    }
+    if (this.watchers > 0 || this.dir) setTimeout(() => this.capture().catch(() => {}), 150)
     return true
   },
 }
+
+// Macros (P2.4): "Record clicks" keeps what comes in through live-input, with its time into the run; Save macro hands the events
+// to the interface, which keeps them with its other launch options (like pins). Recording stops when saved.
+const macro = { recording: false, events: [], text: 0 }
+const MACRO_MAX = 2000, MACRO_TEXT_MAX = 100 * 1024   // as options.js
 
 // ---- Packages ----
 function loadPackage(path) { return loadPackageData(basename(path), readFileSync(path), path) }
@@ -277,18 +319,24 @@ function bootFor(path, files = pkg.files) {
 }
 
 // o: { item, cmi?, ...launch options } (see options.js). Unknown options throw.
-async function launchItem({ item: itemIndex, cmi: givenCmi, ...rest }) {
+async function launchItem({ item: itemIndex, cmi: givenCmi, leave = false, ...rest }) {
   if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
   const norm = normaliseOptions({ ...rest, files: rest.files ?? pkg?.overrides })
   const cmi = givenCmi ?? (norm.resume && pkg.lastCmi ? pkg.lastCmi : null)
   const plan = launchPlan({ pkg, item: itemIndex, cmi, options: { ...norm, ...(process.env.SCORM_LAB_FORCE_TRACE === '1' && norm.browser === 'chromium' ? { trace: true } : {}) },   // tests: every Electron run traced
     origins: norm.browser === 'webkit' ? WEBKIT_ORIGINS : undefined })
   const { o, res, files, config: cfg, launch, headers, label } = plan
-  if (o.browser === 'webkit') return beginWebkit({ plan, itemIndex, cmi })
-  config = cfg
-  await begin({ kind: 'package', label, url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers, storage: launch.storage, viewport: o.viewport })
+  if (o.browser === 'webkit') { if (o.macro.length || leave) throw webkitMacro(); return beginWebkit({ plan, itemIndex, cmi }) }
+  config = { ...cfg, snapshots: leave }   // the test LMS page reports its data model as it changes only for a run that will leave (host.js)
+  await begin({ kind: 'package', label, url: 'lab://run/__lab/host.html', launch, partition: 'lab', caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers, storage: launch.storage, viewport: o.viewport, leave, recordInput: o.recordInput })
+  // The macro's events at their times into the run, through the same input as the live view; they stop if the run ends first.
+  // A click in a frame of another origin was only placed approximately (approx): it is skipped, and the trace says so.
+  const a = active, skipped = o.macro.filter(e => e.approx).length
+  if (skipped) a.rec.push('probe', { type: 'macro-skipped', count: skipped, message: `${skipped} click${skipped === 1 ? ' was' : 's were'} made in a frame of another origin, so ${skipped === 1 ? 'its' : 'their'} position is approximate: not replayed.`, t: a.rec.t(), sid: '' })
+  for (const e of o.macro.filter(e => !e.approx)) setTimeout(() => { if (active === a) live.input(e, true) }, e.t)
   return true
 }
+const webkitMacro = () => new Error('Macros and the save-and-resume test run in Chromium only: WebKit runs have no input to replay. Choose Chromium.')
 
 // ---- WebKit runs (P2.3): the CLI's Node process drives Playwright's WebKit (src/webkit-runner.js); this process waits for it ----
 // ponytail: no live view for WebKit; the Live tab stays empty. Stream Playwright screenshots when it matters.
@@ -373,8 +421,8 @@ async function experimentStart({ item, preset = 'standard', variants, ...rest })
 }
 
 // One launch, stopped after its wait; the recorded run, or null if it ended without one. Experiments and discovery use it.
-async function runToEnd(item, options) {
-  await launchItem({ ...options, auto: options.auto || options.wait, item })
+async function runToEnd(item, options, leave = false, cmi) {
+  await launchItem({ ...options, auto: options.auto || options.wait, item, leave, ...(cmi ? { cmi } : {}) })
   const a = active
   while (a && !a.ended) await new Promise(r => setTimeout(r, 200))
   return a?.run ?? null
@@ -445,6 +493,33 @@ async function drillStart({ run: id }) {
   return true
 }
 
+// ---- Save and resume (P2.4): leave the way a learner does, then resume from what was left (see src/cycle.js) ----
+// Two runs through the experiment runner's path, sharing its slot. Run 1 plays the macro (options.macro) and then leaves: the content
+// window goes to about:blank and is closed with the recorder attached. Run 2 resumes from run 1's data. Events 'cycle':
+// { state: 'start' } · { state: 'run', index, run (id) } · { state: 'done', runs: [ids], rows, findings } · { state: 'error', message }.
+async function cycleStart({ item, ...rest }) {
+  rest = { ...rest, files: rest.files ?? pkg?.overrides }
+  if (experiment || active) throw new Error('Something is already running. Stop it first.')
+  if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
+  const base = normaliseOptions(rest), job = experiment = { stop: false }
+  try { if (base.browser === 'webkit') throw webkitMacro() } catch (e) { experiment = null; throw e }
+  emit('cycle', { state: 'start' })
+  ;(async () => {
+    try {
+      const first = await runToEnd(item, base, true)
+      if (job.stop) throw new Error('Stopped.')
+      if (!first) throw new Error('The first run didn’t finish.')
+      emit('cycle', { state: 'run', index: 0, run: first.id })
+      const second = await runToEnd(item, { ...resumeOptions(base), resume: true }, false, first.trace.cmi)
+      if (job.stop) throw new Error('Stopped.')
+      if (!second) throw new Error('The second run didn’t finish.')
+      emit('cycle', { state: 'run', index: 1, run: second.id })
+      emit('cycle', { state: 'done', runs: [first.id, second.id], rows: cycleRows([first, second]), findings: cycleFindings({ runs: [first, second], macro: base.macro }) })
+    } catch (e) { emit('cycle', { state: 'error', message: e.message }) } finally { experiment = null }
+  })()
+  return true
+}
+
 // The override for a path, if there is one of its own (not something inherited like “constructor”).
 const override = path => Object.hasOwn(pkg.overrides, path) ? pkg.overrides[path] : undefined
 // A file of the open package (not an override), after checking the path. Undefined for a new file.
@@ -508,6 +583,8 @@ const handlers = {
   profiles: () => PROFILES,
   'experiment-start': o => experimentStart(o),
   'experiment-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
+  'cycle-start': o => cycleStart(o),
+  'cycle-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
   'discover-start': o => discoverStart(o),
   'discover-stop': async () => { if (experiment) experiment.stop = true; await finish(); return true },
   'drill-start': o => drillStart(o),
@@ -544,6 +621,10 @@ const handlers = {
     return (r?.package && r.package === pkg?.name && pkg.files.get(path)?.toString('utf8')) || ''
   },
   'live-input': e => live.input(e),
+  // Macros: Record clicks starts keeping live-input events; Save macro stops and returns them. 'macro-from-run' returns the clicks and keys the probe saw in a run's content frames.
+  'macro-record': ({ on = true }) => { macro.recording = !!on; if (macro.recording) { macro.events = []; macro.text = 0 } return macro.recording },
+  'macro-save': () => { macro.recording = false; return normaliseOptions({ macro: macro.events }).macro },
+  'macro-from-run': ({ run }) => { const r = runs.get(+run); if (!r) throw new Error('Choose a run.'); return macroFromTrace(r.trace) },
 }
 for (const [name, fn] of Object.entries(handlers)) ipcMain.handle(name, (_e, arg) => fn(arg ?? {}))
 
@@ -591,7 +672,7 @@ app.on('window-all-closed', () => { if (!web && !JOB && process.platform !== 'da
 app.on('activate', () => { if (WINDOW && !ui && app.isReady()) createWindow() })
 
 // ---- Headless runs (bin/scorm-lab.js run) ----
-// The job file: { zip, item, options (see options.js), resumeFrom, out, live (folder) }. Writes
+// The job file: { zip, item, options (see options.js), resumeFrom, close (leave like a learner at the end: the cycle's first run), out, live (folder) }. Writes
 // the run to out in the saved-run format. With live: frames to live/frame.jpg, progress to live/status.json, and
 // input (and { type: 'stop' }) read from live/input/*.json.
 async function headless(jobFile) {
@@ -606,7 +687,7 @@ async function headless(jobFile) {
   if (job.live) { mkdirSync(join(job.live, 'input'), { recursive: true }); live.dir = job.live }
   status({ state: 'starting' })
   const options = normaliseOptions(job.options)
-  await launchItem({ ...options, resume: options.resume || !!cmi, item, cmi })
+  await launchItem({ ...options, resume: options.resume || !!cmi, item, cmi, leave: !!job.close })
   const until = Date.now() + options.wait * 1000
   let stop = false
   while (!stop && Date.now() < until && active) {

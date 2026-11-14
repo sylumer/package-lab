@@ -149,7 +149,8 @@ and a line in the guides. The shape:
   wait (s, headless runs), profile: 'generic' | preset name | { base?, notes?, …profile fields } (see LMS profiles), browser: 'chromium'|'webkit', viewport: null | { width, height, deviceScaleFactor, mobile, touch, userAgent } (a preset name or 'WxH' is accepted and returned in full),
   files: { path: { content } | { base64 } },
   pins: [{ path, value (JSON), frames: 'content'|'all', mode: 'force' } | { path, frames, mode: 'watch' }],
-  responses: [{ match, method?, status, headers, body }], launchParams: 'a=1&b=2', storage: 'normal'|'blocked'|'partitioned' (see Storage), trace: false }
+  responses: [{ match, method?, status, headers, body }], launchParams: 'a=1&b=2', storage: 'normal'|'blocked'|'partitioned' (see Storage), trace: false,
+  macro: [{ t (ms), type: 'click'|'move'|'wheel'|'key'|'text', x, y, dy, key, text }] (see Save and resume) }
 ```
 
 `launchItem` takes `{ item, cmi?, ...options }`, normalises the options and saves them in `launch.options` (the older
@@ -187,6 +188,11 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `load-run` | `{ file }` | `[run summary]`. The name is reduced to a base name in the runs folder |
 | `source` | `{ run, url }` or `{ run, path }` | A script's source from a run, by address; or by package path (the Execution tab): the script as recorded, or for a page, the file the run was served (its changed file, or the open package's if it is that package), else `''` |
 | `live-input` | an input event | `true` if delivered |
+| `macro-record` | `{ on? }` (default true) | Whether recording is on. Turning it on clears what was recorded |
+| `macro-save` | — | The recorded events as a checked macro (`[{ t, type, … }]`); recording stops |
+| `macro-from-run` | `{ run }` | The macro made from the `input` reports the probe saw in that run |
+| `cycle-start` | `{ item, …launch options (the macro too) }` | `true`, at once; progress comes as `cycle` events (see [Save and resume](#save-and-resume-p24)). Throws in WebKit, or if a run, experiment, discovery or drill-down is under way |
+| `cycle-stop` | — | `true`: stops the run in progress and the rest of the cycle |
 
 Package info is `{ name, loaded, analysis, overrides: [{ path, size, binary, added }], findings, items: [{ index, title, type, depth, href }] }`. A run summary is
 the run without script sources and raw coverage, with `boot.nodes` already matched against the run (`bootRun`).
@@ -324,6 +330,10 @@ auto-attached target too). It reports through the `__labReport` binding:
 | `{ type: 'timers', raf, sites, list }` | From the timer hooks (not in SCORM Lab's host pages): a summary of `setTimeout` and `setInterval` per kind and call site. `list` is `[kind, delay, created, fired, cleared, msSinceLastRun]` and `sites[i]` is the caller's stack line for `list[i]`. `raf` counts `requestAnimationFrame` calls. At most once a second for the first 30, then every 5 s, and when the page hides or the recorder stops. The recorder's own `t` is when it arrived; the last one of a frame is the state at the end |
 | `{ type: 'listener', id, stack }`, `{ type: 'msg-run', id, n }` | A `message` listener (a function, on a window) registered, and each run of it (the first five of each, then every hundredth). `id` is per frame |
 | `{ type: 'post', to, shape, origin, n, stack }` | A `postMessage` call, reported by the realm of the window it was called on, so `to` is that window's URL (empty for another origin, where it can't be read). `shape` is `{ kind, value? }` for a primitive, `{ kind: 'array' }`, `{ kind: 'object' }` (a class instance or other non-plain object), or `{ kind: 'object', keys (first 5), vals }` for a plain object (read by descriptor, no getters), where `vals` has only numbers, booleans and strings of 80 characters or less; every stored string (keys, origin, kind) is cut at 80 characters. Residual: a `Proxy` can't be told from an object, so its `getPrototypeOf` trap (and `ownKeys`, if it looks plain) runs when it is inspected. Throttled per target and shape (the first 10, then every hundredth; at most 200 distinct kinds per frame, then none) |
+| `{ type: 'input', kind, x, y, key, text }` | P2.4, content frames only: a trusted `pointerdown` (left button; `kind: 'click'`, `x` and `y` 0–1 across the top frame, the frames' offsets added up where they can be reached), a `keydown` of a named key (`kind: 'key'`, `key` in the names `live-input` takes) or an `input` event with text (`kind: 'text'`). A click whose frames can't all be reached (another origin) has `approx: true`. Text is reported only when the run has `recordInput` (the probe prefix `window.__labText`), and for a target (`composedPath()[0]`) that is a password field or has `autocomplete` `current-password`, `new-password`, `cc-…` or `one-time-code` it is `{ kind: 'text', length, redacted: true }`, and its `keydown`s aren't reported at all. At most 2,000 per frame. `macroFromTrace` (`src/cycle.js`) turns them into macro events |
+| `{ type: 'unload', event, listeners, props }` | P2.4, content frames only: once, when the first of `beforeunload`, `pagehide` and `unload` reaches the window (a capture listener, added first). `listeners` counts the listeners the content added on its window for each of the three (by the `addEventListener` hook); `props` lists the `on…` handlers it has (also those of `<body onunload>`). Later ones aren't reported: a page that is going away may not get a report out |
+| `{ type: 'cmi-now', values }` | From the test LMS's page (`host.js`), only when the page's config has `snapshots` (a run that will leave like a learner: `launchItem` sets it from `leave`), after each call that can change the data model (`SetValue`, `Commit`, `Finish`, `Terminate`): at most every 250 ms, and at once once the page is hiding. The recorder keeps only the last as `lastCmi` and does not put it in `trace.probe`; WebKit never gets them |
+| `{ type: 'leave' }`, `{ type: 'dialog', kind, message, leaving }`, `{ type: 'macro-skipped', count, message }` | Made by the main process through the recorder, not by the probe. `leave`: where the learner-style leave starts (`cycle.js` reads the unload reports and API calls after the last one). `dialog`: a JavaScript dialog opened (a `beforeunload` prompt is accepted only while `leaving`; otherwise it is left as before). `macro-skipped`: approximate clicks a macro didn't replay |
 | `{ type: 'dom', readyState, text, sample, visible, media, frames, loader, hidden, elements, w, h }` | What the frame shows. Sent at DOMContentLoaded, load, page hide, and 1–60 s after start, only when it changes. Not sent from SCORM Lab's host pages |
 
 The recorder adds `t` (ms since start), `sid` and `frame` (the frame's URL). Its `t` and `sid` win over any the
@@ -367,6 +377,40 @@ moment the debugger attaches. (ponytail: a popup the content opens with a URL ca
 of every session to send its pending trace events: `Runtime.evaluate` with `silent`, so a cross-origin frame's refusal
 isn't recorded as a caught error). The lists are capped (5,000 scripts,
 10,000 requests…); `truncated` says which overflowed.
+
+## Save and resume (P2.4)
+
+`src/cycle.js` is pure: `readMacro`, `macroFromTrace`, `resumeOptions`, `cycleFindings`, `cycleRows` (and `summarise`, what
+one run did, from its `api` and `unload` probe reports). `main.js`, the CLI and the apps run the two launches.
+
+**Macros.** `options.macro` is `[{ t, type, … }]` (see the [CLI guide](cli.md#macros) for the events); `normaliseOptions`
+checks every event and sorts by `t`, with caps (2,000 events, 100 KB of text, `t` within an hour). `launchItem` plays
+it: each event is `live.input(e, true)` at `t` ms after the launch, through the same code as the live view (to the newest
+window of the run, with `sendInputEvent`), as long as the same run is still active. `live.input` also records its events
+(with `t` from the start of the run) while `macro.recording` is on: the `macro-record` handler starts it and `macro-save`
+stops it and returns them. The interface keeps the macro (`st.macro`) with its other options and sends it with every
+launch, as it does pins; `macro-from-run` returns the macro for a run made from its `input` reports. Macros and
+the cycle are refused in WebKit (`webkitMacro`, in `main.js` and the CLI): there is no input to replay.
+
+**Leaving.** A run started with `leave` (the cycle's first run; the job file's `close: true`) ends with
+`leaveLikeLearner` before the data model is read. In a popup (window-opener profiles, or a window the content opened) the
+newest window goes to `about:blank` and is destroyed. Otherwise the content is a frame of the test LMS's page and the
+frame's `src` is set to `about:blank`, found by following the `wrap.html` frames down; if there is none the whole window is
+navigated. The frame, not the window, because a page that is itself leaving can't report to the recorder (reports from a
+page that has navigated away are lost): the LMS page stays up, takes the API calls the content's handlers make, and is
+read afterwards. Only during the leave (`leaveLikeLearner` sets `recorder.leaving` and adds a `will-prevent-unload` handler to the windows) is a `beforeunload` dialog accepted and are prompts let through, so a prompt can't hold the leave; at any other time dialogs are recorded (`type: 'dialog'`) and left as before. The data model is read with `window.__labCmi()`, and if that page is gone, from the last
+`cmi-now` report (`recorder.lastCmi`; only when `config.snapshots`); it ends up in `trace.cmi`, as before.
+
+**Cycle.** `cycleStart` (handler `cycle-start`, sharing the experiment slot) runs `runToEnd(item, options, leave)`, then
+`runToEnd(item, resumeOptions(options), false, run1.trace.cmi)`: the same options, no macro, `resume: true` and run 1's data.
+Events `cycle`: `{ state: 'start' }`, `{ state: 'run', index, run }`, `{ state: 'done', runs, rows, findings }`, `{ state: 'error', message }`.
+The CLI's `cycle` does the same with two `runPackage` calls (the first with `close`, the second with `--resume-from` the first's saved run).
+
+**Findings.** `cycleFindings({ runs, macro })` reads each run's `type: 'api'` probe reports: the version (from
+`Initialize`), the successful `SetValue`s and `GetValue`s by element (suspend data, location, status, exit, entry), whether
+`Finish` or `Terminate` succeeded, and the calls after the first `unload` report. The entry the second run was offered is
+read from its `trace.cmi`. Checks run in this order: nothing saved (error; stops the rest), session not ended (warning), a finished attempt (info; stops the rest), no resume offered (warning; stops the rest), place not read (error), restarted from the beginning (the first location written differs from the last one left; warning), suspend data empty or shorter than what was left (warning). With none of them, one info finding. Titles and meanings are in [findings.md](findings.md#from-a-save-and-resume-test).
+`cycleRows` is the side-by-side table.
 
 ## Other browsers and device sizes (P2.3)
 

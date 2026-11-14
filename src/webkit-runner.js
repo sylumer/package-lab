@@ -60,6 +60,7 @@ export async function runWebkit({ plan, wait = 10, stop = () => false, onReady }
       let d
       try { d = JSON.parse(toLab(payload)) } catch { return }
       // A window's first blank page (the run's own, or one the host opens) isn't content; Electron's recorder attaches after it.
+      if (d.type === 'cmi-now') return   // the Electron recorder keeps these (P2.4); the data model is read at the end
       if (d.frame === 'about:blank' && source.frame === source.page.mainFrame()) return
       push('probe', { ...d, t: t(), sid: '' })
     })

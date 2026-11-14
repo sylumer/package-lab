@@ -27,6 +27,7 @@ import { Recorder, shiftTimes, isBlocked, nameAt } from '../src/recorder.js'
 import { launchPlan, serveRequest, WEBKIT_ORIGINS } from '../src/launch.js'
 import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams, storageMode } from '../src/profiles.js'
 import { originFindings, storageFindings } from '../src/rules.js'
+import { cycleFindings, cycleRows, readMacro, macroFromTrace, resumeOptions } from '../src/cycle.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import vm from 'node:vm'
 
@@ -92,6 +93,12 @@ writeFileSync(gatedFix, readFileSync(join(work, 'gated', 'lesson.js'), 'utf8').r
 // chromeonly: reads navigator.userAgentData.brands without a guard, which only Chromium has: it fails in WebKit (Safari).
 const chromeOnly = fixture('chromeonly', d => sub(d, 'lesson.js', /^/, "var brands = navigator.userAgentData.brands.map(function (b) { return b.brand }).join()\n"))
 
+// noexit: never sets cmi.core.exit, so an LMS has no reason to offer a resume. restart: reads its bookmark and then opens page 1 anyway.
+const noExit = fixture('noexit', d => sub(d, 'scorm.js', /\s*api\.LMSSetValue\('cmi\.core\.exit', exit\)/, ''))
+const restart = fixture('restart', d => sub(d, 'lesson.js', /show\(entry === 'resume'[^\n]*\n/, "scorm.get('cmi.core.lesson_location')\n  show(1)\n"))
+
+// typing: a text field and a password field, to see what is kept of typed text.
+const typing = fixture('typing', d => sub(d, 'lesson.html', '<nav>', '<p><input id="name" type="text"> <input id="pw" type="password" autocomplete="current-password"></p><nav>'))
 // handshake: tells its parent it is ready and waits for {type: 'launch'}, which no LMS here sends. polling: checks
 // window.API every 250 ms (the LMS offers it on the parent, so it never finds it on its own window).
 const handshake = fixture('handshake', d => {
@@ -303,7 +310,7 @@ assert.deepEqual(verdict([]).sev, 'ok')
 // Launch options: defaults, validation, unknown fields, the CLI line.
 const dflt = normaliseOptions()
 assert.deepEqual(dflt, { expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10, profile: 'generic', browser: 'chromium', viewport: null,
-  files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false }, 'options: defaults')
+  files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false, macro: [], recordInput: false }, 'options: defaults')
 assert.deepEqual(normaliseOptions({}), dflt); assert.notEqual(normaliseOptions().files, normaliseOptions().files, 'options: defaults are not shared')
 assert.deepEqual(normaliseOptions({ depth: '3', auto: '20', expose: '1.2', viewport: { width: 390, height: 844 } }), { ...dflt, depth: 3, auto: 20, expose: '1.2', viewport: { width: 390, height: 844, deviceScaleFactor: 1, mobile: false, touch: false, userAgent: '' } }, 'options: a saved { width, height } viewport reads as a plain size')
 for (const [o, re] of [[{ nope: 1 }, /Unknown option: nope/], [{ nope: 1, other: 2 }, /Unknown options: nope, other/], [{ expose: 'x' }, /expose.*one of/], [{ depth: 6 }, /depth/], [{ depth: 1.5 }, /depth/],
@@ -996,6 +1003,77 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.ok(f.evidence.some(e => /player-ready/.test(e)) && f.evidence.some(e => /polls every 250 ms/.test(e)), 'stall: evidence lists each item')
   assert.equal(stallFinding(st([post(100, HOST, 'x')], {}, ms('launched', 'wrote'))), null, 'stall: a run that wrote data wasn’t stalled'); assert.equal(stallFinding(st([])), null, 'stall: nothing waiting, no finding')
 }
+
+// ---- Save and resume (P2.4): macros and the cycle's findings ----
+{
+  const click = (t, x = 0.5, y = 0.5) => ({ t, type: 'click', x, y })
+  assert.deepEqual(normaliseOptions({ macro: [{ t: 2000, type: 'key', key: 'Enter' }, { t: 1000.4, type: 'click', x: 0.1, y: 1 }, { t: 5, type: 'text', text: 'hi' }, { t: 9, type: 'wheel', x: 0, y: 0, dy: -100 }, { t: 10, type: 'move', x: 0.2, y: 0.2 }] }).macro.map(e => e.t + e.type), ['5text', '9wheel', '10move', '1000click', '2000key'], 'macro: checked, rounded and sorted by time')
+  assert.deepEqual(normaliseOptions().macro, [], 'macro: empty by default')
+  for (const [bad, why] of [['x', /list of events/], [[1], /list of events/], [[{ t: 0, type: 'tap' }], /type to be click/], [[{ t: 0, type: 'click', x: 2, y: 0 }], /x to be a number from 0 to 1/], [[{ t: 0, type: 'click', x: 0 }], /y to be a number/],
+    [[{ t: -1, type: 'key', key: 'Enter' }], /t to be a number/], [[{ t: 3600001, type: 'key', key: 'Enter' }], /t to be a number/], [[{ t: 0, type: 'key', key: 'F13' }], /key to be a name/], [[{ t: 0, type: 'text', text: '' }], /text to be 1 to 2000/],
+    [[{ t: 0, type: 'click', x: 0, y: 0, z: 1 }], /unknown field in event 1: z/], [Array.from({ length: 2001 }, (_, i) => click(i)), /at most 2000 events/], [Array.from({ length: 52 }, () => ({ t: 0, type: 'text', text: 'x'.repeat(2000) })), /KB of typed text/]])
+    assert.throws(() => normaliseOptions({ macro: bad }), why, 'macro: refused ' + JSON.stringify(bad).slice(0, 50))
+  assert.match(cliCommand({ macro: [click(5)] }), / --macro macro\.json$/, 'macro: the CLI line')
+  assert.deepEqual(readMacro({ events: [click(1)] }), readMacro([click(1)]), 'macro file: a list or { events }'); assert.throws(() => readMacro({ nope: 1 }), /list of events/)
+  assert.deepEqual(macroFromTrace({ probe: [{ type: 'input', kind: 'click', x: 0.5, y: 0.25, t: 40 }, { type: 'api', t: 41 }, { type: 'input', kind: 'key', key: 'Tab', t: 50 }, { type: 'input', kind: 'text', text: 'a', t: 60 }] }),
+    [{ t: 40, type: 'click', x: 0.5, y: 0.25 }, { t: 50, type: 'key', key: 'Tab' }, { t: 60, type: 'text', text: 'a' }], 'macro: made from the probe’s input reports')
+  assert.deepEqual([resumeOptions({ macro: [click(1)], depth: 1 })].map(o => [o.macro.length, o.resume, o.depth]), [[0, true, 1]], 'cycle: the second run plays no macro and resumes')
+
+  // cycleFindings over runs made of the probe's API reports (SCORM 1.2).
+  const call = (c, el = '', value, result = 'true') => ({ type: 'api', version: '1.2', call: c, el, value, result })
+  const set = (el, v) => call('LMSSetValue', el, v), get = (el, result = 'x') => call('LMSGetValue', el, undefined, result)
+  const L = 'cmi.core.lesson_location', S = 'cmi.suspend_data', X = 'cmi.core.exit', ST = 'cmi.core.lesson_status'
+  const unload = { type: 'unload', event: 'pagehide', frame: 'lab://run/pkg/a.html', listeners: { beforeunload: 0, pagehide: 1, unload: 0 }, props: [] }
+  const run = (probe, cmi = {}) => ({ trace: { probe: [call('LMSInitialize'), ...probe], cmi: { '1.2': cmi } } })
+  const saving = [set(L, '3'), set(ST, 'incomplete'), set(S, '{"a":1}'), unload, set(X, 'suspend'), call('LMSFinish')]
+  const resumed = (extra = [], entry = 'resume') => run([get(X + 'x'), get(L), get(S), ...extra], { 'cmi.core.entry': entry })
+  const titles = (a, b, macro) => cycleFindings({ runs: [a, b], macro }).map(f => f.sev + ' ' + f.title)
+  assert.deepEqual(titles(run(saving), resumed([set(L, '3'), set(S, '{"a":1,"b":2}')])), ['info Saving and resuming worked'], 'cycle: a clean cycle')
+  let f = cycleFindings({ runs: [run([get(L)]), resumed()], macro: [] })
+  assert.deepEqual(f.map(x => x.sev + ' ' + x.title), ['error Leaving the course saved nothing'], 'cycle: nothing saved stops the checks')
+  assert.ok(f[0].evidence.some(e => /No macro was given/.test(e)) && f[0].evidence.some(e => /No beforeunload/.test(e)), 'cycle: nothing saved: says no macro, no unload event')
+  f = cycleFindings({ runs: [run([call('LMSSetValue', L, '', 'true'), unload]), resumed()], macro: [click(1)] })
+  assert.ok(f[0].sev === 'error' && f[0].evidence[0] === 'The macro played 1 events first.' && f[0].evidence.some(e => /a\.html added 0 beforeunload, 1 pagehide, 0 unload listeners/.test(e)), 'cycle: an empty location is not a save; the handlers are listed: ' + JSON.stringify(f[0].evidence))
+  f = cycleFindings({ runs: [run([set(L, '3'), unload, set('cmi.core.session_time', '0000:00:01.00'), set(X, 'suspend')]), resumed([set(L, '3')])] })
+  assert.deepEqual(f.map(x => x.sev + ' ' + x.title), ['warn Leaving the course didn’t end the session'], 'cycle: no Finish')
+  assert.ok(/API calls while leaving: LMSSetValue\(cmi\.core\.session_time\), LMSSetValue\(cmi\.core\.exit\)/.test(f[0].evidence.join()), 'cycle: calls made while leaving are listed: ' + f[0].evidence)
+  f = titles(run([...saving.slice(0, 4), call('LMSFinish')]), resumed([], ''))
+  assert.deepEqual(f, ['warn The LMS started a new attempt instead of resuming (entry was “”)'], 'cycle: exit never set, no resume offered')
+  f = cycleFindings({ runs: [run([...saving.slice(0, 4), set(X, 'normal'), call('LMSFinish')]), resumed([], '')] })
+  assert.ok(/exit written by the content: “normal”/.test(f[0].evidence[0]) && /Set cmi\.core\.exit to “suspend”/.test(f[0].fix), 'cycle: exit with another value')
+  assert.deepEqual(titles(run([...saving.slice(0, 2), set(ST, 'completed'), call('LMSFinish')]), resumed([], '')), ['info The first run finished the attempt, so there was nothing to resume'], 'cycle: a finished attempt has nothing to resume')
+  f = cycleFindings({ runs: [run(saving), run([set(L, '3')], { 'cmi.core.entry': 'resume' })] })
+  assert.deepEqual([f[0].sev, f[0].title, f[0].evidence.length], ['error', 'On resume, the content didn’t read its saved place', 2], 'cycle: saved place not read: ' + JSON.stringify(f))
+  assert.deepEqual(titles(run(saving), resumed([set(L, '1')])), ['warn The content read its saved place but started from the beginning'], 'cycle: restarts at the beginning')
+  assert.deepEqual(titles(run(saving), resumed([set(L, '3'), set(S, '')])), ['warn Suspend data written after resuming doesn’t start from what was saved'], 'cycle: suspend data starts again')
+  assert.deepEqual(titles(run(saving), resumed([set(L, '3'), set(S, '{"a":1,"b":22}')])), ['info Saving and resuming worked'], 'cycle: longer suspend data is fine')
+  // SCORM 2004 uses its own elements, found from the version the first run initialised.
+  const c4 = (c, el = '', value, result = 'true') => ({ type: 'api', version: '2004', call: c, el, value, result })
+  const r4 = (probe, cmi) => ({ trace: { probe: [c4('Initialize'), ...probe], cmi: { 2004: cmi } } })
+  assert.deepEqual(titles(r4([c4('SetValue', 'cmi.location', '5'), c4('SetValue', 'cmi.exit', 'suspend'), c4('Terminate')], {}), r4([c4('GetValue', 'cmi.location', undefined, '5'), c4('SetValue', 'cmi.location', '5')], { 'cmi.entry': 'resume' })), ['info Saving and resuming worked'], 'cycle: SCORM 2004')
+  const rows = cycleRows([run(saving, { [ST]: 'incomplete' }), resumed([set(L, '3')])])
+  assert.deepEqual(rows.find(r => r.label === 'Entry offered'), { label: 'Entry offered', a: '(nothing)', b: 'resume' }, 'cycle: rows'); assert.equal(rows.find(r => r.label === 'Exit set').a, 'suspend')
+  // Review fixes: the final leave's reports, Finish before or while leaving, exit as its own finding, approximate clicks, typed text.
+  const leaveMark = { type: 'leave' }, early = { ...unload, frame: 'lab://run/pkg/early.html' }
+  f = cycleFindings({ runs: [run([early, set(L, '3'), leaveMark, unload, call('LMSSetValue', X, 'suspend'), call('LMSFinish')]), resumed([set(L, '3')])] })
+  assert.deepEqual(f.map(x => x.title), ['Saving and resuming worked'], 'cycle: Finish while leaving counts')
+  f = cycleFindings({ runs: [run([early, set(L, '3'), set(ST, 'incomplete'), unload, leaveMark, call('LMSSetValue', X, 'suspend')]), resumed([set(L, '3')])] })
+  assert.deepEqual(f.map(x => x.title), ['Leaving the course didn’t end the session'], 'cycle: Finish before the leave marker is not "while leaving"; unloads before it are not the leave')
+  assert.deepEqual(f[0].evidence, ['No beforeunload, pagehide or unload event reached the content.'], 'cycle: only reports after the leave are listed: ' + f[0].evidence)
+  f = cycleFindings({ runs: [run([set(L, '3'), call('LMSFinish')]), resumed([], '')] })
+  assert.deepEqual(f.map(x => x.title), ['The content never sets exit, and its status is “”'], 'cycle: exit unset with no incomplete status is its own finding, and the entry finding is left out as redundant')
+  f = cycleFindings({ runs: [run([...saving.slice(0, 4), set(X, 'normal'), call('LMSFinish')]), resumed([], '')] })
+  assert.deepEqual(f.map(x => x.title), ['The content exits with “normal” instead of “suspend”'], 'cycle: exit with another value')
+  f = cycleFindings({ runs: [run(saving.slice(0, 2).concat([call('LMSFinish')])), resumed([], '')] })
+  assert.deepEqual(f.map(x => x.title), ['The LMS started a new attempt instead of resuming (entry was “”)'], 'cycle: exit unset with the status incomplete passes the exit check; entry still says no resume')
+  // approximate clicks and typed text
+  assert.deepEqual(readMacro([{ t: 1, type: 'click', x: 0.1, y: 0.2, approx: true }]), [{ t: 1, type: 'click', x: 0.1, y: 0.2, approx: true }], 'macro: approx clicks are kept')
+  assert.throws(() => normaliseOptions({ macro: [{ t: 1, type: 'click', x: 0, y: 0, approx: 1 }] }), /approx/, 'macro: approx is true or left out')
+  assert.throws(() => normaliseOptions({ macro: [{ t: 0, type: 'constructor' }] }), /type to be click/, 'macro: only own event types (constructor is not one)')
+  assert.deepEqual(macroFromTrace({ probe: [{ type: 'input', kind: 'click', x: 0.5, y: 0.5, approx: true, t: 5 }, { type: 'input', kind: 'text', length: 6, redacted: true, t: 6 }, { type: 'input', kind: 'text', text: 'ok', t: 7 }] }),
+    [{ t: 5, type: 'click', x: 0.5, y: 0.5, approx: true }, { t: 7, type: 'text', text: 'ok' }], 'macro: redacted text (a password field) is left out, approx kept')
+  assert.equal(normaliseOptions({ recordInput: true }).recordInput, true); assert.match(cliCommand({ recordInput: true }), / --record-input$/, 'recordInput: the CLI line'); assert.throws(() => normaliseOptions({ recordInput: 'yes' }), /true or false/)
+}
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -1331,6 +1409,46 @@ if (!process.argv.includes('--unit')) {
   assert.ok(STEPS.findIndex(s => s[0] === lv.furthest) >= STEPS.findIndex(s => s[0] === 'wrote'), 'live: reaches at least wrote: ' + lv.furthest)
   console.log('live: ok')
 
+  // Save and resume (P2.4): a macro clicks Next, then Save and exit (positions across the window, measured on the sample page).
+  const macroFile = join(work, 'macro.json'); writeFileSync(macroFile, JSON.stringify([{ t: 400, type: 'click', x: 0.631, y: 0.328 }, { t: 900, type: 'click', x: 0.73, y: 0.328 }]))
+  const cycle = (zip, ...args) => { const r = node(['cycle', zip, '--wait', '2', '--json', ...args]); assert.ok(r.stdout, 'cycle printed nothing: ' + r.stderr); return JSON.parse(r.stdout) }
+  const cyc = cycle(good, '--macro', macroFile)
+  assert.deepEqual(cyc.findings.map(f => f.sev + ' ' + f.title), ['info Saving and resuming worked'], 'cycle: good passes: ' + JSON.stringify(cyc.findings))
+  assert.deepEqual([cyc.rows.find(r => r.label === 'Entry offered').b, cyc.rows.find(r => r.label === 'Exit set').a, cyc.rows.find(r => r.label === 'Location saved (first, last)').b], ['resume', 'suspend', '2, 2'], 'cycle: the second run resumed on page 2: ' + JSON.stringify(cyc.rows))
+  assert.equal(cyc.base.macro.length, 2, 'cycle: the macro is in the options')
+  console.log('cycle: ok')
+  if (slow) {
+    // Without a macro, only what start-up saves counts; the findings of the fixtures; the options and the text output; WebKit is refused.
+    assert.deepEqual(cycle(good).findings.map(f => f.sev), ['info'], 'cycle: with no macro the start-up bookmark and the pagehide handler still pass')
+    const ne = cycle(noExit, '--macro', macroFile)
+    assert.deepEqual(ne.findings.map(f => f.sev + ' ' + f.title), ['warn The LMS started a new attempt instead of resuming (entry was “”)'], 'cycle: no exit: ' + JSON.stringify(ne.findings))
+    assert.ok(ne.findings[0].evidence[0] === 'exit written by the content: nothing', 'cycle: no exit: evidence')
+    const rs = cycle(restart, '--macro', macroFile)
+    assert.deepEqual(rs.findings.map(f => f.sev + ' ' + f.title), ['warn The content read its saved place but started from the beginning'], 'cycle: restart: ' + JSON.stringify(rs.findings))
+    assert.deepEqual(rs.findings[0].evidence, ['left at “2”', 'first saved after resuming: “1”'], 'cycle: restart: evidence')
+    const cdir = join(work, 'cycle-runs'), ct = node(['cycle', good, '--wait', '2', '--macro', macroFile, '--out', cdir])
+    assert.match(ct.stdout, /Run 1: leaves {2,}Run 2: resumes[\s\S]*Entry offered {2,}ab-initio {2,}resume[\s\S]*INFO {2}Saving and resuming worked[\s\S]*Runs saved in /, 'cycle: text output: ' + ct.stdout + ct.stderr)
+    assert.ok(existsSync(join(cdir, '01-first.json')) && JSON.parse(readFileSync(join(cdir, '02-resumed.json'), 'utf8')).launch.resume === true, 'cycle: --out keeps both runs')
+    assert.equal(node(['cycle', noExit, '--wait', '2', '--macro', macroFile, '--strict']).status, 0, 'cycle: --strict ignores warnings')
+    // A macro in an ordinary run reaches the page, and the run's saved options carry it.
+    const mr = run(good, '--wait', '3', '--macro', macroFile)
+    assert.ok(mr.api.some(a => a.el === 'cmi.core.lesson_location' && a.value === '2') && mr.launch.options.macro.length === 2 && mr.api.some(a => a.call === 'LMSFinish'), 'macro: replayed in a run: ' + calls(mr))
+    writeFileSync(optFile, JSON.stringify({ macro: [{ t: 1, type: 'tap' }] })); assert.match(node(['run', good, '--options', optFile]).stderr, /type to be click/, 'macro: a bad macro in the options file fails')
+    writeFileSync(optFile, '{"nope":1}'); assert.match(node(['run', good, '--macro', optFile]).stderr, /list of events/, 'macro: a bad macro file fails')
+    // Typed text: kept only with --record-input, never from the password field (its length only), and keys are not kept for it either.
+    const typeMacro = join(work, 'type.json'); writeFileSync(typeMacro, JSON.stringify([{ t: 400, type: 'click', x: 0.278, y: 0.3 }, { t: 700, type: 'text', text: 'abc' }, { t: 1000, type: 'key', key: 'Tab' }, { t: 1300, type: 'text', text: 'hunter2' }]))
+    for (const [flag, kept] of [[[], false], [['--record-input'], true]]) {
+      const tOut = join(work, 'typing' + kept + '.json'); run(typing, '--wait', '4', '--macro', typeMacro, '--out', tOut, ...flag)
+      const inputs = JSON.parse(readFileSync(tOut, 'utf8')).trace.probe.filter(p => p.type === 'input')
+      assert.ok(!JSON.stringify(inputs).includes('hunter2'), 'typing: the password is never kept: ' + JSON.stringify(inputs))
+      assert.equal(inputs.some(p => p.kind === 'text' && p.text === 'abc'), kept, 'typing: text kept only with --record-input: ' + JSON.stringify(inputs))
+      assert.equal(inputs.some(p => p.redacted && p.length === 7), kept, 'typing: a password field is reported by length only, and only when recording text: ' + JSON.stringify(inputs))
+      assert.ok(inputs.some(p => p.kind === 'click'), 'typing: the click is kept')
+    }
+    assert.match(node(['cycle', good, '--browser', 'webkit']).stderr, /Chromium only/, 'cycle: WebKit is refused')
+    assert.match(node(['run', good, '--browser', 'webkit', '--macro', macroFile]).stderr, /Chromium only/, 'macro: WebKit is refused')
+  }
+
   // The web interface: token, upload, launch, live frames, the run, saved runs.
   const data = join(work, 'web-data')
   const server = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, SCORM_LAB_DATA: data }, stdio: ['ignore', 'pipe', 'ignore'] })
@@ -1451,6 +1569,35 @@ if (!process.argv.includes('--unit')) {
       const dd = JSON.parse(/event: drill\ndata: (\{"state":"done".*)\n/.exec(drText)?.[1] ?? 'null')
       assert.ok(dd?.result.cause?.kind === 'file' && dd.result.chain.at(-1).file === 'data/config.json' && dd.result.traceRun && dd.result.watchRun, 'web: drill-down result: ' + drText.slice(-800))
       assert.equal((drText.match(/"state":"step"/g) ?? []).length, forced ? 1 : 2, 'web: traced again (unless every run is traced), then watched')
+    }
+    // Macros and Test saving over the handlers (slow): Record clicks keeps what goes through live-input with its time, the probe saw the
+    // same click, and the cycle runs twice and says what it found, as 'cycle' events.
+    if (slow) {
+      assert.equal((await fetch(base + '/api/upload?name=good.zip', { method: 'POST', headers: H, body: readFileSync(good) })).status, 200)
+      assert.equal(await invoke('macro-record', { on: true }), true, 'web: recording starts')
+      await invoke('launch', { item: 0, auto: 6 })
+      await new Promise(r => setTimeout(r, 1500))
+      assert.equal(await invoke('live-input', { type: 'click', x: 0.631, y: 0.328 }), true)
+      const rec = await invoke('macro-save')
+      assert.deepEqual(rec.map(e => [e.type, e.x, e.y]), [['click', 0.631, 0.328]], 'web: the click is recorded'); assert.ok(rec[0].t >= 1000 && rec[0].t < 6000, 'web: with its time into the run: ' + rec[0].t)
+      await invoke('live-input', { type: 'click', x: 0.2, y: 0.2 })
+      assert.equal((await invoke('macro-save')).length, 1, 'web: saving stops recording: a later click is not added')
+      const mid = await invoke('stop'), seen = await invoke('macro-from-run', { run: mid })
+      assert.ok(seen.length === 2 && seen[0].type === 'click' && Math.abs(seen[0].x - 0.631) < 0.01 && Math.abs(seen[0].y - 0.328) < 0.02, 'web: the probe saw both clicks, recorded or not: ' + JSON.stringify(seen))
+      await assert.rejects(invoke('macro-from-run', { run: 9999 }), /Choose a run/, 'web: macro-from-run needs a run')
+      await assert.rejects(invoke('options', { macro: [{ t: 0, type: 'click' }] }), /x to be a number/, 'web: a bad macro is refused')
+      assert.match((await invoke('options', { macro: rec })).command, / --macro macro\.json$/, 'web: the macro in the CLI line')
+      const cEvs = await fetch(base + '/api/events', { headers: H }), cReader = cEvs.body.getReader()
+      let cText = ''
+      assert.equal(await invoke('cycle-start', { item: 0, wait: 4, macro: rec }), true, 'web: the cycle starts')
+      await assert.rejects(invoke('cycle-start', { item: 0 }), /already running/, 'web: one at a time')
+      while (!/event: cycle\ndata: \{"state":"(done|error)".*\n/.test(cText)) cText += new TextDecoder().decode((await cReader.read()).value)
+      cReader.cancel()
+      const cd = JSON.parse(/event: cycle\ndata: (\{"state":"done".*)\n/.exec(cText)?.[1] ?? 'null')
+      assert.ok(cd && cd.runs.length === 2 && cd.findings.map(f => f.title).join() === 'Saving and resuming worked' && cd.rows.find(r => r.label === 'Entry offered').b === 'resume', 'web: the cycle result: ' + cText.slice(-600))
+      assert.equal((cText.match(/"state":"run"/g) ?? []).length, 2, 'web: an event for each run')
+      await assert.rejects(invoke('cycle-start', { item: 0, browser: 'webkit' }), /Chromium only/, 'web: the cycle refuses WebKit')
+      await assert.rejects(invoke('launch', { item: 0, browser: 'webkit', macro: rec }), /Chromium only/, 'web: a macro refuses WebKit')
     }
     // A WebKit run over the handlers (slow, with Playwright): the options line, the run through the CLI's Node path, and Stop.
     if (slow && !forced && wkReady) {

@@ -197,6 +197,25 @@ Only after **Run all** on the Experiments tab, or `scorm-lab experiment`. They c
 | With storage blocked, the content gets less far | warning | A variant with storage blocked (the **storage** experiment) reached an earlier step than the default, which doesn't block it. The evidence lists the steps it no longer reached | Open the blocked run: "The content needs storage the browser can block" says where the content uses storage. Keep its state in the LMS instead |
 | Nothing tried made a difference | info | No variant got further than the default | Try your own variants, or look at what stops the default run in its own findings |
 
+## From a save-and-resume test
+
+Only after **Test saving** (the Test saving tab) or `scorm-lab cycle`. The first run plays the macro and then leaves the
+way a learner closing the window does; the second run resumes from the data the first left. See
+[Testing saving](user-guide.md#testing-that-progress-is-saved-and-resumed). When the first finding is an error, the
+checks that need the second run are skipped.
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| Leaving the course saved nothing | error | The content never wrote suspend data, a location or a status (with a value) in the first run. An LMS would have nothing to resume from. The evidence says how many macro events were played (or that no macro was given, so nothing was clicked) and lists what the probe saw in the final leave (not earlier page changes): how many `beforeunload`, `pagehide` and `unload` listeners it had added, its `on…` handlers, and the API calls it made while leaving | Save the bookmark and suspend data as the learner moves, and again in the `pagehide` handler. Record clicks in the live view to give the test something to save |
+| Leaving the course didn’t end the session | warning | Nothing called `LMSFinish` or `Terminate` while the content was leaving (its `beforeunload`, `pagehide` and `unload` handlers), and no button the macro clicked had ended the session before. Some LMSs then lose the last values or count the attempt as abandoned. The evidence lists the unload handlers and the calls made while leaving | Call `LMSFinish` or `Terminate` from `pagehide` (and `unload`, for older browsers), after the last `SetValue` |
+| The first run finished the attempt, so there was nothing to resume | info | The status at the end was completed, passed or failed. A resume only applies to an attempt left unfinished, so the second run's checks are skipped | Use a macro that stops before the end |
+| The content exits with “…” instead of “suspend” / The content never sets exit, and its status is “…” | warning | The exit the content set (or didn't set, with a status other than incomplete) is not one an LMS resumes from. The evidence shows the exit, the status and the `entry` the second run got; this test LMS, like many real ones, started a new attempt. The second run's other checks are skipped | Set `cmi.core.exit` or `cmi.exit` to `suspend` whenever the learner leaves before finishing, before the session ends |
+| The LMS started a new attempt instead of resuming (entry was “…”) | warning | The exit was fine by the rule above (`suspend`, or unset with the status incomplete), but the second run still wasn't offered a resume. Unset is accepted by that rule, yet this test LMS only offers a resume after `exit = suspend`. The second run's other checks are skipped | Set `cmi.core.exit` or `cmi.exit` to `suspend` whenever the learner leaves before finishing, before the session ends |
+| On resume, the content didn’t read its saved place | error | The second run was offered a resume, but the content never read the location or suspend data that the first run saved (the evidence lists which) | When `entry` is `resume`, read the location and suspend data on launch and go back to them |
+| The content read its saved place but started from the beginning | warning | The first location the content saved after resuming isn't where the first run left it | Use the location that was read to open the right page, and keep the bookmark until the learner moves on |
+| Suspend data written after resuming doesn’t start from what was saved | warning | The first suspend data the second run wrote was empty, or shorter than what the first run left, so earlier progress would be lost | Read the suspend data on launch and add to it |
+| Saving and resuming worked | info | None of the above applies. The evidence says what was saved and the exit and entry values | Nothing |
+
 ## From a discovery
 
 Only after **Discover** on the Server needs tab, or `scorm-lab discover`. See

@@ -24,6 +24,7 @@
       <option value="0">I stop it</option><option value="10">10 s</option><option value="20">20 s</option><option value="30">30 s</option>
       <option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
     <button id="launch" type="button" disabled>Launch</button>
+    <button id="cycle" type="button" class="secondary" disabled title="Run, leave the way a learner closing the window does, then resume from what was saved, and check the content saved and read its place.">Test saving</button>
   </div>
   <div class="bar">
     <label class="grow">Working copy (reference) <input id="ref-url" type="url" placeholder="https://… where the course works (hosted preview, LMS, SCORM Cloud)" spellcheck="false"></label>
@@ -47,6 +48,9 @@
     <h3 class="section">Profile fields</h3>
     <p class="muted small" id="profile-notes"></p>
     <div id="profile-fields" class="row wrap"></div>
+    <h3 class="section">Macro</h3>
+    <label class="check" title="Keep the text typed in the course’s frames in the run, so “Use this run’s clicks” can include it. Never from password fields. Saved in the run."><input type="checkbox" id="record-input"> Keep typed text in runs (for macros)</label>
+    <div id="macro"></div>
     <h3 class="section">Pins</h3>
     <div id="pins"></div>
     <h3 class="section">Answers</h3>

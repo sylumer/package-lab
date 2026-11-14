@@ -73,6 +73,44 @@
     ;[1, 2, 4, 7, 10, 15, 25, 40, 60].forEach(s => setTimeout(dom, s * 1000)) // also when load never comes
     addEventListener('pagehide', dom)
   }
+  // The learner's input and the content's leaving (P2.4), in the content's frames only. Input is reported as macro events
+  // (src/cycle.js macroFromTrace): clicks as 0–1 positions across the top frame (frames are added up when they can be reached),
+  // named keys, and typed text. Leaving: beforeunload, pagehide and unload are reported once, as the first of them reaches the window (this
+  // listener is first, in the capture phase) with how many listeners the content added for each, and which on… handlers it has.
+  // The listeners are counted by the addEventListener hook below.
+  const leaveCounts = { beforeunload: 0, pagehide: 0, unload: 0 }
+  if (!ownHost) {
+    const unit = n => Math.round(Math.min(1, Math.max(0, n)) * 10000) / 10000
+    const KEYS = { ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', PageUp: 'PageUp', PageDown: 'PageDown', Home: 'Home', End: 'End' }
+    let sent = 0
+    // Typed text is kept only when the run asks (the recordInput option, window.__labText), and never from a password-like field: its
+    // type is password, or its autocomplete names a password, a card detail or a one-time code (the key names, which could be
+    // characters, are left out too). For those the report has only the length.
+    const recordText = window.__labText === true
+    try { delete window.__labText } catch (err) { /* kept */ }
+    const target = e => { try { return e.composedPath()[0] } catch (err) { return e.target } }
+    const secret = t => { try { return !!t && (t.type === 'password' || /(^|\s)(current-password|new-password|one-time-code|cc-[a-z-]+)(\s|$)/i.test(t.getAttribute('autocomplete') || '')) } catch (err) { return true } }
+    const input = data => { if (sent++ < 2000) report({ type: 'input', ...data }) }
+    addEventListener('pointerdown', e => {
+      if (!e.isTrusted || e.button !== 0) return
+      let ox = e.clientX, oy = e.clientY, f = window
+      try { while (f !== f.parent && f.frameElement) { const r = f.frameElement.getBoundingClientRect(); ox += r.left; oy += r.top; f = f.parent } } catch (err) { /* another origin */ }
+      let approx = false
+      try { approx = f !== f.parent } catch (err) { approx = true }   // stopped at a frame inside another origin's page: only the frame's own position is known
+      input({ kind: 'click', x: unit(ox / f.innerWidth), y: unit(oy / f.innerHeight), ...(approx ? { approx: true } : {}) })
+    }, true)
+    addEventListener('keydown', e => { if (e.isTrusted && KEYS[e.key] && !e.metaKey && !e.ctrlKey && !secret(target(e))) input({ kind: 'key', key: KEYS[e.key] }) }, true)
+    addEventListener('input', e => {
+      if (!e.isTrusted || !recordText || typeof e.data !== 'string' || !e.data) return
+      input(secret(target(e)) ? { kind: 'text', length: e.data.length, redacted: true } : { kind: 'text', text: e.data.slice(0, 2000) })
+    }, true)
+    let left = false
+    for (const ev of Object.keys(leaveCounts)) addEventListener(ev, () => {
+      if (left) return
+      left = true   // one report, from the first of the three: a page that is going away may not get later ones out
+      report({ type: 'unload', event: ev, listeners: { ...leaveCounts }, props: Object.keys(leaveCounts).filter(n => typeof window['on' + n] === 'function') })
+    }, true)
+  }
   // Pins (P1.2): the recorder puts the pins for this run in window.__labPins. Top-level names become accessors on the
   // window, so `var x = …` at the top of a classic script assigns through the setter and is ignored. A dotted path is
   // an accessor on its root that, when given an object, pins the next name on that object, and so on. Every read and
@@ -252,6 +290,7 @@
     let nextId = 0
     hook(typeof EventTarget === 'function' ? EventTarget.prototype : null, 'addEventListener', (t, th, a) => {
       try {
+        if (!ownHost && (th == null || th === window) && typeof a[1] === 'function' && Object.hasOwn(leaveCounts, a[0])) leaveCounts[a[0]]++
         if (a[0] === 'message' && typeof a[1] === 'function' && isWin(th)) {
           let w = wrappers.get(a[1])
           if (!w) {

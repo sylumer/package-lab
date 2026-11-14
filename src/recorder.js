@@ -31,8 +31,8 @@ export const storagePrefix = mode => mode === 'blocked' ? "globalThis.__labStora
 
 // The script put into every frame ahead of the page's own: the run's pins, storage mode and shape/trace probes, then probe.js.
 // The same in every browser (the CDP recorder below, and src/webkit-runner.js).
-export const probeSource = ({ pins = [], responses = [], trace = false, storage = 'normal' } = {}) =>
-  storagePrefix(storage) + pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + (trace ? TRACE + ';\n' : '') + PROBE
+export const probeSource = ({ pins = [], responses = [], trace = false, storage = 'normal', recordInput = false } = {}) =>
+  (recordInput ? 'globalThis.__labText = true;\n' : '') + storagePrefix(storage) + pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + (trace ? TRACE + ';\n' : '') + PROBE
 
 export class Recorder {
   // pins and responses are the run's launch options (pins.js): pins go into the probe, responses are served through the Fetch domain.
@@ -40,9 +40,9 @@ export class Recorder {
   // storage: the run's effective mode (profiles.js storageMode); 'blocked' puts a line ahead of the probe that makes it block storage.
   // trace (a traced run, P1.4) puts trace-probe.js ahead of the probe too; its reports go to trace.exec.
   // viewport (P2.3): a device size, applied through Emulation to the page, and its user agent to every frame (a pinned user agent wins).
-  constructor(wc, { label, caught = true, pins = [], responses = [], trace = false, storage = 'normal', viewport = null } = {}) {
+  constructor(wc, { label, caught = true, pins = [], responses = [], trace = false, storage = 'normal', viewport = null, recordInput = false } = {}) {
     this.wc = wc; this.dbg = wc.debugger; this.caught = caught; this.t0 = Date.now(); this.sessions = new Set([''])
-    this.probe = probeSource({ pins, responses, trace, storage }); this.userAgent = userAgentPin(pins) ?? (viewport?.userAgent || undefined); this.viewport = viewport; this.responses = responses; this.answered = new Map()
+    this.probe = probeSource({ pins, responses, trace, storage, recordInput }); this.userAgent = userAgentPin(pins) ?? (viewport?.userAgent || undefined); this.viewport = viewport; this.responses = responses; this.answered = new Map()
     this.traced = trace; this.execCount = 0
     this.trace = { label, browser: 'chromium', started: new Date().toISOString(), targets: [], scripts: [], requests: [], navigations: [], console: [], exceptions: [],
       caught: [], log: [], probe: [], exec: [], coverage: [], sources: {}, truncated: {} }
@@ -130,6 +130,10 @@ export class Recorder {
       }
       case 'Network.responseReceived': { const r = this.req.get(p.requestId); if (r) { r.status = p.response.status; r.mime = p.response.mimeType } return }
       case 'Network.loadingFailed': { const r = this.req.get(p.requestId); if (r) { r.failed = p.blockedReason || p.corsErrorStatus?.corsError || p.errorText; r.canceled = p.canceled } return }
+      // A dialog is recorded. During a learner-style leave (P2.4, `leaving`) a beforeunload prompt is accepted, as a learner confirming would; otherwise it is left as it was.
+      case 'Page.javascriptDialogOpening':
+        this.push('probe', { type: 'dialog', kind: p.type, message: String(p.message ?? '').slice(0, 200), leaving: !!this.leaving, t, sid })
+        return this.leaving && p.type === 'beforeunload' ? this.send('Page.handleJavaScriptDialog', { accept: true }, sid).catch(() => {}) : undefined
       case 'Page.frameNavigated': return this.trace.navigations.push({ t, sid, frame: p.frame.id, parent: p.frame.parentId ?? '', url: p.frame.url })
       case 'Runtime.consoleAPICalled':
         return this.push('console', { t, sid, level: p.type, text: p.args.map(argText).join(' ').slice(0, 2000), at: frames(p.stackTrace).slice(0, 3) })
@@ -143,6 +147,7 @@ export class Recorder {
         let d
         try { d = JSON.parse(p.payload) } catch { return /* bad payload */ }
         if (d?.type === 'exec' && Array.isArray(d.events)) return this.exec(t, sid, d)
+        if (d?.type === 'cmi-now') { this.lastCmi = d.values; return }   // the LMS page's data model after its latest change (host.js); kept for a run that left
         this.push('probe', { ...d, t, sid })   // t last: a report's own t (the test LMS's API calls have Date.now()) must not replace the run-relative time
         this.onProbe?.(this.trace.probe.at(-1))
     }

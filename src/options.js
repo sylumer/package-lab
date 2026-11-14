@@ -5,9 +5,13 @@ import { pinPathProblem, PIN_MODES, matcher, USER_AGENT } from './pins.js'
 import { checkProfile, launchProfile } from './profiles.js'
 const DEFAULTS = Object.freeze({
   expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10,
-  profile: 'generic', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false,
+  profile: 'generic', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false, macro: [], recordInput: false,
 })
 const MAX_PIN = 1024 ** 2, MAX_BODY = 10 * 1024 ** 2, MAX_BODIES = 20 * 1024 ** 2, MAX_LIST = 100   // a pin's value, a response's body, entries in pins or responses
+// A macro (P2.4): events, at most this many, with at most this much typed text in all, none later than an hour into the run.
+export const MACRO_KEYS = /^(Enter|Tab|Escape|Backspace|Delete|Space|Up|Down|Left|Right|PageUp|PageDown|Home|End)$/
+const MAX_MACRO = 2000, MAX_MACRO_TEXT = 100 * 1024, MAX_MACRO_T = 3600 * 1000
+const MACRO_FIELDS = { click: ['x', 'y', 'approx'], move: ['x', 'y', 'approx'], wheel: ['x', 'y', 'dy'], key: ['key'], text: ['text'] }
 const MAX_FILE = 50 * 1024 ** 2, MAX_TOTAL = 200 * 1024 ** 2   // changed files: per file and in all
 const EXPOSE = ['manifest', 'both', '1.2', '2004', 'none']
 export const STORAGE = ['normal', 'blocked', 'partitioned']
@@ -39,6 +43,8 @@ const check = {
   expose: (k, v) => str(k, v, EXPOSE),
   depth: (k, v) => { const n = num(k, v, 0, 5); return Number.isInteger(n) ? n : bad(k, 'must be a whole number from 0 to 5') },
   opener: bool, resume: bool, caught: bool, trace: bool,
+  // Keep the text typed in the content's frames in the probe's input reports (P2.4), for making a macro from the run. Never from password-like fields.
+  recordInput: bool,
   auto: (k, v) => num(k, v, 0, 3600),
   wait: (k, v) => num(k, v, 1, 3600),
   // A preset name or a custom profile object (profiles.js); 'none', from runs saved before P2.1, is generic.
@@ -128,6 +134,31 @@ const check = {
   // normal: the run window's storage as it is (it lasts from run to run while the app is open) · blocked: Safari's refusals in
   // content frames (the probe) · partitioned: the same storage, emptied before the run. The profile's cookies field can block too.
   storage: (k, v) => str(k, v, STORAGE),
+  // [{ t (ms into the run), type: 'click' | 'move' | 'wheel' | 'key' | 'text', x, y (0–1 across the window), dy, key, text }], replayed through the live view's input (main.js live.input).
+  macro: (k, v) => {
+    if (!Array.isArray(v) || !v.every(obj)) bad(k, 'must be a list of events like { "t": 1500, "type": "click", "x": 0.5, "y": 0.3 }')
+    if (v.length > MAX_MACRO) bad(k, `can hold at most ${MAX_MACRO} events`)
+    let text = 0
+    const unit = (e, f) => typeof e[f] === 'number' && e[f] >= 0 && e[f] <= 1 ? e[f] : bad(k, `needs ${f} to be a number from 0 to 1 in each ${e.type} event`)
+    return v.map((e, i) => {
+      const allowed = Object.hasOwn(MACRO_FIELDS, e.type) ? MACRO_FIELDS[e.type] : null
+      if (!allowed) bad(k, `needs type to be click, move, wheel, key or text in event ${i + 1}`)
+      const extra = Object.keys(e).filter(f => !['t', 'type', ...allowed].includes(f))
+      if (extra.length) bad(k, `has an unknown field in event ${i + 1}: ${extra.join(', ')}`)
+      if (typeof e.t !== 'number' || !(e.t >= 0 && e.t <= MAX_MACRO_T)) bad(k, `needs t to be a number of milliseconds from 0 to ${MAX_MACRO_T} in event ${i + 1}`)
+      const out = { t: Math.round(e.t), type: e.type }
+      if (allowed.includes('x')) { out.x = unit(e, 'x'); out.y = unit(e, 'y') }
+      if (e.approx !== undefined) { if (e.approx !== true) bad(k, `needs approx to be true or left out in event ${i + 1}`); out.approx = true }   // a click in another origin's frame, placed approximately: not replayed
+      if (e.type === 'wheel') { if (typeof e.dy !== 'number' || !Number.isFinite(e.dy) || Math.abs(e.dy) > 10000) bad(k, `needs dy to be a number from -10000 to 10000 in event ${i + 1}`); out.dy = e.dy }
+      if (e.type === 'key') { if (!MACRO_KEYS.test(e.key)) bad(k, `needs key to be a name like Enter or Tab in event ${i + 1}, not ${JSON.stringify(e.key)}`); out.key = e.key }
+      if (e.type === 'text') {
+        if (typeof e.text !== 'string' || !e.text || e.text.length > 2000) bad(k, `needs text to be 1 to 2000 characters in event ${i + 1}`)
+        if ((text += e.text.length) > MAX_MACRO_TEXT) bad(k, `holds more than ${MAX_MACRO_TEXT / 1024} KB of typed text in all`)
+        out.text = e.text
+      }
+      return out
+    }).sort((a, b) => a.t - b.t)
+  },
 }
 
 // Returns the full options object for o (missing fields get defaults). Throws on unknown fields and bad values.
@@ -157,7 +188,7 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   // Pins and responses with a flag's worth of settings get one; anything else (frames, headers, a method) goes in the options file.
   const pinFlag = o.pins.every(p => p.frames === 'content' && p.mode === 'force'), answerFlag = o.responses.every(r => !r.method && !Object.keys(r.headers).length)
   const vpFlag = o.viewport ? viewportFlag(o.viewport) : ''
-  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', 'profile', 'storage', 'browser', ...vpFlag || !o.viewport ? ['viewport'] : [], ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
+  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', 'profile', 'storage', 'browser', 'macro', 'recordInput', ...vpFlag || !o.viewport ? ['viewport'] : [], ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
   const rest = Object.keys(DEFAULTS).filter(k => !flagged.includes(k) && JSON.stringify(o[k]) !== JSON.stringify(DEFAULTS[k]))
   // Changed files: --override path=path, which assumes a local copy saved at the same relative path.
   for (const p of Object.keys(o.files)) a.push('--override', quote(`${p}=${p}`))
@@ -167,6 +198,8 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (o.trace) a.push('--trace')
   if (o.storage !== DEFAULTS.storage) a.push('--storage', o.storage)
   if (o.browser !== DEFAULTS.browser) a.push('--browser', o.browser)
+  if (o.macro.length) a.push('--macro', 'macro.json')
+  if (o.recordInput) a.push('--record-input')
   if (vpFlag) a.push('--viewport', vpFlag)
   // A preset by name; a custom profile in a file of its own.
   if (typeof o.profile === 'string' && o.profile !== DEFAULTS.profile) a.push('--profile', o.profile)

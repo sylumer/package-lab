@@ -11,6 +11,8 @@ Concierge module use it too.
 - [run](#run)
 - [experiment](#experiment)
 - [discover](#discover)
+- [drill](#drill)
+- [cycle](#cycle)
 - [report](#report)
 - [open](#open)
 - [serve](#serve)
@@ -48,6 +50,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `experiment <package.zip>` | Runs the same launch several ways, one after another, and prints how far each got |
 | `discover <package.zip>` | Works out what the content wants from its server: the fields it reads from each answer, and a stand-in response |
 | `drill <package.zip>` | Why it stopped: the decisions that led to the dead end, their values, and where each `undefined` came from |
+| `cycle <package.zip>` | Tests saving: runs, leaves the way a learner does, then resumes from what it left, and checks the content saved and read its place |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
@@ -125,6 +128,8 @@ app.
 | `--storage` | `normal` | Storage in the content's frames: `blocked` makes `localStorage` and `sessionStorage` throw a `SecurityError`, `document.cookie` read empty and `indexedDB.open` fail, as Safari does for content in another site's page; `partitioned` empties the run window's storage first. With `normal`, a profile whose `cookies` is `third-party-blocked` (`scorm-cloud`) blocks it too. See the [user guide](user-guide.md#storage-blocked-in-the-contents-frames). In an options file: `"storage": "blocked"` |
 | `--browser` | `chromium` | `webkit` runs the content in Safari's engine through Playwright (see [WebKit](#webkit)) |
 | `--viewport` | none | A device size: `iphone`, `ipad`, `android-phone`, or a width and height like `390x844`. The preset's touch, pixel ratio and user agent come with it. With no `--viewport` the window is as it is |
+| `--macro` | none | A JSON file of clicks, keys and typing to play at their times during the run (see [Macros](#macros)). Chromium only. In an options file: `"macro": [ … ]` |
+| `--record-input` | off | Keeps the text typed in the content's frames in the run's probe reports (`trace.probe`, `type: "input"`), so a macro can be made from it. Never from a password field, or a field whose `autocomplete` is `current-password`, `new-password`, `cc-…` or `one-time-code`: those report only a length. Without it a run holds clicks and named keys, no text |
 | `--trace` | off | Records which functions of the package ran and which way each decision went, with the values (see [Tracing](#tracing)). Keep the run with `--out` to read it |
 | `--out` | none | Keeps the full run (scripts, requests, coverage, sources). Open it in the desktop app with **Open saved…**, or pass it to `report` or `--resume-from` |
 | `--live` | none | See [Live runs](#live-runs) |
@@ -425,6 +430,80 @@ other branch never ran, and the findings (see [From a drill-down](findings.md#fr
 
 Exit status is 0 unless the command fails.
 
+## cycle
+
+Tests that progress is saved and resumed, without a person clicking through. See
+[Testing that progress is saved and resumed](user-guide.md#testing-that-progress-is-saved-and-resumed).
+
+```bash
+scorm-lab cycle course.zip [--item n] [--macro macro.json] [--json] [--strict] [--out folder] [run options]
+```
+
+It runs the item twice, one after the other:
+
+1. **Run 1** plays the macro (if there is one), then leaves like a learner closing the window: the content is sent to
+   `about:blank`, which runs its `beforeunload`, `pagehide` and `unload` handlers with the recorder still attached, and
+   the window is closed. The data model the test LMS held is kept.
+2. **Run 2** resumes from that data (as `--resume-from` does) and plays no macro.
+
+The run options apply to both. `--wait` is the length of each run (default 10 s), so a cycle takes about twice that plus
+start-up; keep it short for a macro that finishes quickly. Progress goes to standard error. Chromium only: with
+`--browser webkit` the command fails, saying so.
+
+| Option | Default | What it does |
+|---|---|---|
+| `--macro` | none | The events to play in run 1 (see [Macros](#macros)). Without one nothing is clicked: only what the content saves by itself counts |
+| `--out` | none | A folder: both runs (`01-first.json`, `02-resumed.json`) as saved runs |
+| `--json` | off | Prints JSON (below) instead of text |
+| `--strict` | off | Exit status 1 if the findings include an error |
+
+The text output is the two runs side by side (API calls, entry offered, location and suspend data read and saved, status,
+exit, whether the content ended the session) and the findings (see
+[From a save-and-resume test](findings.md#from-a-save-and-resume-test)).
+
+`cycle --json`:
+
+```json
+{
+  "package": "course.zip", "item": { "number": 1, "…": "…" }, "base": { "macro": [{ "t": 400, "type": "click", "x": 0.631, "y": 0.328 }], "…": "…" },
+  "runs": [
+    { "furthest": "wrote", "verdict": { "sev": "ok", "title": "…" }, "apiCalls": 15, "out": null },
+    { "furthest": "wrote", "verdict": { "sev": "ok", "title": "…" }, "apiCalls": 11, "out": null }
+  ],
+  "rows": [{ "label": "Entry offered", "a": "ab-initio", "b": "resume" }, "…"],
+  "findings": [{ "sev": "info", "title": "Saving and resuming worked", "detail": "…", "evidence": ["…"], "fix": "" }]
+}
+```
+
+`runs[n].out` is the saved run's path when `--out` was given, else null. `rows` are the side-by-side table: `a` is run 1
+and `b` run 2.
+
+### Macros
+
+A macro file is a JSON list of events, or `{ "format": "scorm-lab-macro", "version": 1, "events": [ … ] }`. Each event
+has `t`, the milliseconds since the run started (0 to 3,600,000), and a `type`:
+
+| Type | Fields | Does |
+|---|---|---|
+| `click` | `x`, `y`, `approx`? | A left click at that point. `x` and `y` run from 0 to 1 across the window. `approx: true` (made in a frame of another origin, where only the frame's own position is known) is skipped in replay, and the run's trace has a `macro-skipped` note |
+| `move` | `x`, `y` | Moves the pointer |
+| `wheel` | `x`, `y`, `dy` | Scrolls by `dy` pixels (positive is down) |
+| `key` | `key` | One of `Enter`, `Tab`, `Escape`, `Backspace`, `Delete`, `Space`, `Up`, `Down`, `Left`, `Right`, `PageUp`, `PageDown`, `Home`, `End` |
+| `text` | `text` | Types the text (up to 2,000 characters) into the focused field |
+
+```json
+[
+  { "t": 400, "type": "click", "x": 0.631, "y": 0.328 },
+  { "t": 900, "type": "click", "x": 0.73, "y": 0.328 }
+]
+```
+
+At most 2,000 events and 100 KB of typed text in all. Events are played in time order through the same input as the live
+view, to the newest window of the run. `--macro` works on `run` as well, and the macro goes in the saved run's
+`launch.options.macro`. Make one by recording in the [live view](web.md#live-view), or from a run in the desktop app
+(the clicks, keys and typing the probe saw are in the run's `probe` list with `type: "input"`). Macros are not supported in
+WebKit.
+
 ## report
 
 ```bash
@@ -567,6 +646,9 @@ scorm-lab run course.zip --depth 3
 # Resume test: run, keep it, run again from its data.
 scorm-lab run course.zip --wait 30 --out first.json
 scorm-lab run course.zip --resume-from first.json
+
+# The same, automatically: click through with a macro, leave like a learner, resume, and check.
+scorm-lab cycle course.zip --macro macro.json --wait 8
 
 # Check every package in a folder; list the ones with errors.
 for z in exports/*.zip; do scorm-lab analyze "$z" --strict >/dev/null || echo "$z"; done

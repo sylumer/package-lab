@@ -21,6 +21,7 @@ import { drill, watchPins } from '../src/drilldown.js'
 import { overlayFiles } from '../src/overlay.js'
 import { renderReport, verdict, counts, screens } from '../src/report.js'
 import { launchPlan, runAnalysis, savedRun, WEBKIT_ORIGINS } from '../src/launch.js'
+import { readMacro, cycleFindings, cycleRows, resumeOptions } from '../src/cycle.js'
 
 const APP_DIR = new URL('..', import.meta.url).pathname
 const VERSION = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')).version
@@ -38,6 +39,7 @@ Commands
   experiment <package.zip>  Run the same launch several ways, one after another, and show how far each got.
   discover <package.zip>    Work out what the content wants from its server: the fields it reads, and a stand-in response.
   drill <package.zip>       Why it stopped: the decisions that led to the dead end, their values, and where each undefined came from.
+  cycle <package.zip>       Test saving: leave the way a learner does, then resume, and check the content saved and read its place.
   report <package.zip | run.json>
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
@@ -72,6 +74,8 @@ Options for run (and report --run)
   --viewport <size>         A device size: iphone, ipad, android-phone, or WIDTHxHEIGHT like 390x844. Default: the window as it is.
   --storage <mode>          Storage in the content's frames: normal (default), blocked (what Safari does for content in another site's
                             page) or partitioned (empty at the start of the run).
+  --macro <file.json>       Clicks, keys and typing to play during the run, at their times (a list of events; see docs/cli.md). Chromium only.
+  --record-input            Keep the text typed in the content in the run (never from password fields), to make a macro from it.
   --trace                   Record which functions ran and which way each decision went (the saved run's trace.exec).
   --out <run.json>          Keep the full run (open it in the desktop app with Open saved…).
   --live <folder>           Write frames to <folder>/frame.jpg and read clicks and keys from <folder>/input/.
@@ -94,6 +98,12 @@ Options for discover (also the run options above, which set every round's launch
 Options for drill (also the run options above; the first run is always traced)
   --out <folder>            Keep both runs in <folder>, and the result as drill.json.
   --json                    Print JSON instead of text.
+
+Options for cycle (also the run options above; --wait is the length of each of the two runs)
+  --macro <file.json>       What to play in the first run before it leaves (without one, nothing is clicked).
+  --out <folder>            Keep both runs in <folder> as saved runs.
+  --json                    Print JSON instead of text.
+  --strict                  Exit with status 1 if the findings include an error.
 
 Options for report
   --out <file.html>         Where to write it. Default: print to standard output.
@@ -118,7 +128,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'macro', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
     if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
@@ -232,6 +242,14 @@ function overrideFiles(list = []) {
   }
   return Object.fromEntries(files)
 }
+// --macro file.json: a list of events, or { events }.
+function macroFile(path) {
+  if (typeof path !== 'string' || !path) fail('--macro needs a JSON file of events.')
+  if (!existsSync(path)) fail(`No such file: ${path}`)
+  let j
+  try { j = JSON.parse(readFileSync(path, 'utf8')) } catch (e) { fail(`${basename(path)} isn’t valid JSON: ${e.message}`) }
+  try { return readMacro(j) } catch (e) { fail(`${basename(path)}: ${e.message}`) }
+}
 function flagOptions(o) {
   const f = {}
   if (o.api !== undefined) f.expose = o.api
@@ -244,6 +262,8 @@ function flagOptions(o) {
   if (o.storage !== undefined) f.storage = o.storage
   if (o.browser !== undefined) f.browser = o.browser
   if (o.viewport !== undefined) f.viewport = o.viewport
+  if (o.macro !== undefined) f.macro = macroFile(o.macro)
+  if (o['record-input']) f.recordInput = true
   // --profile-file holds a custom profile: { base?, …fields }. With --profile too, that name is its base unless it names one.
   if (o['profile-file'] !== undefined) {
     const p = jsonFile(o['profile-file'], 'a profile, like { "base": "moodle", "contentOrigin": "other" }')
@@ -272,8 +292,9 @@ function runPackage(pkg, o, options) {
   const out = o.out ? resolve(o.out) : join(dir, 'run.json')
   try { options ??= buildOptions(o) } catch (e) { rmSync(dir, { recursive: true, force: true }); throw e }
   const wait = options.wait
+  if (options.browser === 'webkit' && (options.macro.length || o.close)) { rmSync(dir, { recursive: true, force: true }); fail('Macros and the save-and-resume test run in Chromium only: WebKit runs have no input to replay.') }
   if (options.browser === 'webkit') return runWebkit(pkg, item, o, options, dir, out)
-  const job = { zip: pkg.path, item: item.index, options, resumeFrom: o['resume-from'] ? resolve(o['resume-from']) : null, out, live: o.live ? resolve(o.live) : null }
+  const job = { zip: pkg.path, item: item.index, options, resumeFrom: o['resume-from'] ? resolve(o['resume-from']) : null, close: !!o.close, out, live: o.live ? resolve(o.live) : null }
   writeFileSync(join(dir, 'job.json'), JSON.stringify(job))
   const [bin, pre] = electron(), log = join(dir, 'electron.log'), fd = openSync(log, 'w')
   const r = spawnSync(bin, [...pre, `--run=${join(dir, 'job.json')}`, ...(o.show ? ['--show-runs'] : [])], { stdio: ['ignore', 'ignore', fd], timeout: (wait + 120) * 1000 })
@@ -447,6 +468,32 @@ const commands = {
     printFindings(result.findings)
     if (dir) console.log(paint('2', `\nRuns and drill.json saved in ${dir}`))
     return 0
+  },
+  // Test saving (P2.4): the first run plays the macro and leaves like a learner; the second resumes from what it left.
+  cycle(o) {
+    const pkg = openZip(o._[0]), options = buildOptions(o), item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'scorm-lab-cycle-')), keep = o.out ? resolve(o.out) : null
+    if (options.browser === 'webkit') { rmSync(dir, { recursive: true, force: true }); fail('The save-and-resume test runs in Chromium only: WebKit runs have no input to replay.') }
+    if (keep) mkdirSync(keep, { recursive: true })
+    const f1 = join(keep ?? dir, '01-first.json'), f2 = join(keep ?? dir, '02-resumed.json')
+    try {
+      if (!o.json) process.stderr.write(`Run 1 of 2: ${options.macro.length ? `playing ${options.macro.length} events, then ` : ''}leaving (${options.wait} s)…\n`)
+      const first = runPackage(pkg, { ...o, 'resume-from': undefined, out: f1, live: undefined, close: true }, options).run
+      if (!o.json) process.stderr.write(`Run 2 of 2: resuming (${options.wait} s)…\n`)
+      const second = runPackage(pkg, { ...o, 'resume-from': f1, out: f2, live: undefined, close: false }, resumeOptions(options)).run
+      const findings = cycleFindings({ runs: [first, second], macro: options.macro }), rows = cycleRows([first, second])
+      const one = (run, out) => ({ furthest: run.milestones ? furthest(run.milestones)?.id ?? null : null, verdict: verdict(run.findings), apiCalls: counts(run.findings, run.trace).apiCalls, out: keep ? out : null })
+      const json = { package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), base: options, runs: [one(first, f1), one(second, f2)], rows, findings }
+      if (o.json) console.log(JSON.stringify(json, null, 1))
+      else {
+        printHeader(pkg, item)
+        const table = [['', 'Run 1: leaves', 'Run 2: resumes'], ...rows.map(r => [r.label, r.a, r.b])], w = [0, 1, 2].map(c => Math.max(...table.map(r => r[c].length)))
+        console.log()
+        for (const [i, r] of table.entries()) { console.log(r.map((c, k) => c.padEnd(w[k])).join('  ').trimEnd()); if (i === 0) console.log(paint('2', w.map(n => '─'.repeat(n)).join('  '))) }
+        printFindings(findings)
+        if (keep) console.log(paint('2', `\nRuns saved in ${keep}`))
+      }
+      return o.strict && findings.some(f => f.sev === 'error') ? 1 : 0
+    } finally { rmSync(dir, { recursive: true, force: true }) }
   },
   report(o) {
     const input = o._[0]

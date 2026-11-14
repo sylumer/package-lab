@@ -7,14 +7,19 @@
   const n = +location.hash.slice(1) || 0
   if (!n) {
     const report = data => { try { __labReport(JSON.stringify({ frame: location.href, ...data })) } catch (e) { /* not recorded */ } }
+    // With cfg.snapshots (a run that will leave like a learner, P2.4): the data model after each call that can change it, so the last one is what the LMS held when the content left: a
+    // page that is closing can't be asked. Sent at once while leaving, otherwise at most every 250 ms. The recorder keeps only the last.
+    let closing = false, lastSnap = 0, snapTimer = 0
+    const snap = () => { snapTimer = 0; lastSnap = Date.now(); report({ type: 'cmi-now', values: window.__labCmi() }) }
+    const changed = () => { if (closing || Date.now() - lastSnap > 250) snap(); else if (!snapTimer) snapTimer = setTimeout(snap, 250) }
     const make = version => scormRuntime({ ...cfg.runtime, version, cmi: new Map(Object.entries(cfg.cmi?.[version] ?? {})),
-      log: e => report({ type: 'api', version, ...e, value: e.value === undefined ? undefined : String(e.value).slice(0, 5000) }) })
+      log: e => { report({ type: 'api', version, ...e, value: e.value === undefined ? undefined : String(e.value).slice(0, 5000) }); if (cfg.snapshots && /SetValue|Commit|Finish|Terminate/.test(e.call)) changed() } })
     const expose = cfg.expose === 'both' ? ['1.2', '2004'] : cfg.expose === 'none' ? [] : [cfg.expose]
     const rts = {}
     for (const v of expose) rts[v] = make(v)
     // The values at the end of the run, for the progress checks.
     window.__labCmi = () => Object.fromEntries(Object.entries(rts).map(([v, r]) => [v, Object.fromEntries(r.cmi)]))
-    addEventListener('pagehide', () => report({ type: 'cmi', values: window.__labCmi() }))
+    addEventListener('pagehide', () => { closing = true; report({ type: 'cmi', values: window.__labCmi() }) })
     // The API objects stay this page's (its calls are logged here) but go on the window the profile names, after apiDelay.
     const give = w => { for (const v of expose) w[v === '1.2' ? 'API' : 'API_1484_11'] = rts[v].api }
     let ready = !cfg.apiDelay
