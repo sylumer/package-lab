@@ -7,6 +7,10 @@ Every finding SCORM Lab can report, grouped by where it comes from. Each has a s
 
 Titles below are as SCORM Lab shows them, with *italic* parts filled in.
 
+Some findings name an **Autofix**: a mechanical correction SCORM Lab can make for you when it exports a
+[corrected package](user-guide.md#exporting-a-corrected-package). They are `manifest-case`, `manifest-not-root`,
+`file-missing`, `manifest-version`, `case` and `http-to-https`. Everything else needs a person to decide.
+
 The verdict at the top of a report, in the CLI and in the Concierge widget is the first error, or the first warning
 if there are no errors.
 
@@ -29,15 +33,15 @@ if there are no errors.
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
 | No imsmanifest.xml in the package | error | Not a SCORM package, or the manifest is missing | Re-export as SCORM |
-| The manifest is named *X*; it must be imsmanifest.xml in lower case | error | LMSs look for exactly `imsmanifest.xml` | Rename it |
-| The manifest is in *folder*, not at the top of the ZIP | warning | The ZIP was made from the folder above the package | Zip the package folder's contents, not the folder |
+| The manifest is named *X*; it must be imsmanifest.xml in lower case | error | LMSs look for exactly `imsmanifest.xml` | Rename it. **Autofix:** `manifest-case` |
+| The manifest is in *folder*, not at the top of the ZIP | warning | The ZIP was made from the folder above the package | Zip the package folder's contents, not the folder. **Autofix:** `manifest-not-root` |
 | The manifest isn't well-formed XML | error | It can't be read, so nothing can be imported | Fix the XML (often a hand edit or a bad character) |
-| Resource *R* launches *path*, but the ZIP has *Path* | error | The capitals differ, which fails on most LMS servers | Make the `href` match the file exactly |
+| Resource *R* launches *path*, but the ZIP has *Path* | error | The capitals differ, which fails on most LMS servers | Make the `href` match the file exactly. **Autofix:** `case` |
 | Resource *R* launches *path*, which isn't in the package | error | The launch file is missing | Fix the `href`, or include the file |
-| Resource *R* lists *file*, which isn't in the package | warning | A `<file>` entry has no file; harmless unless the content needs it | Remove the entry or include the file |
+| Resource *R* lists *file*, which isn't in the package | warning | A `<file>` entry has no file; harmless unless the content needs it | Remove the entry or include the file. **Autofix:** `file-missing` (removes the entry) |
 | Resource *R* launches *URL*, on another site | warning | The package needs that site to be reachable | Include the content in the package |
 | No item launches a SCO | warning | Assets never talk to the LMS: no API calls or progress are expected | Check the export type |
-| The manifest says SCORM *X*, but the scripts use the SCORM *Y* API | error | The LMS offers only the manifest's API, so the content finds no LMS | Republish for the right version, or correct `<schemaversion>`. Confirm with the API **Both** setting |
+| The manifest says SCORM *X*, but the scripts use the SCORM *Y* API | error | The LMS offers only the manifest's API, so the content finds no LMS | Republish for the right version, or correct `<schemaversion>`. Confirm with the API **Both** setting. **Autofix:** `manifest-version` |
 
 ## From the scripts
 
@@ -59,11 +63,11 @@ These come from following everything the launch page loads (see **Boot path** in
 | The launch page *X* isn't in the package (or has different capitals) | error | Nothing can load | Correct the resource `href` |
 | *N* files the launch loads aren't in the package | error | Pages or scripts ask for them and get "not found". A missing script usually means what it would have built never appears. If a file with the same name exists elsewhere, the path is wrong. If a path works relative to the script but not the page, the script was written for another folder layout: fetch and `src` paths resolve from the page | Include the files, or correct the paths |
 | Scripts name *N* files that aren't in the package | warning | Paths that appear as text in scripts; some may be unused | A run shows which are actually asked for |
-| Paths differ from the files only in capitals | error | Works on Windows and macOS, fails on Linux servers | Make each reference match exactly |
+| Paths differ from the files only in capitals | error | Works on Windows and macOS, fails on Linux servers | Make each reference match exactly. **Autofix:** `case` |
 | The launch depends on paths at the root of the server | error | They exist only on the source platform | Export as standalone, or find the setting that makes them relative |
 | Paths climb out of the package (../ above its top folder) | error | Usually a page moved into a subfolder at export | Correct the paths, or check the launch page |
 | Paths point at the author's own computer | error | `file://` and drive-letter paths | Include the files with relative paths |
-| Scripts, styles or frames load over http:// | warning | Blocked on an https LMS (mixed content) | Use https, or include the files |
+| Scripts, styles or frames load over http:// | warning | Blocked on an https LMS (mixed content) | Use https, or include the files. **Autofix:** `http-to-https` |
 | The launch loads code from other sites | info | Fails if the learner can't reach them | |
 | The content needs Adobe Flash Player | error | No browser runs Flash, so it is blank or shows "get Flash" | Republish as HTML5 from the source |
 | Some scripts only work in Internet Explorer | warning | `ActiveXObject`, `attachEvent` or `document.all` with no modern alternative | Republish with a current version of the tool |

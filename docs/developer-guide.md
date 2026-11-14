@@ -691,12 +691,37 @@ All paths are checked by `packagePath` in `options.js` (relative, `/` only, no `
 
 `src/overlay.js` is pure: `isText`, `entryFor(buffer)` (text as `{ content }`, otherwise `{ base64 }`), `overlayFiles`, `overrideList`, `overrideFinding(files)` (the "This run used N changed files" note, `null` for none) and `overrideProgressFinding(before, after)` (uses `progress()` from milestones). `withProgress` in `main.js` puts the notes straight after the milestone finding; the comparison runs only when an earlier run of the same item (same package name and item index) had no overrides, so it exists in the desktop and web interfaces but not in headless runs, and it is not rebuilt when a saved run is reopened (the override note is, from `launch.options.files`). `src/textdiff.js` is a line diff by longest common subsequence (common start and end trimmed first; over four million cells the middle is shown as replaced): `diffLines(a, b)` and `unified(a, b, context = 3)`.
 
+## Corrected package export (P3.1)
+
+`src/zip.js` writes ZIPs as well as reading them: `zip(files Map, date?)` → Buffer. Each entry is deflated (`deflateRawSync`), or stored when that isn't smaller (empty and tiny files, already-compressed data). The CRC is `zlib.crc32` when Node has it and the table version (`crc32Table`, exported so a test can compare them) otherwise. Names with characters outside ASCII get the UTF-8 flag (0x800), which the reader already honours. `zip()` refuses entry names that are empty, absolute, contain `..` segments, backslashes, drive letters or control characters. No ZIP64: more than 65,535 entries, or a 4 GB archive, throws. The archive is built in memory, like uploads.
+
+`src/fixes.js` holds the fixes and the export. `FIXES` is `{ id: { label, apply(files, params) → { files, changes: [string] } } }`; the key order is the order they run (ZIP layout, manifest, then references). `apply` returns `{ files, changes, notes }`: `changes` are things done (no changes means no zip), `notes` are things it declined to do and why. It only edits files that decode as UTF-8 (`getText`, fatal decoder, byte-order mark kept), matches manifest `<resource>` blocks to `analysis.manifest.resources` by identifier (`blocksById`), and never changes its input Map, finds its own work by running `analyze` and `bootGraph` on the files it is given (so it works on the result of the fix before it), and returns no changes when there is nothing to fix. Findings carry only the data: `autofix: { id, params }` (set in `staticFindings` and the boot graph's risks; the `manifest-version` finding has `params.to`, the API the scripts use). `params` is optional input to `apply`, and findings stay serialisable. The interfaces read `autofix` ids to build the export checklist (`applicable(findings)` → `pkgInfo().fixes`: the static findings and the first SCO's boot findings); export runs the `only` list (an array, possibly empty), or every fix when it is left out.
+
+| Id | Fixes | How |
+|---|---|---|
+| `manifest-case` | manifest not named `imsmanifest.xml` | renames it (not if the name is taken) |
+| `manifest-not-root` | manifest inside a folder | strips the folder prefix from every file under it; files outside it stay; nothing is replaced |
+| `file-missing` | `<file>` entries with no file | removes each entry, matching resource blocks to `analysis.manifest.resources` in order |
+| `manifest-version` | manifest says 1.2 but scripts use 2004 or the other way | rewrites the root element's namespaces (known-good sets, `NS` in the file), `<schemaversion>`, and the `scormtype`/`datafromlms` spelling; drops `xsi:schemaLocation`; says what it cannot convert (the 1.2 mastery score) |
+| `case` | references that differ from the file only in capitals | per file: when no reference spells it correctly, one wrong spelling is used everywhere and its folders match, the file is renamed; otherwise each reference is rewritten (`recase` keeps `../`, queries and `%`-encoding, and checks the result resolves to the file). It repeats until nothing changes, because the boot graph lists a repeated reference once |
+| `http-to-https` | scripts, styles, frames over `http://` | swaps the quoted string in the file that loads it |
+
+Edits to text are quoted-string swaps (`swapQuoted`): unquoted attributes and strings built at run time are left (and still show as findings afterwards, which the proof reports).
+
+`correct(files, { only, overrides })` puts the overrides on top (`overlayFiles`), runs the selected fixes in order, and returns `{ files, applied: [{ id, label, changes }], overridden, proof }`. `proof` is `prove(before, after)`: the titles of `staticAll()` (the static and first-SCO boot findings) before and after, as `gone`, `remaining` and `added` (a changed count in a title shows as one gone and one added). `exportFixed(files, { version, name, only, overrides })` adds `SCORM-LAB-CHANGES.txt` at the top of the ZIP and returns the zip (`null` when nothing changed). The interfaces: `fix` in `bin/scorm-lab.js`; `handlers['export-fixed']` in `main.js` (a save dialog; desktop only, listed in `DESKTOP_ONLY` in `web.js`); and `GET /api/export` (the `download` option of `startWeb`; the summary is in the `X-Scorm-Lab-Summary` header) for web clients, used by `lab.download()` in `ui/bridge.js`.
+
+**Adding an autofix:**
+1. Add an entry to `FIXES` in `src/fixes.js`, in the position it should run. `apply` returns `{ files, changes }`, with one plain sentence per change, and no changes when there is nothing to do. Never write outside the Map.
+2. Put `autofix: { id, params }` on the finding or findings it addresses (`rules.js`, `bootpath.js`).
+3. Unit-test it in `test/test.js` (the "Corrected package export" block): does nothing to a good package, fixes a small package built in memory, and the finding is gone after.
+4. Add the id to the table above, to `docs/cli.md` (`fix`) and the user guide, and mark the finding in `docs/findings.md`.
+
 ## Findings
 
 A finding is:
 
 ```js
-{ sev: 'error' | 'warn' | 'info', title, detail?, evidence?: [string], fix? }
+{ sev: 'error' | 'warn' | 'info', title, detail?, evidence?: [string], fix?, autofix?: { id, params } }
 ```
 
 | Function | Input | Covers |
@@ -933,7 +958,7 @@ A frame is `{ fn, url, line, col }`. Older runs without `format` (from before ve
 npm test
 ```
 
-`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `SCORM_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers; P2.1: profiles with a delayed popup, a frameset, a late API and a CSP, and the `lms` experiment). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
+`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `SCORM_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers; P2.1: profiles with a delayed popup, a frameset, a late API and a CSP, and the `lms` experiment; P3.1: the corrected `blank` and `mismatch` run (no longer blank, API calls appear), and the corrected package as a web download). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
 `test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
 
 | Fixture | Change | Tests |
@@ -969,6 +994,7 @@ The end-to-end part covers:
   the API on the content's parent two frames down, fails commits and fills in the launch parameters; bad profiles exit
   with status 2. The unit checks validate every preset (and their sources, once `PRESET_SOURCES_PENDING` is false), the
   checks and combinations, `apiAt`, placeholders, `nameAt`, and the findings over hand-made probes.
+- **Corrected package (P3.1):** unit checks cover the writer (empty, binary, large, non-ASCII names with the UTF-8 flag, the CRC table against zlib, `unzip -t`) and each fix on small packages built in memory, the `autofix` data on findings, and the export (overrides first, change list, proof, `only`, nothing to change). The CLI checks in the default suite run `fix` on `blank` and `mismatch`, check the output with `unzip -t` and the reader, and `analyze` it (no capitals finding; no version finding; a missing script is still reported). The Electron runs on the corrected packages and the web download are `--slow`.
 - **Storage (P2.2):** `stored` (boot.js reads and writes `localStorage` and only starts the lesson if that worked) works as it is and with `--storage partitioned`; with `--storage blocked` (and, with `--slow`, `--profile scorm-cloud`), it never starts, so it never looks for the API, and gets "The content needs storage the browser can block", whose evidence names the line in `boot.js`, with the one uncaught `SecurityError` it caused; with `--slow`, `good` (which uses no storage) gets no such finding, and the `storage` experiment says "With storage blocked, the content gets less far". The unit checks run the probe under `vm` (localStorage and sessionStorage throw `SecurityError`, cookies read empty, `indexedDB.open` fails to both `onerror` and listeners, SCORM Lab's own pages and the other modes are untouched), and cover `storageMode`, `storageFindings` and the experiment finding. A `--window` run of `good` is matched in the trace (the popup bug above).
 - **Drill-down:** `drill hosted --json` names the failed `/api/player/config` request, with one run (the operand is a local).
   The unit checks cover operand paths, the branch not taken, the dead end, static assignments, the probe's watch pins

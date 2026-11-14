@@ -325,6 +325,33 @@ files are used by experiments too, as part of the default launch.
 SCORM Lab works out the boot path again for the changed files, but the checks on the manifest and scripts under
 **Package** still describe the original package.
 
+## Exporting a corrected package
+
+**Export corrected package…** (next to **Test saving**) first shows a checklist of the fixes that apply to this package, all ticked: untick any you don't want, then choose **Export…**. It saves a new `.zip` with two kinds of change:
+
+- the files you changed in the **Files** tab (see above), and
+- the mechanical fixes below, for the problems SCORM Lab can correct without guessing.
+
+| Fix | What it does |
+|---|---|
+| Rename the manifest | `Imsmanifest.xml` becomes `imsmanifest.xml` |
+| Move the files to the top of the ZIP | For a ZIP made from the folder above the package |
+| Remove missing file entries | Takes `<file>` lines for files that aren't there out of the manifest |
+| Match the SCORM version | Sets the manifest's version and namespaces to the API the scripts use |
+| Match capitals | Changes references to match the file, or renames the file when everything spells it the same way |
+| Use https | Changes `http://` scripts, styles and frames to `https://` |
+
+If a fix can't do its job safely (a file that isn't plain UTF-8 text, a rename that would overwrite a file), it leaves that alone and says so under **Not done** in `SCORM-LAB-CHANGES.txt`. The original package is not changed. You choose where to save the new one (in the web interface, the browser
+downloads it). Inside it, `SCORM-LAB-CHANGES.txt` lists every change. The status line says how many findings the
+changes cleared: SCORM Lab checks the new package again, without running it. If nothing needs changing, it says so and
+writes nothing.
+
+A fix is a mechanical guess at what you meant. Run the new package (open it and **Launch**), and check it in your LMS
+before you rely on it. Findings that need a decision (a missing script, a server the content needs) are left alone.
+The findings that have a fix say so in [findings](findings.md).
+
+From the command line, use [`scorm-lab fix`](cli.md#fix).
+
 ## Forcing values and answering requests
 
 Two more ways to test a theory without touching the course. Both happen before the content's own code could notice.

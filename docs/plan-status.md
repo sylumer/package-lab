@@ -30,8 +30,8 @@ In progress on branch `next`.
 | P2.1 | LMS profiles and other-origin content | sonnet / opus | done | 5634744 | Built by opus in one piece; reviewed by the orchestrator. Presets from thin haiku research (most vendor pages unreadable), marked approximations. Popup bug fixed in P2.2 |
 | P2.2 | Blocked storage and cookies | sonnet | done | 1342563 | One review round (fixes by the orchestrator: popup timeout, no script in content popups). Fixed popup launches being recorded late |
 | P2.3 | WebKit and device sizes | sonnet | done | 12a984b | One review round (network confinement, timeouts). Playwright and WebKit installed; WebKit checks are in --slow. Default suite now ~2:41 |
-| P2.4 | Save-and-resume cycle | sonnet | done | | Resumed once after a usage limit. One review round (typed text now kept only with --record-input; passwords never). Macros are Chromium only |
-| P3.1 | Corrected package export | sonnet | todo | | |
+| P2.4 | Save-and-resume cycle | sonnet | done | b3de596 | Resumed once after a usage limit. One review round (typed text now kept only with --record-input; passwords never). Macros are Chromium only |
+| P3.1 | Corrected package export | sonnet | done | | One review round (zip names checked, fix picker, UTF-8 only). Run proof uses a new `capitals` fixture: `blank` has a second bug once its capitals are fixed |
 | P3.2 | Authoring tool rule packs | sonnet + haiku research | todo | | |
 | P3.3 | Comparing two packages | sonnet | todo | | |
 | P4.1 | Code views | sonnet | todo | | |

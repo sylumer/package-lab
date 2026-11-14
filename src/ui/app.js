@@ -433,7 +433,7 @@ function showPackage(p) {
   $('pkg-name').textContent = p.name
   $('item').replaceChildren(...p.items.map(i => h('option', { value: i.index }, `${'· '.repeat(i.depth)}${i.title} (${i.type || '?'})`)))
   const firstSco = p.items.find(i => i.type === 'sco'); if (firstSco) $('item').value = firstSco.index
-  $('item').disabled = !p.items.length; $('launch').disabled = !p.items.length; $('cycle').disabled = !p.items.length
+  $('item').disabled = !p.items.length; $('launch').disabled = !p.items.length; $('cycle').disabled = !p.items.length; $('export').disabled = false
   say(`${p.name}: before running, ${p.findings.filter(f => f.sev === 'error').length} errors and ${p.findings.filter(f => f.sev === 'warn').length} warnings.`)
   st.tab = 'Findings'; render()
 }
@@ -506,6 +506,21 @@ for (const id of ['item', 'expose', 'profile', 'depth', 'opener', 'resume', 'cau
 $('viewport').addEventListener('change', () => { $('viewport-custom').hidden = $('viewport').value !== 'custom' })
 $('more').addEventListener('toggle', showOptions)
 $('cycle').onclick = startCycle
+// Export corrected package…: a checklist of the fixes that apply to this package (all ticked), then the export.
+$('export').onclick = () => {
+  const fixes = st.pkg?.fixes ?? [], panel = $('export-panel')
+  panel.replaceChildren(h('strong', {}, 'Export with these fixes:'),
+    ...fixes.map(f => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: true, 'data-fix': f.id }), ' ' + f.label)),
+    !fixes.length && h('span', { class: 'muted' }, 'No automatic fixes apply to this package. Files you changed in the Files tab are still included.'),
+    h('button', { type: 'button', onclick: () => { const only = [...panel.querySelectorAll('input[data-fix]:checked')].map(i => i.dataset.fix); panel.hidden = true; exportFixed(only) } }, 'Export…'),
+    h('button', { type: 'button', class: 'secondary', onclick: () => { panel.hidden = true } }, 'Cancel'))
+  panel.hidden = false
+}
+const exportFixed = only => act(async () => {
+  const r = await (lab.web ? lab.download(only) : lab.invoke('export-fixed', { only }))
+  say(r.cancelled ? 'Export cancelled.' : !r.file ? 'Nothing to change: none of the fixes found anything to correct, and no files are changed.'
+    : `${lab.web ? 'Downloaded' : 'Saved'} ${r.file}: ${r.changes} change${r.changes === 1 ? '' : 's'}, ${r.gone} finding${r.gone === 1 ? '' : 's'} cleared, ${r.remaining} still there. SCORM-LAB-CHANGES.txt inside lists every change.`)
+}, 'Building the corrected package…')
 $('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeText($('cli-line').textContent); say('Copied.') })
 $('launch').onclick = () => act(async () => {
   st.live = []

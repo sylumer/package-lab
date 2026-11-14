@@ -198,7 +198,7 @@ export function bootGraph(files, start) {
   const cased = bad('case')
   if (cased.length) risks.push({ sev: 'error', title: 'Paths differ from the files only in capitals',
     detail: 'This works on Windows and macOS (and in many authoring previews) but fails on the Linux servers most LMSs use: the file is “not found”.',
-    evidence: cased.slice(0, 10).map(n => `${n.path} is ${n.actual} in the ZIP, from ${at(n)}`), fix: 'Make the reference match the file name exactly.' })
+    evidence: cased.slice(0, 10).map(n => `${n.path} is ${n.actual} in the ZIP, from ${at(n)}`), fix: 'Make the reference match the file name exactly.', autofix: { id: 'case', params: {} } })
   const server = bad('server', crit)
   if (server.length) risks.push({ sev: 'error', title: 'The launch depends on paths at the root of the server',
     detail: 'These only exist on the platform the content came from. In an LMS they are “not found” or return the LMS’s own pages.',
@@ -209,7 +209,7 @@ export function bootGraph(files, start) {
   const local = bad('local')
   if (local.length) risks.push({ sev: 'error', title: 'Paths point at the author’s own computer', detail: 'file:// and drive-letter paths only work on the machine that made the package.', evidence: local.slice(0, 6).map(n => `${n.target} from ${at(n)}`), fix: 'Include the files and use relative paths.' })
   const http = bad('remote-http', n => ['script', 'style', 'page'].includes(n.kind) && n.how !== 'literal')
-  if (http.length) risks.push({ sev: 'warn', title: 'Scripts, styles or frames load over http://', detail: 'LMSs serve over https, and browsers block http scripts, styles and frames on an https page (mixed content).', evidence: http.slice(0, 6).map(n => `${n.target} from ${at(n)}`), fix: 'Use https:// addresses, or include the files.' })
+  if (http.length) risks.push({ sev: 'warn', title: 'Scripts, styles or frames load over http://', detail: 'LMSs serve over https, and browsers block http scripts, styles and frames on an https page (mixed content).', evidence: http.slice(0, 6).map(n => `${n.target} from ${at(n)}`), fix: 'Use https:// addresses, or include the files.', autofix: { id: 'http-to-https', params: {} } })
   const remote = bad('remote', n => ['script', 'style', 'page'].includes(n.kind) && n.how !== 'literal')
   if (remote.length) risks.push({ sev: 'info', title: 'The launch loads code from other sites', detail: 'If a learner’s network blocks them, or the site is gone, the content fails.', evidence: remote.slice(0, 6).map(n => `${n.target} from ${at(n)}`), fix: '' })
 

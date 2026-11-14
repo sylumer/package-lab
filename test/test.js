@@ -6,8 +6,10 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
-import { unzip } from '../src/zip.js'
+import { unzip, zip, crc32, crc32Table } from '../src/zip.js'
+import { FIXES, FIX_IDS, correct, exportFixed, fixedName, prove, staticAll } from '../src/fixes.js'
 import { analyze, pkgPath } from '../src/analyze.js'
 import { matchByPath, branchDiff, compare, segs } from '../src/diff.js'
 import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
@@ -1074,6 +1076,114 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
     [{ t: 5, type: 'click', x: 0.5, y: 0.5, approx: true }, { t: 7, type: 'text', text: 'ok' }], 'macro: redacted text (a password field) is left out, approx kept')
   assert.equal(normaliseOptions({ recordInput: true }).recordInput, true); assert.match(cliCommand({ recordInput: true }), / --record-input$/, 'recordInput: the CLI line'); assert.throws(() => normaliseOptions({ recordInput: 'yes' }), /true or false/)
 }
+
+// ---- Corrected package export (P3.1): the ZIP writer and the autofixes ----
+{
+  const unzipT = path => spawnSync('unzip', ['-t', path], { encoding: 'utf8' })
+  const method = buf => buf.readUInt16LE(8)   // of the first local header
+  // The writer: an empty file, binary data that doesn't compress (stored), large compressible data (deflated), non-ASCII names (UTF-8 flag).
+  const noise = randomBytes(50000), big = Buffer.from('<p>SCORM Lab</p>\n'.repeat(120000))
+  const z = zip(new Map([['empty.txt', Buffer.alloc(0)], ['noise.bin', noise], ['big.html', big], ['dir/café ü.txt', Buffer.from('é')], ['日本語/ファイル.js', Buffer.from('var a = 1')]]))
+  const back = unzip(z)
+  assert.deepEqual([...back.keys()], ['empty.txt', 'noise.bin', 'big.html', 'dir/café ü.txt', '日本語/ファイル.js'], 'zip: names and order survive, non-ASCII included')
+  assert.ok(back.get('empty.txt').length === 0 && back.get('noise.bin').equals(noise) && back.get('big.html').equals(big) && back.get('dir/café ü.txt').toString() === 'é', 'zip: contents round-trip')
+  const first = z.readUInt32LE(0) === 0x04034b50 && method(z), eocd = z.length - 22, cd = z.readUInt32LE(eocd + 16)
+  const entries = []; for (let p = cd, i = 0; i < z.readUInt16LE(eocd + 10); i++) { const n = z.readUInt16LE(p + 28); entries.push({ flags: z.readUInt16LE(p + 8), method: z.readUInt16LE(p + 10), csize: z.readUInt32LE(p + 20), size: z.readUInt32LE(p + 24), name: z.subarray(p + 46, p + 46 + n).toString('utf8') }); p += 46 + n + z.readUInt16LE(p + 30) + z.readUInt16LE(p + 32) }
+  assert.equal(first, 0, 'zip: an empty file is stored')
+  assert.deepEqual(entries.map(e => e.method), [0, 0, 8, 0, 0], 'zip: empty, incompressible and tiny data are stored, large text deflated')
+  assert.ok(entries[2].method === 8 && entries[2].csize < big.length / 10, 'zip: large text is deflated and smaller: ' + entries[2].csize)
+  assert.ok(entries.every(e => e.csize <= e.size || e.method === 8) && entries[1].csize === noise.length, 'zip: stored only when deflate isn’t smaller')
+  assert.deepEqual(entries.map(e => !!(e.flags & 0x800)), [false, false, false, true, true], 'zip: the UTF-8 flag is set for non-ASCII names only')
+  const zf = join(work, 'writer.zip'); writeFileSync(zf, z)
+  const t = unzipT(zf); assert.equal(t.status, 0, 'zip: unzip -t accepts it: ' + t.stdout + t.stderr); assert.match(t.stdout, /No errors detected/)
+  assert.equal(crc32(Buffer.from('123456789')), 0xcbf43926, 'zip: crc32 check value'); assert.equal(crc32Table(Buffer.from('123456789')), 0xcbf43926, 'zip: the table fallback agrees')
+  assert.equal(crc32Table(noise), crc32(noise), 'zip: the table fallback agrees on binary data')
+  assert.equal(unzip(zip(new Map())).size, 0, 'zip: an empty archive')
+  for (const bad of ['', '/etc/x', '../x', 'a/../x', 'a\\b', 'C:/x', 'c:x', 'a\nb', 'a\x00b', '\\x']) assert.throws(() => zip(new Map([[bad, Buffer.alloc(0)]])), /unsafe ZIP entry name/, 'zip: refuses ' + JSON.stringify(bad))
+  assert.ok(zip(new Map([['a..b/c.txt', Buffer.alloc(0)], ['.hidden', Buffer.alloc(0)]])).length, 'zip: dots inside names are fine')
+  assert.throws(() => zip(new Map(Array.from({ length: 65536 }, (_, i) => ['f' + i, Buffer.alloc(0)]))), /Too many files/, 'zip: the entry limit is refused, not truncated')
+
+  // The fixes, on small packages built in memory from the sample.
+  const sample = () => unzip(readFileSync(good)), map = o => new Map(Object.entries(o).map(([k, v]) => [k, Buffer.from(v)]))
+  const rename = (m, f) => new Map([...m].map(([k, v]) => [f(k), v]))
+  const edit = (m, name, a, b) => { const o = new Map(m); o.set(name, Buffer.from(o.get(name).toString().replace(a, b))); return o }
+  const probs = m => analyze(m).problems.map(p => p.code)
+  const run1 = (id, m, params) => FIXES[id].apply(m, params)
+  assert.deepEqual(FIX_IDS, ['manifest-case', 'manifest-not-root', 'file-missing', 'manifest-version', 'case', 'http-to-https'], 'fixes: the six, in order')
+  for (const id of FIX_IDS) assert.deepEqual(run1(id, sample()).changes, [], `fixes: ${id} does nothing to a good package`)
+  // manifest-case
+  let r = run1('manifest-case', rename(sample(), k => k === 'imsmanifest.xml' ? 'IMSManifest.XML' : k))
+  assert.ok(r.files.has('imsmanifest.xml') && !r.files.has('IMSManifest.XML') && r.changes.length === 1 && !probs(r.files).length, 'fix manifest-case: renamed: ' + r.changes)
+  // manifest-not-root (and with the manifest in the wrong case, both together)
+  r = run1('manifest-not-root', rename(sample(), k => 'course/' + k))
+  assert.deepEqual([...r.files.keys()].sort(), [...sample().keys()].sort(), 'fix manifest-not-root: files are at the top of the ZIP'); assert.ok(r.changes.length === 1 && !probs(r.files).length)
+  const both = correct(rename(sample(), k => 'course/' + (k === 'imsmanifest.xml' ? 'ImsManifest.xml' : k)))
+  assert.deepEqual(both.applied.map(f => f.id), ['manifest-case', 'manifest-not-root'], 'fixes: layout fixes run in order'); assert.ok(!probs(both.files).length && both.files.has('imsmanifest.xml'))
+  const clash = new Map([...rename(sample(), k => 'course/' + k), ['lesson.html', Buffer.from('x')]]), refused = run1('manifest-not-root', clash)
+  assert.ok(refused.changes.length === 0 && /Left the folder course\/ alone/.test(refused.notes[0]), 'fix manifest-not-root: refuses to replace a file, with a note and no change')
+  const refusedExport = exportFixed(clash, {}); assert.ok(refusedExport.zip === null && refusedExport.notes.length === 1, 'export: only notes means no zip')
+  // file-missing
+  r = run1('file-missing', edit(sample(), 'imsmanifest.xml', '<file href="lesson.js"/>', '<file href="lesson.js"/>\n      <file href="gone.js"/>\n      <file href="Style.CSS"><metadata/></file>'))
+  assert.ok(!r.files.get('imsmanifest.xml').toString().includes('gone.js') && r.files.get('imsmanifest.xml').toString().includes('Style.CSS'), 'fix file-missing: a missing entry is removed, one with other capitals kept (that is the case fix’s)')
+  assert.ok(r.changes.length === 1 && !probs(r.files).includes('file-missing'), 'fix file-missing: ' + r.changes)
+  // manifest-version: the mismatch fixture (manifest 2004, scripts 1.2), and the other way
+  const mm = unzip(readFileSync(mismatch)); r = run1('manifest-version', mm)
+  const mmA = analyze(r.files), mmText = r.files.get('imsmanifest.xml').toString()
+  assert.equal(mmA.manifest.version, '1.2'); assert.equal(mmA.manifest.schemaversion, '1.2'); assert.ok(/adlcp_rootv1p2/.test(mmText) && /imscp_rootv1p1p2/.test(mmText) && !/adlcp_v1p3|imscp_v1p1"/.test(mmText), 'fix manifest-version: 2004 → 1.2 namespaces: ' + mmText.slice(0, 600))
+  assert.ok(!staticFindings(mmA).some(f => /but the scripts use/.test(f.title)), 'fix manifest-version: the mismatch finding is gone')
+  let s04 = edit(edit(sample(), 'scorm.js', /[\s\S]*/, 'var API_1484_11 = window.parent.API_1484_11; API_1484_11.Initialize("")'), 'lesson.js', /[\s\S]*/, 'var x = 1')
+  s04 = edit(s04, 'imsmanifest.xml', '<adlcp:masteryscore>80</adlcp:masteryscore>', '<adlcp:masteryscore>80</adlcp:masteryscore><adlcp:datafromlms>x</adlcp:datafromlms>')
+  assert.ok(staticFindings(analyze(s04)).some(f => /says SCORM 1\.2, but the scripts use the SCORM 2004 API/.test(f.title) && f.autofix.params.to === '2004'), 'fix manifest-version: setup: 1.2 manifest, 2004 scripts')
+  r = run1('manifest-version', s04); const t04 = r.files.get('imsmanifest.xml').toString(), a04 = analyze(r.files)
+  assert.ok(a04.manifest.version === '2004' && a04.manifest.edition === '4th' && /adlcp_v1p3/.test(t04) && /imscp_v1p1"/.test(t04) && /xmlns:imsss/.test(t04) && /adlcp:scormType="sco"/.test(t04) && /adlcp:dataFromLMS/.test(t04), 'fix manifest-version: 1.2 → 2004: ' + t04.slice(0, 900))
+  assert.ok(r.notes.some(c => /mastery score.*not converted/.test(c)) && !r.changes.some(c => /mastery/.test(c)), 'fix manifest-version: says what it didn’t convert, as a note: ' + r.notes)
+  assert.deepEqual(run1('manifest-version', unzip(readFileSync(good))).changes, [], 'fix manifest-version: nothing when the scripts agree')
+  // case: rename (every reference spells it the same wrong way), rewrite (another reference has it right), the manifest's own href, an import path
+  const blankFiles = unzip(readFileSync(blank)); r = run1('case', blankFiles)
+  assert.ok(r.files.has('js/app.js') && !r.files.has('js/App.js') && /Renamed js\/App\.js to js\/app\.js/.test(r.changes[0]), 'fix case: single wrong spelling renames the file: ' + r.changes)
+  assert.ok(!bootGraph(r.files, 'lesson.html').risks.some(x => /capitals/.test(x.title)), 'fix case: no capitals finding on the boot graph')
+  let mix = new Map(sample()); mix.set('js/App.js', Buffer.from('var a = 1')); mix.set('lesson.html', Buffer.from('<script src="js/App.js"></script><script src="../js/APP.js"></script>')); mix.set('glossary.html', Buffer.from('<script src="js/app.js"></script>'))
+  r = run1('case', mix)
+  assert.ok(r.files.has('js/App.js') && !r.files.has('js/app.js') && r.files.get('glossary.html').toString() === '<script src="js/App.js"></script>', 'fix case: with one right spelling the references change: ' + r.changes)
+  assert.ok(!bootGraph(r.files, 'glossary.html').risks.some(x => /capitals/.test(x.title)), 'fix case: glossary no longer has capitals problems')
+  r = run1('case', edit(sample(), 'imsmanifest.xml', 'href="lesson.html"', 'href="Lesson.HTML"'))
+  assert.ok(/href="lesson\.html"/.test(r.files.get('imsmanifest.xml').toString()) && r.changes.length === 1 && !probs(r.files).includes('launch-case'), 'fix case: the manifest’s launch href: ' + r.changes)
+  let dirs = new Map(sample()); dirs.set('Js/Lib.js', Buffer.from('1')); dirs.set('lesson.html', Buffer.from('<script src="js/lib.js"></script><script src="JS/lib.js"></script>'))
+  r = run1('case', dirs); assert.ok(r.files.has('Js/Lib.js') && r.files.get('lesson.html').toString() === '<script src="Js/Lib.js"></script><script src="Js/Lib.js"></script>', 'fix case: a folder in the wrong capitals, two spellings: ' + r.changes)
+  // http-to-https
+  const web = edit(sample(), 'lesson.html', /<script/, '<script src="http://cdn.example.com/lib.js"></script><link rel="stylesheet" href=\'http://cdn.example.com/x.css\'><script')
+  r = run1('http-to-https', web); assert.ok(/src="https:\/\/cdn\.example\.com\/lib\.js"/.test(r.files.get('lesson.html').toString()) && /href='https:\/\/cdn\.example\.com\/x\.css'/.test(r.files.get('lesson.html').toString()) && r.changes.length === 2, 'fix http-to-https: ' + r.changes)
+  assert.ok(!bootGraph(r.files, 'lesson.html').risks.some(x => /over http/.test(x.title)), 'fix http-to-https: the finding is gone')
+  // Files that aren't valid UTF-8 are left alone, with a note.
+  const latin = new Map(web); latin.set('lesson.html', Buffer.concat([Buffer.from(web.get('lesson.html')), Buffer.from([0xff, 0xfe])]))
+  r = run1('http-to-https', latin); assert.ok(r.changes.length === 0 && r.files.get('lesson.html').equals(latin.get('lesson.html')) && /lesson\.html alone: it isn’t valid UTF-8/.test(r.notes[0]), 'fix: a file that isn’t UTF-8 is not edited: ' + r.notes)
+  const badManifest = new Map(mm); badManifest.set('imsmanifest.xml', Buffer.concat([mm.get('imsmanifest.xml'), Buffer.from([0xff])]))
+  r = run1('manifest-version', badManifest); assert.ok(r.changes.length === 0 && r.notes.length === 1, 'fix manifest-version: a manifest that isn’t UTF-8 is left alone: ' + r.notes)
+  const bom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), mm.get('imsmanifest.xml')]), withBom = new Map(mm); withBom.set('imsmanifest.xml', bom)
+  assert.deepEqual([...run1('manifest-version', withBom).files.get('imsmanifest.xml').subarray(0, 3)], [0xef, 0xbb, 0xbf], 'fix manifest-version: a byte-order mark is kept')
+  // Resource blocks are matched by identifier: a commented-out resource earlier in the manifest doesn't shift them.
+  r = run1('file-missing', edit(edit(sample(), 'imsmanifest.xml', '<file href="lesson.js"/>', '<file href="lesson.js"/><file href="gone2.js"/>'), 'imsmanifest.xml', '<resources>', '<resources><!-- <resource identifier="old" href="x.html"><file href="gone.js"/><file href="lesson.js"/></resource> -->'))
+  assert.ok(r.changes.length === 1 && /gone2\.js/.test(r.changes[0]) && /<!-- <resource identifier="old"[^>]*><file href="gone\.js"\/>/.test(r.files.get('imsmanifest.xml').toString()), 'fix file-missing: blocks matched by identifier: ' + r.changes)
+  // The findings carry the fix as data, and stay serialisable.
+  const fixable = f => f.autofix?.id
+  assert.deepEqual(staticFindings(analyze(rename(sample(), k => 'course/' + (k === 'imsmanifest.xml' ? 'ImsManifest.xml' : k)))).map(fixable).filter(Boolean).sort(), ['manifest-case', 'manifest-not-root'], 'findings: manifest layout problems carry their fix')
+  assert.equal(staticFindings(analyze(edit(sample(), 'imsmanifest.xml', '</resource>', '<file href="nope.js"/></resource>'))).find(f => /nope\.js/.test(f.title)).autofix.id, 'file-missing')
+  assert.ok(bootGraph(blankFiles, 'lesson.html').risks.find(x => /capitals/.test(x.title)).autofix.id === 'case' && bootGraph(web, 'lesson.html').risks.find(x => /over http/.test(x.title)).autofix.id === 'http-to-https', 'findings: boot risks carry theirs')
+  const withFix = staticFindings(analyze(mm)).find(f => f.autofix); assert.deepEqual(JSON.parse(JSON.stringify(withFix)), withFix, 'findings: autofix is plain data'); assert.deepEqual(withFix.autofix, { id: 'manifest-version', params: { to: '1.2' } })
+  assert.ok(FIX_IDS.every(id => typeof FIXES[id].apply === 'function' && FIXES[id].label), 'fixes: each has a label and a function')
+  // Export: overrides first, then the fixes; the change list and the proof; nothing changed means no zip; --only; unknown ids.
+  const ex = exportFixed(blankFiles, { version: '9.9.9', name: 'blank.zip', overrides: { 'extra.txt': { content: 'hi' } } })
+  const exOut = unzip(ex.zip), notes = exOut.get('SCORM-LAB-CHANGES.txt').toString()
+  assert.ok(exOut.get('extra.txt').toString() === 'hi' && exOut.has('js/app.js') && /^SCORM Lab 9\.9\.9: changes made to blank\.zip/.test(notes) && /extra\.txt/.test(notes) && /Renamed js\/App\.js/.test(notes) && /Findings the changes cleared:\n {2}- Paths differ from the files only in capitals/.test(notes), 'export: the zip and its change list: ' + notes)
+  assert.ok(ex.proof.gone.some(t => /capitals/.test(t)) && !staticAll(exOut).some(f => /capitals/.test(f.title)), 'export: proof by analysing the result')
+  assert.deepEqual(prove(blankFiles, ex.files).gone, ex.proof.gone)
+  assert.equal(exportFixed(sample(), {}).zip, null, 'export: a package with nothing to fix gives no zip'); assert.ok(exportFixed(sample(), { overrides: { 'a.txt': { content: 'x' } } }).zip, 'export: overrides alone are a change')
+  assert.deepEqual(correct(mm, { only: 'case' }).applied, [], 'export: --only leaves the others out'); assert.deepEqual(correct(mm, { only: ['manifest-version'] }).applied.map(f => f.id), ['manifest-version'])
+  assert.throws(() => correct(mm, { only: 'nope' }), /No autofix “nope”/, 'export: unknown id'); assert.throws(() => correct(mm, { only: ',' }), /needs fix ids/)
+  assert.deepEqual(exportFixed(ex.files, {}).applied, [], 'export: running it again on its own result changes nothing')
+  assert.ok(correct(mm).files !== mm && mm.get('imsmanifest.xml').toString().includes('schemaversion>2004'), 'export: the original files are not changed')
+  assert.equal(fixedName('a b.ZIP'), 'a b-fixed.zip')
+}
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -1095,6 +1205,24 @@ if (!process.argv.includes('--unit')) {
   assert.match(node(['items', good]).stdout, /1 {2}Lesson and quiz/)
   assert.match(node(['report', good, '--fragment']).stdout, /class="sl"[\s\S]*Loading path/, 'cli report (static)')
   console.log('cli: ok')
+
+  // scorm-lab fix (P3.1), without Electron: the corrected zip is valid (unzip -t), reads back, and analyze no longer finds what was fixed.
+  const fixOut = join(work, 'blank-fixed.zip'), fx = node(['fix', blank, '--out', fixOut, '--json'])
+  assert.equal(fx.status, 0, 'cli fix: ' + fx.stderr); const fj = JSON.parse(fx.stdout)
+  assert.ok(fj.applied.some(f => f.id === 'case') && fj.proof.gone.some(t => /capitals/.test(t)) && fj.out === fixOut, 'cli fix: --json lists the change and the proof')
+  const uz = spawnSync('unzip', ['-t', fixOut], { encoding: 'utf8' }); assert.equal(uz.status, 0, 'cli fix: unzip -t: ' + uz.stdout + uz.stderr)
+  const fixedFiles = unzip(readFileSync(fixOut)); assert.ok(fixedFiles.has('js/app.js') && /^SCORM Lab \S+: changes made to blank\.zip/.test(fixedFiles.get('SCORM-LAB-CHANGES.txt').toString()), 'cli fix: round-trip through the reader')
+  const fan = JSON.parse(node(['analyze', fixOut, '--json']).stdout)
+  assert.ok(!fan.findings.some(f => /capitals/.test(f.title)), 'cli fix: no capitals finding in the result: ' + fan.findings.map(f => f.title)); assert.ok(fan.findings.some(f => /vendor\/missing\.js/.test(f.evidence?.join(' '))), 'cli fix: what isn’t mechanically fixable (a missing file) is still reported')
+  assert.match(node(['fix', mismatch, '--out', join(work, 'mismatch-fixed.zip')]).stdout, /manifest-version[\s\S]*Findings cleared: 1 of 1[\s\S]*Wrote /, 'cli fix: text output')
+  assert.ok(!JSON.parse(node(['analyze', join(work, 'mismatch-fixed.zip'), '--json']).stdout).findings.some(f => /but the scripts use/.test(f.title)), 'cli fix: the version finding is gone')
+  assert.equal(spawnSync('unzip', ['-t', join(work, 'mismatch-fixed.zip')]).status, 0)
+  const nothing = node(['fix', good, '--out', join(work, 'good-fixed.zip')]); assert.ok(nothing.status === 0 && /Nothing to change/.test(nothing.stdout) && !existsSync(join(work, 'good-fixed.zip')), 'cli fix: nothing to fix writes no file')
+  const only = JSON.parse(node(['fix', mismatch, '--only', 'case', '--out', join(work, 'only.zip'), '--json']).stdout); assert.deepEqual(only.applied, [], 'cli fix: --only limits the fixes'); assert.equal(only.out, null)
+  assert.equal(node(['fix', good, '--only', 'nope']).status, 2, 'cli fix: unknown id fails'); assert.match(node(['fix', good, '--only', 'nope']).stderr, /No autofix “nope”/); assert.equal(node(['fix', good, '--only']).status, 2, 'cli fix: --only needs a value')
+  const ovFile = join(work, 'ov.txt'); writeFileSync(ovFile, 'note')
+  const ov = node(['fix', good, '--override', 'notes/ov.txt=' + ovFile, '--out', join(work, 'ov.zip')]); assert.equal(ov.status, 0, ov.stderr); assert.equal(unzip(readFileSync(join(work, 'ov.zip'))).get('notes/ov.txt').toString(), 'note', 'cli fix: --override files go in')
+  assert.equal(node(['fix', join(work, 'nope.zip')]).status, 2, 'cli fix: missing file is status 2')
 
   // Runs.
   const out = join(work, 'good-run.json'), g = run(good, '--out', out)
@@ -1146,6 +1274,19 @@ if (!process.argv.includes('--unit')) {
     assert.ok(plf && plf.evidence.some(e => /polls every 250 ms/.test(e) && (process.env.SCORM_LAB_FORCE_TRACE === '1' || !/tests/.test(e))), 'polling: a poller without a trace: ' + titles(pl))
     const plt = run(polling, '--wait', '4', '--trace'), pltf = plt.findings.find(f => /was waiting for/.test(f.title))
     assert.ok(pltf && /`window\.API` to change \(checked every 250 ms\)/.test(pltf.title) && pltf.evidence.some(e => /boot\.js:1 polls every 250 ms \(\d+ runs\); tests `window\.API → undefined`, \d+ times/.test(e)), 'polling: the condition when traced: ' + titles(plt))
+  }
+  if (slow) {
+    // P3.1: the corrected packages run. A package whose only fault is a script reference in the wrong capitals, once fixed, has
+    // no 404 (blank itself would then show its own script error: that script runs before <body> exists); mismatch's version fixed: calls appear with no --api setting.
+    const capitals = fixture('capitals', d => {
+      mkdirSync(join(d, 'js')); writeFileSync(join(d, 'js', 'App.js'), "document.body.insertAdjacentHTML('beforeend', '<h1>Built by App.js</h1>')")
+      sub(d, 'lesson.html', '</body>', '<script src="js/app.js"></script></body>')
+    })
+    assert.ok(titles(run(capitals)).some(t => /js\/app\.js/.test(t) && /404|Not found/.test(t)), 'fix: setup: the wrong capitals give a 404 for js/app.js')
+    const capOut = join(work, 'capitals-fixed.zip'); assert.equal(node(['fix', capitals, '--out', capOut]).status, 0)
+    const fb = run(capOut), fbt = titles(fb)
+    assert.ok(!fbt.some(t => /404|Not found/.test(t)), 'fix: the corrected package loads the renamed script: ' + fbt)
+    assert.ok(calls(run(join(work, 'mismatch-fixed.zip'))).includes('LMSInitialize '), 'fix: the corrected mismatch makes API calls')
   }
   console.log('runs: ok')
 
@@ -1614,6 +1755,24 @@ if (!process.argv.includes('--unit')) {
       assert.ok((await invoke('state')).running, 'web: the WebKit run goes on until stopped')
       assert.ok(await invoke('stop'), 'web: Stop ends it with a run')
       assert.equal((await invoke('state')).runs.length, nw + 2, 'web: the stopped WebKit run is recorded')
+    }
+    // The corrected package as a download (P3.1, slow): the changed files go in, the zip is valid, and with nothing to fix it says so.
+    if (slow) {
+      assert.equal((await fetch(base + '/api/upload?name=blank.zip', { method: 'POST', headers: H, body: readFileSync(blank) })).status, 200)
+      await invoke('override-set', { path: 'notes.txt', content: 'from the web' })
+      const dl = await fetch(base + '/api/export', { headers: H }), sum = JSON.parse(decodeURIComponent(dl.headers.get('x-scorm-lab-summary'))), dlBuf = Buffer.from(await dl.arrayBuffer())
+      assert.ok(dl.status === 200 && dl.headers.get('content-type') === 'application/zip' && /attachment; filename="blank-fixed\.zip"/.test(dl.headers.get('content-disposition')), 'web export: a zip download: ' + dl.status + ' ' + dl.headers.get('content-disposition'))
+      assert.ok(sum.file === 'blank-fixed.zip' && sum.applied.includes('case') && sum.gone >= 1, 'web export: summary: ' + JSON.stringify(sum))
+      const dlFile = join(work, 'web-fixed.zip'); writeFileSync(dlFile, dlBuf); assert.equal(spawnSync('unzip', ['-t', dlFile]).status, 0, 'web export: unzip -t')
+      const dlFiles = unzip(dlBuf); assert.ok(dlFiles.has('js/app.js') && dlFiles.get('notes.txt').toString() === 'from the web' && dlFiles.has('SCORM-LAB-CHANGES.txt'), 'web export: includes the fixes, the overrides and the change list')
+      assert.equal((await fetch(base + '/api/export?only=nope', { headers: H })).status, 500, 'web export: an unknown fix is an error')
+      const noFix = await fetch(base + '/api/export?only=', { headers: H }), noFixFiles = unzip(Buffer.from(await noFix.arrayBuffer()))
+      assert.ok(noFix.status === 200 && noFixFiles.has('js/App.js') && noFixFiles.get('notes.txt') && !noFixFiles.has('js/app.js'), 'web export: an empty list of fixes keeps only the changed files')
+      assert.equal(/filename\*=UTF-8''blank-fixed\.zip$/.test(dl.headers.get('content-disposition')), true, 'web export: filename* ends the header')
+      await assert.rejects(invoke('export-fixed'), /not found|Not found|invoke/i, 'web export: the save-dialog handler is desktop only')
+      assert.equal((await fetch(base + '/api/upload?name=good.zip', { method: 'POST', headers: H, body: readFileSync(good) })).status, 200)
+      const none = await fetch(base + '/api/export', { headers: H }); assert.ok(none.status === 500 && /Nothing to change/.test((await none.json()).error), 'web export: nothing to change says so')
+      assert.equal((await fetch(base + '/api/export')).status, 401, 'web export: needs the token')
     }
     console.log('web: ok')
   } finally { server.kill() }

@@ -7,6 +7,7 @@ import { createRequire } from 'node:module'
 import { tmpdir, homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { unzip } from '../src/zip.js'
+import { exportFixed, fixedName, FIX_IDS } from '../src/fixes.js'
 import { analyze } from '../src/analyze.js'
 import { bootGraph } from '../src/bootpath.js'
 import { staticFindings, sortFindings } from '../src/rules.js'
@@ -34,6 +35,7 @@ Usage: scorm-lab <command> [options]
 
 Commands
   analyze <package.zip>     Check the package without running it: manifest, scripts, launch path.
+  fix <package.zip>         Write a corrected copy of the package: the mechanical fixes, plus any --override files.
   items <package.zip>       List the items that can be launched, with their numbers.
   run <package.zip>         Launch an item in a hidden browser, record it, and report what went wrong.
   experiment <package.zip>  Run the same launch several ways, one after another, and show how far each got.
@@ -82,6 +84,12 @@ Options for run (and report --run)
   --no-caught               Don't record errors the content catches itself.
   --show                    Show the content window while it runs.
 
+Options for fix
+  --only <id,…>             Only these fixes (default: all): ${FIX_IDS.join(', ')}.
+  --override <path>=<file>  Put a changed file in the corrected package (as for run). Repeatable.
+  --out <fixed.zip>         Where to write it. Default: <package>-fixed.zip in the current folder.
+  --json                    Print JSON instead of text.
+
 Options for experiment (also the run options above, which set the default launch)
   --variants <file.json>    Your own variants: [{ "name": "deep", "patch": { "depth": 2 } }, …].
   --preset <name>           Built-in variants: standard (default), api, frames, lms (one per LMS profile), storage (normal and blocked), browsers (chromium and webkit).
@@ -128,7 +136,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'macro', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'macro', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds', 'only']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
     if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
@@ -356,6 +364,29 @@ const commands = {
       verdict: verdict(findings), counts: counts(findings), findings, boot }, null, 1))
     else { printHeader(pkg, item); printFindings(findings); printVerdict(findings) }
     return o.strict && findings.some(f => f.sev === 'error') ? 1 : 0
+  },
+  fix(o) {
+    const pkg = openZip(o._[0])
+    for (const k of ['only', 'out']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
+    let r
+    try { r = exportFixed(pkg.files, { only: o.only, overrides: overrideFiles(o.override), version: VERSION, name: pkg.name }) } catch (e) { if (e instanceof Fail) throw e; fail(e.message) }
+    const out = r.zip ? resolve(o.out ?? fixedName(pkg.name)) : null
+    if (out) writeFileSync(out, r.zip)
+    if (o.json) console.log(JSON.stringify({ package: pkg.name, out, applied: r.applied, notes: r.notes, overridden: r.overridden, proof: r.proof }, null, 1))
+    else {
+      console.log(paint('1', `SCORM Lab · fix · ${pkg.name}`))
+      if (!r.zip) console.log('Nothing to change: none of the fixes found anything to correct, and no --override was given. No file written.')
+      for (const f of r.applied) { console.log(`\n${f.label} ${paint('2', `[${f.id}]`)}`); for (const c of f.changes) console.log(`  · ${c}`) }
+      if (r.notes.length) { console.log('\nNot done:'); for (const n of r.notes.flatMap(f => f.notes)) console.log(`  · ${n}`) }
+      if (r.overridden.length) console.log(`\nChanged files: ${r.overridden.join(', ')}`)
+      if (r.zip) {
+        console.log(`\nFindings cleared: ${r.proof.gone.length} of ${r.proof.before}${r.proof.gone.map(t => `\n  ✓ ${t}`).join('')}`)
+        if (r.proof.added.length) console.log(`New or reworded:${r.proof.added.map(t => `\n  + ${t}`).join('')}`)
+        console.log(`Still there: ${r.proof.remaining.length}`)
+        console.log(paint('2', `\nWrote ${out} (the changes are listed inside it, in SCORM-LAB-CHANGES.txt)`))
+      }
+    }
+    return 0
   },
   items(o) {
     const pkg = openZip(o._[0]), list = launchable(pkg.analysis)

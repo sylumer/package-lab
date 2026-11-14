@@ -45,6 +45,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | Command | Does |
 |---|---|
 | `analyze <package.zip>` | Checks the package without running it: manifest, scripts, boot path |
+| `fix <package.zip>` | Writes a corrected copy of the package: the mechanical fixes, and any `--override` files |
 | `items <package.zip>` | Lists the items that can be launched, numbered |
 | `run <package.zip>` | Launches an item in a hidden browser, records it, and reports what went wrong |
 | `experiment <package.zip>` | Runs the same launch several ways, one after another, and prints how far each got |
@@ -503,6 +504,36 @@ view, to the newest window of the run. `--macro` works on `run` as well, and the
 `launch.options.macro`. Make one by recording in the [live view](web.md#live-view), or from a run in the desktop app
 (the clicks, keys and typing the probe saw are in the run's `probe` list with `type: "input"`). Macros are not supported in
 WebKit.
+
+## fix
+
+```bash
+scorm-lab fix course.zip [--only id,…] [--override path=file …] [--out fixed.zip] [--json]
+```
+
+Writes a corrected copy of the package and says what it changed. The original is not touched. Without `--out` the
+file is `course-fixed.zip` in the current folder. If there is nothing to change, it says so and writes no file.
+
+| Fix id | Does |
+|---|---|
+| `manifest-case` | Renames the manifest to `imsmanifest.xml` |
+| `manifest-not-root` | Moves the files up out of the folder that holds the manifest, to the top of the ZIP |
+| `file-missing` | Removes `<file>` entries for files that aren't in the package |
+| `manifest-version` | Sets `<schemaversion>` and the namespaces to match the SCORM API the scripts use (1.2 or 2004 4th Edition) |
+| `case` | Makes references match the capitals of the files: it changes the references, or renames the file when every reference spells it the same way |
+| `http-to-https` | Changes `http://` addresses of scripts, styles and frames to `https://` |
+
+| Option | Meaning |
+|---|---|
+| `--only` | Run only these fixes, as a comma-separated list. Default: all of them |
+| `--override` | Put a changed file in the new package, as for `run`: `--override js/app.js=fixed-app.js`. Repeatable. Overrides go in first, then the fixes |
+| `--out` | Where to write the ZIP |
+| `--json` | Prints `{ package, out, applied: [{ id, label, changes }], notes: [{ id, label, notes }], overridden, proof: { before, after, gone, remaining, added } }` |
+
+Inside the new ZIP, `SCORM-LAB-CHANGES.txt` lists every change and the SCORM Lab version. After writing it, `fix`
+checks the result again without running it, and prints which findings are gone (`proof.gone`), which are still there,
+and which are new or worded differently (a fix can change a count in a title). What a fix left alone, and why (a file that isn't valid UTF-8, a rename that would replace a file, something it couldn't convert), is printed under **Not done** and listed in `notes`; notes are not changes, so if there are only notes no file is written. An unknown id in `--only` is an error
+(status 2). Check the result with `scorm-lab analyze fixed.zip`, or run it.
 
 ## report
 

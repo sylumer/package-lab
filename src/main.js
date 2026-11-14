@@ -25,6 +25,7 @@ import { startWeb } from './web.js'
 import { normaliseOptions, cliCommand, packagePath } from './options.js'
 import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
+import { exportFixed, fixedName, applicable } from './fixes.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
 import { cycleFindings, cycleRows, macroFromTrace, resumeOptions } from './cycle.js'
 import { discover, checkDiscover } from './shape.js'
@@ -308,7 +309,8 @@ function loadPackageData(name, buf, path = '') {
 function pkgInfo() {
   if (!pkg) return null
   const m = pkg.analysis.manifest, first = m?.items.find(i => i.type === 'sco' && i.res?.path) ?? m?.items.find(i => i.res?.path)
-  return { name: pkg.name, loaded: pkg.loaded, analysis: pkg.analysis, overrides: overrideList(pkg.files, pkg.overrides), findings: sortFindings([...staticFindings(pkg.analysis), ...(first ? bootFor(first.res.path).risks : [])]),
+  const findings = sortFindings([...staticFindings(pkg.analysis), ...(first ? bootFor(first.res.path).risks : [])])
+  return { name: pkg.name, loaded: pkg.loaded, analysis: pkg.analysis, overrides: overrideList(pkg.files, pkg.overrides), findings, fixes: applicable(findings),
     items: (m?.items ?? []).filter(i => i.res).map(i => ({ index: m.items.indexOf(i), title: i.title || i.id, type: i.type, depth: i.depth, href: i.res.path ?? i.res.href })) }
 }
 // The boot graph of a launch page, worked out once per package.
@@ -529,11 +531,28 @@ function ownFile(path) {
   return pkg.files.get(path)
 }
 
+// The corrected package (P3.1): the open package with its changed files and the autofixes. zip is null when nothing changed.
+function buildExport({ only } = {}) {
+  if (!pkg) throw new Error('Open a package first.')
+  const r = exportFixed(pkg.files, { only, overrides: pkg.overrides, version: app.getVersion(), name: pkg.name })
+  return { zip: r.zip, file: fixedName(pkg.name), summary: { file: r.zip ? fixedName(pkg.name) : null, changes: r.applied.reduce((n, f) => n + f.changes.length, 0) + r.overridden.length, applied: r.applied.map(f => f.id),
+    gone: r.proof.gone.length, remaining: r.proof.remaining.length, added: r.proof.added.length } }
+}
+
 // ---- What the interfaces can ask for. The desktop window calls these over IPC, web clients over HTTP. ----
 const handlers = {
   'open-package': async () => {
     const r = await dialog.showOpenDialog(ui, { title: 'Open a SCORM package', filters: [{ name: 'SCORM package', extensions: ['zip'] }], properties: ['openFile'] })
     return r.canceled ? null : loadPackage(r.filePaths[0])
+  },
+  // Export corrected package…: a save dialog, then the file. Returns the summary (file is null if nothing needed changing or the dialog was cancelled).
+  'export-fixed': async o => {
+    const { zip, file, summary } = buildExport(o)
+    if (!zip) return summary
+    const r = await dialog.showSaveDialog(ui, { title: 'Export corrected package', defaultPath: join(pkg.path ? join(pkg.path, '..') : app.getPath('documents'), file), filters: [{ name: 'SCORM package', extensions: ['zip'] }] })
+    if (r.canceled || !r.filePath) return { ...summary, file: null, cancelled: true }
+    writeFileSync(r.filePath, zip)
+    return { ...summary, file: basename(r.filePath), path: r.filePath }
   },
   state: () => ({ pkg: pkgInfo(), runs: [...runs.values()].map(summary), running: active ? { running: active.kind, label: active.label } : null, web: web ? { url: web.url } : null }),
   boot: ({ item }) => { const res = pkg?.analysis.manifest?.items[item]?.res; return res?.path ? bootFor(res.path) : null },
@@ -661,7 +680,8 @@ app.whenReady().then(async () => {
   if (SERVE) {
     const port = flagValue('serve', '') === '0' ? 0 : +flagValue('serve', DEFAULT_PORT) || DEFAULT_PORT, host = flagValue('host', '127.0.0.1')
     web = await startWeb({ host, port, uiDir: join(import.meta.dirname, 'ui'), dataDir: app.getPath('userData'), handlers,
-      upload: (name, buf) => loadPackageData(name, buf), onLive: n => { live.watchers = n; live.restart() } })
+      upload: (name, buf) => loadPackageData(name, buf),
+      download: o => { const { zip, file, summary } = buildExport(o); if (!zip) throw new Error('Nothing to change: no autofix found anything to correct, and no file has been changed.'); return { name: file, buf: zip, summary } }, onLive: n => { live.watchers = n; live.restart() } })
     console.log(`SCORM Lab web interface: ${web.url}`)
   }
   if (WINDOW) createWindow()

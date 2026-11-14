@@ -15,13 +15,15 @@ export function staticFindings(a) {
   if (!a) return out
   const sev = { 'no-manifest': 'error', 'manifest-xml': 'error', 'launch-missing': 'error', 'launch-case': 'error', 'manifest-case': 'error',
     'file-missing': 'warn', 'manifest-not-root': 'warn', 'launch-remote': 'warn', 'no-sco': 'warn' }
-  for (const p of a.problems) out.push({ sev: sev[p.code] ?? 'warn', title: p.text, evidence: [], fix: '' })
+  const autofix = { 'manifest-case': 1, 'manifest-not-root': 1, 'file-missing': 1, 'launch-case': 'case' }   // problem code → the autofix that addresses it (src/fixes.js)
+  for (const p of a.problems) out.push({ sev: sev[p.code] ?? 'warn', title: p.text, evidence: [], fix: '', ...(autofix[p.code] && { autofix: { id: autofix[p.code] === 1 ? p.code : autofix[p.code], params: {} } }) })
   const m = a.manifest
   if (m && a.apiUse !== 'none' && a.apiUse !== 'both' && a.apiUse !== m.version)
     out.push({ sev: 'error', title: `The manifest says SCORM ${m.version}, but the scripts use the SCORM ${a.apiUse} API`,
       detail: `An LMS offers only ${API_NAME[m.version]} for a SCORM ${m.version} package, and the content looks for ${API_NAME[a.apiUse]}, so it finds no LMS.`,
       evidence: evidenceFrom(a.scan, a.apiUse === '1.2' ? 'api12' : 'api04', 3),
-      fix: `Republish for SCORM ${m.version}, or correct <schemaversion> in imsmanifest.xml to match the content (${a.apiUse === '1.2' ? '1.2' : '2004 4th Edition'}). Check with the Both APIs profile.` })
+      fix: `Republish for SCORM ${m.version}, or correct <schemaversion> in imsmanifest.xml to match the content (${a.apiUse === '1.2' ? '1.2' : '2004 4th Edition'}). Check with the Both APIs profile.`,
+      autofix: { id: 'manifest-version', params: { to: a.apiUse } } })
   if (m && a.apiUse === 'none' && m.items.some(i => i.type === 'sco'))
     out.push({ sev: 'warn', title: 'No script in the package mentions the SCORM API',
       detail: 'The SCOs may load their LMS code from somewhere else (a server or another site), or build the names at run time.',

@@ -25,6 +25,7 @@
       <option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
     <button id="launch" type="button" disabled>Launch</button>
     <button id="cycle" type="button" class="secondary" disabled title="Run, leave the way a learner closing the window does, then resume from what was saved, and check the content saved and read its place.">Test saving</button>
+    <button id="export" type="button" class="secondary" disabled title="Save a corrected copy of the package: your changed files and the mechanical fixes (capitals, manifest version, missing files, http, layout), with a list of every change inside.">Export corrected package…</button>
   </div>
   <div class="bar">
     <label class="grow">Working copy (reference) <input id="ref-url" type="url" placeholder="https://… where the course works (hosted preview, LMS, SCORM Cloud)" spellcheck="false"></label>
@@ -33,6 +34,7 @@
     <button id="stop" type="button" disabled>Stop and analyse</button>
     <span id="status" role="status"></span>
   </div>
+  <div class="bar" id="export-panel" hidden></div>
   <details id="more">
     <summary>More options</summary>
     <p class="muted small">The options this launch will use. To set the others, use a file with <code>--options</code> on the command line.</p>

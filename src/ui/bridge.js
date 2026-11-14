@@ -25,6 +25,15 @@ if (!window.lab) {
         x.send(file)
       })
     },
+    // The corrected package, saved by the browser; resolves to the summary of the changes (P3.1).
+    async download(only) {   // only: a list of fix ids (empty: none), or leave out for all
+      const r = await fetch('/api/export' + (only ? '?only=' + encodeURIComponent(only.join(',')) : ''), { credentials: 'same-origin' })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `${r.status} ${r.statusText}`)
+      const summary = JSON.parse(decodeURIComponent(r.headers.get('X-Scorm-Lab-Summary')))
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(await r.blob()), download: summary.file })
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000)
+      return summary
+    },
     // Frames of the running content, until the returned function is called.
     live(fn) {
       const s = new EventSource('/api/live')
