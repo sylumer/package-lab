@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { macro: [], cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'xAPI', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', 'Folder check', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'xAPI', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', ...(lab.web ? [] : ['Folder check']), 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 // ---- The code view: every file:line in evidence opens it (src/ui/codeview.js draws it, the code-view handler fills it) ----
 const codePane = $('code-pane')
@@ -503,7 +503,7 @@ function render() {
   if (lab.web) liveWatch(st.tab === 'Live' && !!st.running)
   $('tabs').replaceChildren(...TABS.map(t => h('button', { type: 'button', role: 'tab', 'aria-selected': String(t === st.tab), onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))
   // Not while the file editor has focus: a redraw (a run or state event) would lose the cursor and scroll position.
-  if (!(st.tab === 'Files' && document.activeElement?.classList.contains('code')) && !document.activeElement?.matches?.('#view .pins-form input, #view .answer-form input, #view .answer-form textarea')) $('view').replaceChildren(...[VIEWS[st.tab]()].flat(Infinity))
+  if (!(st.tab === 'Files' && document.activeElement?.classList.contains('code')) && !document.activeElement?.matches?.('#view .pins-form input, #view .answer-form input, #view .answer-form textarea')) $('view').replaceChildren(...[VIEWS[st.tab]()].flat(Infinity).filter(x => x != null && x !== false))
   $('runs').replaceChildren(...st.runs.map(r => h('li', { class: r.id === st.sel ? 'sel' : null, onclick: () => { st.sel = r.id; render() } },
     h('label', { title: 'Reference: the run that works' }, h('input', { type: 'radio', name: 'ref', checked: st.ref === r.id, onclick: e => { e.stopPropagation(); st.ref = r.id; render() } }), h('span', { class: 'tag' }, 'R')),
     h('label', { title: 'The run that fails' }, h('input', { type: 'radio', name: 'fail', checked: st.fail === r.id, onclick: e => { e.stopPropagation(); st.fail = r.id; render() } }), h('span', { class: 'tag' }, 'F')),

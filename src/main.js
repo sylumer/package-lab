@@ -39,6 +39,8 @@ import { codeViewAsync } from './codeview.js'
 import { timelineView } from './timeline.js'
 import { createLrs, maskTokens, MAX_BODY } from './lrs.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
+// Electron's own warning about pages without a CSP would show as an error of every run's content; it is about SCORM Lab, not the course.
+process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
