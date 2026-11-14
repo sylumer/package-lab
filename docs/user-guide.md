@@ -690,6 +690,24 @@ Minified files are compared as they are, so a changed minified script shows as o
 To see how they behave too, use [`scorm-lab diff --run`](cli.md#diff): it runs the same item with the same options on
 both and says how far each got ("A reached Wrote data; B reached Launch page loaded").
 
+## Checking a folder of packages
+
+A course often comes as a folder of exports. **Check a folder…** (in the toolbar, next to **Compare packages…**) asks for
+a folder and checks every `.zip` in it, from the files alone, so nothing runs. The result appears in the **Folder check**
+tab, one row per package:
+
+- **Verdict:** OK, Warning or Error, the worst finding as it shows in the **Findings** tab. **Failed** means the file
+  couldn't be opened (it isn't a ZIP, say). It stays in the table, with the reason, and the other packages are still
+  checked.
+- **SCORM**, **Tool**, the number of **Errors** and **Warnings**, and the title of the worst finding (**Note**).
+
+Click a row to open that package in the window, as if you had opened it. Only the packages of the last check can be
+opened this way. The button is in the desktop app only.
+
+To check a folder from the command line, or to get a file you can open in a browser or a spreadsheet, use
+[`scorm-lab batch`](cli.md#batch). It can also run each package (`--run`) and writes a CSV and an HTML report. In Alfred,
+the File Action **Check SCORM packages in folder** does the same for a folder and opens the report ([Alfred](alfred.md)).
+
 ## Saved runs
 
 Every run is saved as JSON in `~/Library/Application Support/SCORM Lab/runs/`. **Open saved…** brings runs back, for

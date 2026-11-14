@@ -12,7 +12,7 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { macro: [], cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', 'Folder check', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 // ---- The code view: every file:line in evidence opens it (src/ui/codeview.js draws it, the code-view handler fills it) ----
 const codePane = $('code-pane')
@@ -532,6 +532,22 @@ VIEWS['Package diff'] = () => {
     ...table(['File', 'Kind', 'How', 'Change'], [...d.boot.added.map(n => [n.path, n.kind, n.how, `only in B (${n.status})`]), ...d.boot.removed.map(n => [n.path, n.kind, n.how, `only in A (${n.status})`]), ...d.boot.changed.map(c => [c.path, c.kind, '', `${c.a} → ${c.b}`])]),
     h('h3', { class: 'section' }, 'New findings (in B, not in A)'), findingsList(d.findings.added),
     h('h3', { class: 'section' }, 'Findings gone (in A, not in B)'), findingsList(d.findings.gone)]
+}
+// ---- Folder check (P4.3, desktop only): every package in a folder, one row each. A row opens that package. ----
+const BATCH_SEV = { ok: 'OK', warn: 'Warning', error: 'Error', failed: 'Failed' }
+const showBatch = b => { if (!b) return; st.batch = b; st.tab = 'Folder check'; render(); say(`${b.folder}: ${b.summary.packages} packages checked.`) }
+const openBatchRow = r => act(async () => showPackage(await lab.invoke('open-batch-row', { path: r.path })), 'Opening…')
+$('check-folder').onclick = () => act(async () => showBatch(await lab.invoke('check-folder')), 'Checking the folder…')
+$('check-folder').hidden = !!lab.web   // desktop only: the web interface can't open a folder on this Mac
+VIEWS['Folder check'] = () => {
+  const b = st.batch
+  if (!b) return h('p', { class: 'muted' }, 'Choose Check a folder… to check every SCORM package in a folder.')
+  const s = b.summary
+  return [h('p', {}, h('b', {}, b.folder), `: ${s.packages} packages, ${s.ok} OK, ${s.warnings} with warnings, ${s.errors} with errors, ${s.failed} failed.`),
+    h('p', { class: 'muted small' }, 'From the files alone. Click a package to open it.'),
+    h('table', {}, h('thead', {}, h('tr', {}, ['Package', 'SCORM', 'Tool', 'Verdict', 'Errors', 'Warnings', 'Note'].map(c => h('th', {}, c)))),
+      h('tbody', {}, b.rows.map(r => h('tr', { class: 'click', title: 'Open this package', onclick: () => openBatchRow(r) },
+        [r.package, r.scorm ?? '', r.tool, BATCH_SEV[r.verdict] ?? r.verdict, r.errors, r.warnings, r.note].map(c => h('td', {}, String(c)))))))]
 }
 // ---- LMS profile (P2.1): a preset from the toolbar, with the fields changed in More options going over it ----
 // [field path, label, choices | 'text' | 'number' | 'json']. Empty sandbox, CSP and limits are null (none, the standard's).

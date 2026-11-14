@@ -26,6 +26,7 @@ import { normaliseOptions, cliCommand, packagePath } from './options.js'
 import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
 import { comparePackages } from './pkgdiff.js'
+import { batchFiles, staticRows, batchSummary } from './batch.js'
 import { exportFixed, fixedName, applicable } from './fixes.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
 import { cycleFindings, cycleRows, macroFromTrace, resumeOptions } from './cycle.js'
@@ -308,6 +309,8 @@ function loadPackageData(name, buf, path = '') {
   emit('package', info)
   return info
 }
+// The paths of the last Check a folder… result (see the handlers): the only packages open-batch-row will open.
+let batchPaths = new Set()
 // Compare packages…: the open package (A) against another (B), from the files alone. The other one isn't opened.
 function comparePackageData(name, buf) {
   if (!pkg) throw new Error('Open a package first, then choose the one to compare it with.')
@@ -588,6 +591,20 @@ const handlers = {
     if (active || experiment) throw new Error('Stop the run first.')
     const r = await dialog.showOpenDialog(ui, { title: `Compare ${pkg.name} with…`, filters: [{ name: 'SCORM package', extensions: ['zip'] }], properties: ['openFile'] })
     return r.canceled ? null : comparePackageData(basename(r.filePaths[0]), readFileSync(r.filePaths[0]))
+  },
+  // Check a folder… (P4.3): every package in a folder, from the files alone (no runs), one row each. A row opens its package; only the
+  // rows of the last check can be opened. Static checks in worker threads, two at a time.
+  'check-folder': async () => {
+    const r = await dialog.showOpenDialog(ui, { title: 'Check the SCORM packages in a folder', properties: ['openDirectory'] })
+    if (r.canceled) return null
+    const results = await staticRows(batchFiles([r.filePaths[0]]), { jobs: 2 })
+    batchPaths = new Set(results.map(x => x.row.path))
+    const rows = results.map(x => x.row)
+    return { folder: basename(r.filePaths[0]), rows, summary: batchSummary(rows) }
+  },
+  'open-batch-row': ({ path }) => {
+    if (!batchPaths.has(path)) throw new Error('Check the folder again to open its packages.')
+    return loadPackage(path)
   },
   state: () => ({ pkg: pkgInfo(), runs: [...runs.values()].map(summary), running: active ? { running: active.kind, label: active.label } : null, web: web ? { url: web.url } : null }),
   boot: ({ item }) => { const res = pkg?.analysis.manifest?.items[item]?.res; return res?.path ? bootFor(res.path) : null },

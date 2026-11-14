@@ -35,6 +35,7 @@ import { cycleFindings, cycleRows, readMacro, macroFromTrace, resumeOptions } fr
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import './packs.js'
 import './codeview.js'
+import './batch.js'
 import vm from 'node:vm'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
@@ -1345,6 +1346,51 @@ if (!process.argv.includes('--unit')) {
   const ov = node(['fix', good, '--override', 'notes/ov.txt=' + ovFile, '--out', join(work, 'ov.zip')]); assert.equal(ov.status, 0, ov.stderr); assert.equal(unzip(readFileSync(join(work, 'ov.zip'))).get('notes/ov.txt').toString(), 'note', 'cli fix: --override files go in')
   assert.equal(node(['fix', join(work, 'nope.zip')]).status, 2, 'cli fix: missing file is status 2')
 
+  // Batch checks (P4.3), without Electron: every fixture in one folder, and a file that isn't a ZIP. One row each, with the verdict
+  // analyze gives its package; a CSV and an HTML report are written. The static checks run in worker threads (--jobs 3).
+  {
+    const folder = join(work, 'batch'); mkdirSync(folder)
+    const all = { good, mismatch, hosted, blank, order, loader, gated, chromeOnly, noExit, restart, typing, handshake, polling, stored, pinned, lexical, needs, levels }
+    for (const [name, zipPath] of Object.entries(all)) cpSync(zipPath, join(folder, name + '.zip'))
+    writeFileSync(join(folder, 'broken.zip'), 'not a zip')
+    const csvFile = join(work, 'batch.csv'), htmlFile = join(work, 'batch.html')
+    const bj = node(['batch', folder, '--jobs', '3', '--json', '--csv', csvFile, '--out', htmlFile])
+    assert.equal(bj.status, 0, 'batch: ' + bj.stderr)
+    const b = JSON.parse(bj.stdout), names = Object.keys(all), rowFor = f => b.rows.find(r => r.package === f)
+    assert.equal(b.rows.length, names.length + 1, 'batch: one row per package')
+    const sevOf = zip => {   // the verdict `analyze` gives the package: the same checks as the CLI's, on one thread
+      const files = unzip(readFileSync(zip)), a = analyze(files, { tool: null }), item = (a.manifest?.items ?? []).filter(i => i.res)
+      const first = item.find(i => i.type === 'sco') ?? item[0], boot = first?.res.path ? bootGraph(files, first.res.path) : null
+      return verdict([...staticFindings(a), ...(boot?.risks ?? [])]).sev
+    }
+    for (const name of names) assert.equal(rowFor(name + '.zip').verdict, sevOf(all[name]), `batch: ${name} has its analyze verdict`)
+    assert.equal(rowFor('blank.zip').verdict, 'error', 'batch: blank has the capitals error')
+    assert.equal(rowFor('broken.zip').verdict, 'failed'); assert.match(rowFor('broken.zip').note, /^Couldn’t open it: /, 'batch: a bad file is a row with its error')
+    assert.equal(b.summary.failed, 1); assert.equal(b.summary.packages, names.length + 1)
+    const csv = readFileSync(csvFile, 'utf8').split('\r\n')
+    assert.equal(csv[0], 'Package,SCORM version,Tool,Verdict,Errors,Warnings,Note'); assert.equal(csv.length, names.length + 3, 'batch: CSV has a line per package and ends with a line break')
+    assert.ok(csv.some(l => l.startsWith('blank.zip,') && l.includes(',Error,')), 'batch: CSV has the blank row')
+    const page = readFileSync(htmlFile, 'utf8')
+    assert.match(page, /<h1>SCORM Lab: batch check<\/h1>/); assert.ok(names.every(n => page.includes(`>${n}.zip</a>`)), 'batch: the summary links each package')
+    assert.match(page, /<details id="pkg-1"><summary>[^<]*<\/summary><div class="sl">/, 'batch: each package has its report, collapsed')
+    const text = node(['batch', folder]); assert.equal(text.status, 0, text.stderr)
+    assert.match(text.stdout, new RegExp(`${names.length + 1} packages: `)); assert.match(text.stdout, /broken\.zip\s+Failed/, 'batch: text table')
+    const missing = JSON.parse(node(['batch', join(work, 'nope-folder'), '--json']).stdout)
+    assert.equal(missing.rows[0].verdict, 'failed', 'batch: a path that is not there is a failed row')
+    assert.equal(node(['batch', folder, '--jobs', '0']).status, 2, 'batch: --jobs needs 1 or more')
+    if (slow) {   // --run (P4.3): good and blank, two at a time. Each row takes its run's verdict and furthest milestone; the HTML carries the runs.
+      const rf = join(work, 'batch-run'); mkdirSync(rf); cpSync(good, join(rf, 'good.zip')); cpSync(blank, join(rf, 'blank.zip'))
+      const rr = node(['batch', rf, '--run', '--wait', '3', '--jobs', '2', '--json', '--out', join(work, 'batch-run.html')], { timeout: 300000 })
+      assert.equal(rr.status, 0, 'batch --run: ' + rr.stderr)
+      const rj = JSON.parse(rr.stdout), g2 = rj.rows.find(r => r.package === 'good.zip'), bl = rj.rows.find(r => r.package === 'blank.zip')
+      assert.equal(rj.run, true)
+      assert.ok(STEPS.findIndex(s => s[1] === g2.furthest) >= STEPS.findIndex(s => s[0] === 'wrote'), 'batch --run: good reaches wrote: ' + g2.furthest)
+      assert.equal(bl.furthest, STEPS[0][1], 'batch --run: blank only launches: ' + bl.furthest)
+      assert.match(readFileSync(join(work, 'batch-run.html'), 'utf8'), /What happened/, 'batch --run: the HTML has the runs')
+    }
+  }
+  console.log('batch: ok')
+
   // Runs.
   const out = join(work, 'good-run.json'), g = run(good, '--out', out)
   assert.ok(calls(g).includes('LMSInitialize '), 'good: initialised: ' + calls(g))
@@ -1917,6 +1963,8 @@ if (!process.argv.includes('--unit')) {
       assert.ok(noFix.status === 200 && noFixFiles.has('js/App.js') && noFixFiles.get('notes.txt') && !noFixFiles.has('js/app.js'), 'web export: an empty list of fixes keeps only the changed files')
       assert.equal(/filename\*=UTF-8''blank-fixed\.zip$/.test(dl.headers.get('content-disposition')), true, 'web export: filename* ends the header')
       await assert.rejects(invoke('export-fixed'), /not found|Not found|invoke/i, 'web export: the save-dialog handler is desktop only')
+      await assert.rejects(invoke('check-folder'), /not found|Not found|invoke/i, 'web: check a folder is desktop only')
+      await assert.rejects(invoke('open-batch-row', { path: good }), /not found|Not found|invoke/i, 'web: opening a batch row is desktop only')
       assert.equal((await fetch(base + '/api/upload?name=good.zip', { method: 'POST', headers: H, body: readFileSync(good) })).status, 200)
       const none = await fetch(base + '/api/export', { headers: H }); assert.ok(none.status === 500 && /Nothing to change/.test((await none.json()).error), 'web export: nothing to change says so')
       assert.equal((await fetch(base + '/api/export')).status, 401, 'web export: needs the token')

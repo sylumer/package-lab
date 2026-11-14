@@ -74,6 +74,8 @@ src/
   overlay.js            Overrides: the file set a run is served from, and the findings about changed files
   textdiff.js           A Myers line diff (diffLines, unified)
   pkgdiff.js            Comparing two packages: files, manifest, boot graphs, findings, behaviour (P3.3)
+  batch.js              Batch checks: a folder's packages as rows, the CSV and the HTML summary, the worker pool for static checks (P4.3)
+  batchworker.js        The thread that checks one package for a batch (checkPackage); loaded by staticRows
   stall.js              Why it stalled: pollers, unanswered messages, listeners that never ran, and the finding (P1.6)
   milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
   options.js            Launch options: normaliseOptions (the only place defaults live), cliCommand
@@ -95,6 +97,7 @@ scripts/
 build/icon.svg          The app icon
 test/test.js            Tests; test/fixtures/base is the sample package
 test/packs.js           Rule pack tests (imported by test.js): synthetic packages and hand-made traces
+test/batch.js            Batch check tests (imported by test.js): CSV cells and the formula guard, summary, runs merged into rows, HTML escaping, folders
 test/codeview.js        Code view tests (imported by test.js): VLQ, source maps, formatting, coverage, links, excerpts, the 2 MB timing; pure
 docs/                   User and developer documentation
 ```
@@ -772,6 +775,43 @@ Edits to text are quoted-string swaps (`swapQuoted`): unquoted attributes and st
 2. Put `autofix: { id, params }` on the finding or findings it addresses (`rules.js`, `bootpath.js`).
 3. Unit-test it in `test/test.js` (the "Corrected package export" block): does nothing to a good package, fixes a small package built in memory, and the finding is gone after.
 4. Add the id to the table above, to `docs/cli.md` (`fix`) and the user guide, and mark the finding in `docs/findings.md`.
+
+## Batch checks (P4.3)
+
+`src/batch.js` checks a folder's packages and puts one row each into a table, a CSV and an HTML summary. Its parts:
+
+- `checkPackage(path, { fragment })` reads one package and returns `{ row, fragment }`. The check is `analyze`'s: the first
+  SCO's loading path, the static findings and the boot risks, sorted. The row's `verdict` is `ok`, `warn`, `error` or
+  `failed`. It never throws: a file it can't read is a failed row (`failedRow`). `fragment` is the package's
+  `renderReport` section, when asked for.
+- `staticRows(files, { jobs, fragment })` runs `checkPackage` in up to `jobs` worker threads (`src/batchworker.js`, the same
+  pattern as `codeworker.js`). Each lane takes the next file when free; a worker that dies makes its file a failed row, and
+  the lane gets a new thread. Results are in file order.
+- `runRow(row, json)` and `failedRun(row, why)` merge a run into a row. The run's JSON is what `scorm-lab run --json`
+  prints: its `verdict`, `counts` and `milestones` give the verdict, the counts and the furthest label.
+- `batchFiles(inputs, { recursive })` turns a folder into its `.zip` names (sorted; hidden entries skipped). Any other input
+  is kept as a path, so a missing one is a failed row.
+- `batchTable`, `batchCsv`, `batchHtml`, `batchSummary`, `csvCell`: the output. `csvCell` quotes a cell with a comma or a
+  quote, and prefixes a cell that starts with `=`, `+`, `-`, `@` or a tab with an apostrophe (formula injection). Control
+  characters are dropped first, as the CLI does for everything from a package. `batchHtml` escapes its text with `esc`, puts
+  each package's section (a `<details id="pkg-N">`) below the summary, and links to it from the first column.
+
+The CLI's `batch` command (`bin/scorm-lab.js`) runs the static pass with `staticRows`, then, with `--run`, `runBatch`: each
+package runs as a child process, `scorm-lab run --json --out <file>`, so Electron is never started twice in one process (its
+run is `spawnSync`) and the run's own code path is the one `run` uses. The run file is read back for its report section.
+Limits: one run at a time, or two with `--jobs` over 1. A run that exits with an error is a row marked failed, with the
+last line of its stderr.
+
+The desktop **Check a folder…** (`check-folder` in `main.js`) uses `batchFiles` and `staticRows` with two threads, static only,
+and shows the rows in the **Folder check** tab. `open-batch-row` opens a path only if it came from the last check
+(`batchPaths`). The button is hidden in the web interface.
+
+**Tests.** `test/batch.js` (unit, in `--unit`) covers the cells, the guard, the summary, the rows after a run, the HTML
+escaping and the folder listing. The end-to-end block in `test/test.js` builds every fixture into one folder with a file
+that isn't a ZIP, and checks: one row each; each row's verdict equals the one the same checks give that package on one
+thread; the CSV's header and line count; the HTML's links and sections; a missing path is a failed row; `--jobs 0` is
+refused. The `--slow` block runs `good` and `blank` with `--run` two at a time and checks their furthest milestones and the
+run sections in the HTML. The default suite runs no Electron.
 
 ## Findings
 

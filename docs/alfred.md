@@ -31,6 +31,10 @@ File Actions: select a `.zip` in Alfred, or in Finder with Alfred's File Actions
 - **Check with SCORM Lab**: a report from the files, opened in your browser
 - **Run and report with SCORM Lab**: runs it hidden for 20 seconds, then opens the report
 
+Select a **folder** instead and the File Action **Check SCORM packages in folder** checks every `.zip` in it from its files
+(as `scorm-lab batch` does, see [cli.md](cli.md#batch)), and opens the batch report in your browser. A notification shows
+the folder's name, or the last line of the log if it fails.
+
 Checks and runs end with a notification. A run takes the wait plus a few seconds. Change the length with the
 workflow variable `wait`, in seconds.
 

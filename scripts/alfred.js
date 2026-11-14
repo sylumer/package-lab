@@ -5,6 +5,7 @@
 //                       ⌥↩ run it and report
 //   scormweb            start the web interface on this Mac (if it isn't running) and open it in the browser
 //   File Actions on a .zip: Open in SCORM Lab · Check with SCORM Lab · Run and report with SCORM Lab
+//   File Action on a folder: Check SCORM packages in folder (a batch report, opened in the browser)
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync, copyFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -21,12 +22,15 @@ const link = (from, to, modifiers = 0, modifiersubtext = '') => (connections[fro
 // Bash scripts get the file as $1; node and the CLI come from the workflow's variables.
 const script = (body, x, y) => add('alfred.workflow.action.script', { concurrently: true, escaping: 0, script: body, scriptargtype: 1, scriptfile: '', type: 0 }, 2, x, y)
 const notify = (x, y) => add('alfred.workflow.output.notification', { lastpathcomponent: false, onlyshowifquerypopulated: true, removeextension: false, text: '{query}', title: 'SCORM Lab' }, 1, x, y)
-const action = (name, x, y) => add('alfred.workflow.trigger.action', { acceptsmulti: 0, filetypes: ['public.zip-archive'], name }, 1, x, y)
+const action = (name, x, y, filetypes = ['public.zip-archive']) => add('alfred.workflow.trigger.action', { acceptsmulti: 0, filetypes, name }, 1, x, y)
 
 const OPEN = `if [ -d "/Applications/SCORM Lab.app" ]; then open -a "SCORM Lab" "$1"; else "$node" "$cli" open "$1"; fi`
 const CHECK = `"$node" "$cli" report "$1" --open >/dev/null 2>/tmp/scorm-lab-alfred.log && echo "Checked $(basename "$1")" || echo "Couldn’t check it: $(tail -1 /tmp/scorm-lab-alfred.log)"`
 const RUN = `echo "Running $(basename "$1") for $wait seconds…" >&2
 "$node" "$cli" report "$1" --run --wait "$wait" --open >/dev/null 2>/tmp/scorm-lab-alfred.log && echo "Report ready: $(basename "$1")" || echo "The run failed: $(tail -1 /tmp/scorm-lab-alfred.log)"`
+// A folder: the batch check's report goes to a temporary folder and opens in the browser (like Check).
+const BATCH = `out="$(mktemp -d "\${TMPDIR:-/tmp}/scorm-lab-batch.XXXXXX")/batch.html"
+"$node" "$cli" batch "$1" --out "$out" >/dev/null 2>/tmp/scorm-lab-alfred.log && open "$out" && echo "Checked the packages in $(basename "$1")" || echo "Couldn’t check the folder: $(tail -1 /tmp/scorm-lab-alfred.log)"`
 const WEB = `port=4880
 if ! /usr/sbin/lsof -nP -iTCP:$port -sTCP:LISTEN >/dev/null 2>&1; then
   nohup "$node" "$cli" serve --port $port >/tmp/scorm-lab-web.log 2>&1 &
@@ -50,11 +54,14 @@ link(check, n1); link(runIt, n2)
 link(action('Open in SCORM Lab', 30, 630), open)
 link(action('Check with SCORM Lab', 30, 750), check)
 link(action('Run and report with SCORM Lab', 30, 870), runIt)
+const batchIt = script(BATCH, 300, 990)
+link(action('Check SCORM packages in folder', 30, 990, ['public.folder']), batchIt)
+link(batchIt, notify(520, 990))
 
 const info = {
   bundleid: 'com.sylumer.scorm-lab.alfred', name: 'SCORM Lab', createdby: 'SCORM Lab', category: 'Tools', webaddress: '',
   description: 'Open, check and run SCORM packages with SCORM Lab',
-  readme: `Keywords: scormlab (open the app), scorm <name> (find a package: ↩ open, ⌘↩ check, ⌥↩ run and report), scormweb (web interface).\nFile Actions on .zip files: Open in, Check with, Run and report with SCORM Lab.\n\nBuilt from ${root} by npm run alfred. Rebuild it if the repo or Node moves.`,
+  readme: `Keywords: scormlab (open the app), scorm <name> (find a package: ↩ open, ⌘↩ check, ⌥↩ run and report), scormweb (web interface).\nFile Actions on .zip files: Open in, Check with, Run and report with SCORM Lab. On folders: Check SCORM packages in folder.\n\nBuilt from ${root} by npm run alfred. Rebuild it if the repo or Node moves.`,
   objects, connections, uidata, variablesdontexport: [],
   variables: { node: process.execPath, cli, wait: '20' },
   version: JSON.parse((await import('node:fs')).readFileSync(join(root, 'package.json'), 'utf8')).version,

@@ -24,6 +24,8 @@ import { renderReport, verdict, counts, screens } from '../src/report.js'
 import { launchPlan, runAnalysis, savedRun, WEBKIT_ORIGINS } from '../src/launch.js'
 import { comparePackages, compareBehaviour } from '../src/pkgdiff.js'
 import { readMacro, cycleFindings, cycleRows, resumeOptions } from '../src/cycle.js'
+import { availableParallelism } from 'node:os'
+import { batchFiles, staticRows, runRow, failedRun, batchSummary, summaryText, batchTable, batchCsv, batchHtml } from '../src/batch.js'
 
 const APP_DIR = new URL('..', import.meta.url).pathname
 const VERSION = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')).version
@@ -44,6 +46,7 @@ Commands
   drill <package.zip>       Why it stopped: the decisions that led to the dead end, their values, and where each undefined came from.
   cycle <package.zip>       Test saving: leave the way a learner does, then resume, and check the content saved and read its place.
   diff <a.zip> <b.zip>      What changed between two packages: files (with text diffs), manifest, loading path and findings. --run also runs both.
+  batch <folder | zips…>    Check every package in a folder (or the zips named): one row each, with its verdict. --run runs each one too.
   report <package.zip | run.json>
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
@@ -122,6 +125,14 @@ Options for diff (with --run, also the run options above, used for both runs)
   --out <report.html>       Also write the diff as an HTML report, with a collapsible diff per file.
   --json                    Print JSON instead of text.
 
+Options for batch (also the run options above, for --run)
+  --run                     Run each package too, and take the verdict, counts and furthest milestone from the run. One at a time; two with --jobs over 1.
+  --recursive               Look in the folder's subfolders too.
+  --jobs <n>                Packages checked at once (static checks in worker threads). Default 1.
+  --csv <file.csv>          Also write the table as CSV (spreadsheet formulas are neutralised).
+  --out <report.html>       Also write an HTML report: a summary table, and each package's report below it, collapsed.
+  --json                    Print JSON instead of a table (docs/cli.md).
+
 Options for report
   --out <file.html>         Where to write it. Default: print to standard output.
   --open                    Open the report in the browser (written to a temporary file if there's no --out).
@@ -145,7 +156,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'macro', 'profile', 'profile-file', 'tool', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds', 'only']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'macro', 'profile', 'profile-file', 'tool', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds', 'only', 'csv', 'jobs']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
     if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
@@ -372,6 +383,46 @@ function printRows(rows, first = 'Variant', base = 'the default') {
   }
 }
 
+// Batch --run (P4.3): each package runs as `scorm-lab run --json --out` in a child process, so Electron stays out of this one. One at a
+// time, or two with --jobs over 1. A run's row and report replace the static ones in results.
+async function runBatch(results, { jobs, dir, wait, out, json }) {
+  const limit = jobs > 1 ? 2 : 1, waitArgs = wait !== undefined ? ['--wait', wait] : [], cli = join(APP_DIR, 'bin', 'scorm-lab.js')
+  const one = (path, file) => new Promise(done => {
+    const child = spawn(process.execPath, [cli, 'run', path, '--json', '--out', file, ...waitArgs], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = '', stderr = '', stopped = false
+    // A run that is still going after its wait plus a minute is killed: its row fails rather than the batch hanging.
+    const limit = setTimeout(() => { stopped = true; child.kill('SIGKILL') }, (Number.isFinite(+wait) ? +wait : 10) * 1000 + 60000)
+    child.stdout.on('data', d => { stdout += d }); child.stderr.on('data', d => { stderr += d })
+    child.on('error', e => { clearTimeout(limit); done({ error: e.message }) })
+    child.on('close', code => {
+      clearTimeout(limit)
+      if (stopped) return done({ error: 'the run took too long and was stopped' })
+      if (code !== 0) return done({ error: stderr.trim().split('\n').at(-1) || `exit ${code}` })
+      try { done({ json: JSON.parse(stdout), run: JSON.parse(readFileSync(file, 'utf8')) }) } catch (e) { done({ error: e.message }) }
+    })
+  })
+  let next = 0
+  const lane = async () => {
+    while (next < results.length) {
+      const i = next++, r = results[i]
+      if (r.row.verdict === 'failed') continue   // not a readable package: nothing to run
+      if (!json) process.stderr.write(`Running ${r.row.package} for ${wait ?? 10} s…\n`)
+      const got = await one(r.row.path, join(dir, `run-${i + 1}.json`))
+      if (got.error) { r.row = failedRun(r.row, got.error); continue }
+      r.row = runRow(r.row, got.json)
+      if (out) r.fragment = renderReport({ title: `SCORM Lab: ${r.row.package}`, subtitle: got.run.label, run: got.run, fragment: true })
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, results.length) }, lane))
+}
+const printGrid = table => {
+  const w = table[0].map((_, c) => Math.max(...table.map(r => clean(r[c]).length)))
+  for (const [i, r] of table.entries()) {
+    console.log(r.map((c, k) => clean(c).padEnd(w[k])).join('  ').trimEnd())
+    if (i === 0) console.log(paint('2', w.map(n => '─'.repeat(n)).join('  ')))
+  }
+}
+
 // ---- Commands ----
 const commands = {
   analyze(o) {
@@ -585,6 +636,33 @@ const commands = {
     }
     if (o.out) console.log(paint('2', `\nReport written to ${resolve(o.out)}`))
     return 0
+  },
+  // Batch checks (P4.3): one row per package from its files (worker threads, --jobs at a time); --run also runs each (runBatch).
+  async batch(o) {
+    if (!o._.length) fail('Name a folder or some packages: scorm-lab batch <folder | zips…>')
+    for (const k of ['csv', 'out', 'jobs', 'wait']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
+    const asked = o.jobs === undefined ? 1 : /^\d+$/.test(o.jobs) && +o.jobs >= 1 ? +o.jobs : fail('--jobs needs a whole number, 1 or more.')
+    const jobs = Math.min(asked, availableParallelism())   // more threads than cores only slows the checks down
+    const files = batchFiles(o._, { recursive: !!o.recursive, onSkip: p => process.stderr.write(`Skipped the symbolic link to a folder ${p} (links to folders are not followed).\n`) })
+    if (!files.length) fail('No .zip packages found there.')
+    if (!o.json) process.stderr.write(`Checking ${files.length} package${files.length === 1 ? '' : 's'}…\n`)
+    const dir = mkdtempSync(join(tmpdir(), 'scorm-lab-batch-'))
+    try {
+      const results = await staticRows(files, { jobs, fragment: !!o.out })
+      if (o.run) await runBatch(results, { jobs, dir, wait: o.wait, out: !!o.out, json: !!o.json })
+      const rows = results.map(r => r.row), s = batchSummary(rows), run = !!o.run, folder = o._.join(', ')
+      if (o.csv) writeFileSync(resolve(o.csv), batchCsv(rows, { run }))
+      if (o.out) writeFileSync(resolve(o.out), batchHtml(results, { folder, run }))
+      if (o.json) console.log(JSON.stringify({ folder, run, summary: s, rows, csv: o.csv ? resolve(o.csv) : null, out: o.out ? resolve(o.out) : null }, null, 1))
+      else {
+        console.log(paint('1', 'SCORM Lab · batch'))
+        printGrid(batchTable(rows, run))
+        console.log(`\n${summaryText(s)}`)
+        if (o.csv) console.log(paint('2', `CSV written to ${resolve(o.csv)}`))
+        if (o.out) console.log(paint('2', `HTML report written to ${resolve(o.out)}`))
+      }
+      return 0
+    } finally { rmSync(dir, { recursive: true, force: true }) }
   },
   report(o) {
     const input = o._[0]

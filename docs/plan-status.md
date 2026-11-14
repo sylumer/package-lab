@@ -37,8 +37,8 @@ In progress on branch `next`.
 | P3.2 | Authoring tool rule packs | sonnet + haiku research | done | 8fcfa13 | Research thin for most tools (Xyleme very thin), so most rules are info. One review round: severities lowered to match the notes; added `--tool` to force a pack |
 | P3.3 | Comparing two packages | sonnet | done | | One review round. Behaviour comparison is CLI only (`diff --run`) |
 | P4.1 | Code views | sonnet | done | 81722b0 | One review round (formatting in a worker, bounded caches). Big minified files open unformatted first. Six secondary e2e checks moved behind --slow: default suite ~2:24 |
-| P4.2 | Timeline | haiku | done | | Resumed once after a usage limit. One review round (pan slider bug, clamping, handler bounds) |
-| P4.3 | Batch checks | haiku | todo | | |
+| P4.2 | Timeline | haiku | done | 2332458 | Resumed once after a usage limit. One review round (pan slider bug, clamping, handler bounds) |
+| P4.3 | Batch checks | haiku | done | | One review round (desktop-only guard for the folder dialog, worker pool hardening). Desktop check is static only |
 | P4.4 | Redacted report | haiku | todo | | |
 | P4.5 | cmi5 and xAPI | sonnet | todo | | |
 | P5.1 | Concierge module catch-up | sonnet | todo | | |

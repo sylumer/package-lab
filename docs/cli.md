@@ -53,6 +53,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `drill <package.zip>` | Why it stopped: the decisions that led to the dead end, their values, and where each `undefined` came from |
 | `cycle <package.zip>` | Tests saving: runs, leaves the way a learner does, then resumes from what it left, and checks the content saved and read its place |
 | `diff <a.zip> <b.zip>` | What changed between two packages: files with text diffs, manifest, loading path and findings; with `--run`, how far each got |
+| `batch <folder \| zips…>` | Checks every package in a folder (or the zips named): one row each, with its verdict. `--run` runs each one too. [Details](#batch) |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run. Each `file:line` in a finding's evidence links to a read-only excerpt (±20 lines) of that file, from the package or the saved run's sources |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
@@ -594,6 +595,63 @@ bad ZIP, an unknown `--item`, a run that didn't finish).
 side has no such resource or item. `behaviour` is only there with `--run`; `better` is 1 when b got further, -1 when
 it got less far, 0 for no difference. Files and findings are the same lists as `analyze --json`.
 
+## batch
+
+```bash
+scorm-lab batch <folder | zips…> [--run [run options]] [--recursive] [--jobs n] [--csv file.csv] [--out report.html] [--json]
+```
+
+Checks every package in a folder, one row each. Without `--run` each package is checked from its files alone, the same
+checks `analyze` makes on its first SCO. A folder gives its `.zip` files (sorted by name; with `--recursive`, the ones in
+its subfolders too). Anything else named is a package path: a path that doesn't exist, or a file that isn't a ZIP, is a
+row marked **Failed** with the reason, and the batch goes on.
+
+The table has these columns:
+
+| Column | Meaning |
+|---|---|
+| Package | The file name |
+| SCORM version | From the manifest (`1.2`, `2004 4th edition`), or blank |
+| Tool | The authoring tool SCORM Lab recognised, or blank |
+| Verdict | **OK**, **Warning** or **Error**: the worst finding, as `analyze` shows it. **Failed**: the package couldn't be opened or its run didn't finish |
+| Errors, Warnings | The counts of findings of each kind |
+| Furthest milestone | With `--run` only: the furthest step the run reached (for example "Wrote data") |
+| Note | The title of the worst finding, or the reason for a failed row |
+
+| Option | Meaning |
+|---|---|
+| `--run` | Runs each package with the run options (the same as `run`, with `--wait` as the length of each run). The verdict, counts and furthest milestone come from the run. Runs go one at a time, or two at a time with `--jobs` over 1. A run still going after its wait plus 60 seconds is stopped, and its row is **Failed** |
+| `--recursive` | Looks in the folder's subfolders too. Symbolic links to folders are never followed: each one is skipped, with a line on standard error saying so. A symbolic link to a `.zip` is checked |
+| `--jobs n` | Packages checked at once. The static checks run in worker threads. Default 1. Capped at the number of cores this Mac has |
+| `--csv file.csv` | Also writes the table as CSV: the same columns, quoted where needed. A cell that starts with `=`, `+`, `-`, `@` or a tab gets a leading apostrophe, so a spreadsheet shows it as text and doesn't run it as a formula |
+| `--out report.html` | Also writes an HTML report: a summary table that links to each package, and each package's report below it, collapsed. With `--run`, the runs are in them |
+| `--json` | Prints JSON instead of the table (below) |
+
+A package the check can't finish (a worker that runs out of its 1 GB of memory, say) is a **Failed** row too.
+
+The text output ends with a line such as "3 packages: 1 OK, 0 with warnings, 1 with errors, 1 failed." Exit status is 0
+when the batch finishes, even if packages have errors or failed; 2 when there is nothing to check (no `.zip` in the folder)
+or the options are wrong.
+
+`batch --json`:
+
+```json
+{
+  "folder": "courses",
+  "run": false,
+  "summary": { "packages": 3, "ok": 1, "warnings": 0, "errors": 1, "failed": 1 },
+  "rows": [
+    { "package": "blank.zip", "path": "/…/courses/blank.zip", "scorm": "1.2", "tool": "", "verdict": "error", "note": "Resource lesson_res launches Lesson.html, but the ZIP has lesson.html. Paths are case-sensitive on most servers.", "errors": 2, "warnings": 0, "furthest": null },
+    { "package": "broken.zip", "path": "/…/courses/broken.zip", "scorm": null, "tool": "", "verdict": "failed", "note": "Couldn’t open it: Not a ZIP file (no end of central directory).", "errors": 0, "warnings": 0, "furthest": null }
+  ],
+  "csv": null,
+  "out": null
+}
+```
+
+`verdict` is `ok`, `warn`, `error` or `failed`. `furthest` is the milestone's label with `--run` (for example `"Wrote data"`), else `null`.
+`csv` and `out` are the absolute paths written, or `null`. Rows are in file-name order.
+
 ## report
 
 ```bash
@@ -648,7 +706,7 @@ Starts the [web interface](web.md) and prints its address with the access token.
 |---|---|
 | 0 | Done (findings may still include errors) |
 | 1 | `--strict` and the findings include at least one error |
-| 2 | The command failed: bad arguments, a missing or unreadable file, or a run that didn't finish |
+| 2 | The command failed: bad arguments, a missing or unreadable file, or a run that didn't finish. `batch` with no package to check |
 
 ## JSON output
 
