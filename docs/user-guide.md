@@ -11,6 +11,7 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 - [Testing a theory: launch settings](#testing-a-theory-launch-settings)
 - [Running it the way an LMS does: profiles](#running-it-the-way-an-lms-does-profiles)
 - [What the content wants from its server](#what-the-content-wants-from-its-server)
+- [Reading the code](#reading-the-code)
 - [Tracing the code](#tracing-the-code)
 - [Why it stopped: drill-down](#why-it-stopped-drill-down)
 - [Testing resume and progress saving](#testing-resume-and-progress-saving)
@@ -172,7 +173,7 @@ Then the other tabs:
 | **API** | Every API call in order: element, value, result, error code and text, and the stored values at the end |
 | **Lookups** | Each time the content read `window.API` or `window.API_1484_11` in any frame, with whether it found one and the code that looked. Also frame depth and opener for each frame, and any assignment to those names |
 | **Network** | Every request: status, type and the code that made it |
-| **Scripts** | Every script the browser parsed, in order, with what loaded it |
+| **Scripts** | Every script the browser parsed, in order, with what loaded it. **Code** opens the script in the [code view](#reading-the-code) |
 | **Execution** | For a run with **Trace the code** on: the last functions and decisions before it went quiet. See [Tracing the code](#tracing-the-code) |
 | **Errors** | Uncaught errors, caught errors (if **Record caught errors** is on), and browser warnings, in time order with where they happened |
 | **Console** | The content's console output |
@@ -446,6 +447,34 @@ What it can't see:
 
 From the command line: [`discover`](cli.md#discover).
 
+## Reading the code
+
+Anything that names a place in a file opens the code view there: a `file:line` in a finding's evidence (it is a link),
+**Code** in the Execution and Scripts tabs, a line number in the Package tab's scan, the places in the Drill-down tab,
+and **View code** under a file in the Files tab. The view appears above the tab; **Close** hides it.
+
+- **Line numbers** and the line you came for, highlighted.
+- **Formatted, Original, Source map.** *Formatted* lays JavaScript, HTML and CSS out for reading; a minified file opens
+  that way. Its line numbers are the formatted text's, and the view still lands on the right place: the finding's
+  line and column are carried across. *Original* is the file as it is. *Source map* shows the code the file was built
+  from, when the file points to a source map that holds it (inline, or a file in the package): the view lands on the
+  original line, and a map with several sources has a menu. A source map with no sources in it (`sourcesContent`) shows
+  nothing, and SCORM Lab never fetches one from another site.
+- **Coverage.** With a run chosen, each line is shaded: green ran (with `×N`, how many times), red didn't run, amber
+  only part of the line ran. A page's inline scripts aren't shaded (their positions aren't kept); for those, trace markers
+  are the best guide. The run must have recorded the file.
+- **Trace markers.** For a traced run, a grey note at the right of a line says what the trace saw: `show() called ×3`,
+  `if: true ×1, false ×8`.
+- **Search** (Enter for the next match, Shift+Enter for the previous) and **Go** to a line number.
+
+A very large minified file opens as it is at once and the formatted view arrives a moment later (formatting 2 MB takes about
+half a second, done in the background, and a file over 5 MB isn't formatted). The view closes when you choose another run. A file over 5,000 lines draws only the lines in view, so it scrolls smoothly. Lines over 600 characters are cut
+in the display (the search still looks in all of the line).
+
+In an HTML report (`scorm-lab report`), every `file:line` in a finding's evidence is a link to a read-only excerpt of
+that file, 20 lines either side, shown under the finding. It is made from the package (or, for a saved run, from the
+sources the run recorded). A minified file's excerpt is formatted, or is the original source when a source map holds it.
+
 ## Tracing the code
 
 Findings say what the content did. To see why, turn on **Trace the code** under **More options** and launch again.
@@ -460,8 +489,7 @@ The **Execution** tab shows the last 500 events before the run went quiet, newes
   to five of its names (`Object {start, get, set, save, finish, …}`).
 - `(the same 4000 more times)`: a loop that made the same decision over and over is counted, not listed.
 
-The filter box narrows the list, for example to one file or function. **Code** shows the file around that line, with
-the line highlighted. Start from the bottom: the last decisions are usually where the content gave up.
+The filter box narrows the list, for example to one file or function. **Code** opens the [code view](#reading-the-code) at that line. Start from the bottom: the last decisions are usually where the content gave up.
 
 What tracing covers, and what it doesn't:
 - Scripts and inline scripts in the package's pages, up to 2 MB each. Larger files, files that aren't UTF-8 text, and

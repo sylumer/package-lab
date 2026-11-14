@@ -14,10 +14,23 @@ const secs = t => (t / 1000).toFixed(2)
 const st = { macro: [], cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
 const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
+// ---- The code view: every file:line in evidence opens it (src/ui/codeview.js draws it, the code-view handler fills it) ----
+const codePane = $('code-pane')
+function openCode(req) {
+  act(async () => {
+    const ask = o => lab.invoke('code-view', { ...req, ...o }), v = await ask({})
+    if (v.empty) { say(v.otherPackage ? 'This run is from another package; open it to see its files.' : `${req.path} isn’t available: it isn’t in the open package, and this run didn’t record it.`); return }
+    codePane.replaceChildren(CodeView.create(v, { col: req.col, ask, close: () => { codePane.hidden = true; codePane.replaceChildren() } }))
+    codePane.dataset.run = req.run ?? ''; codePane.hidden = false; say('')
+  })
+}
+// Text with every file:line made a link that opens the code there.
+const link = text => CodeView.parts(text).map(p => p.path ? h('button', { type: 'button', class: 'link', title: 'Show the code', onclick: () => openCode({ run: st.sel ?? undefined, path: p.path, line: p.line, col: p.col }) }, p.text) : p.text)
+
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
   return fs.map(f => h('div', { class: 'finding ' + f.sev }, h('h3', {}, h('span', { class: 'sev' }, f.sev === 'warn' ? 'warning' : f.sev), f.title),
-    f.detail && h('p', {}, f.detail), f.evidence?.length && h('ul', {}, f.evidence.map(e => h('li', {}, e))), f.fix && h('p', { class: 'fix' }, h('b', {}, 'Try: '), f.fix)))
+    f.detail && h('p', {}, f.detail), f.evidence?.length && h('ul', {}, f.evidence.map(e => h('li', {}, link(e)))), f.fix && h('p', { class: 'fix' }, h('b', {}, 'Try: '), f.fix)))
 }
 function table(cols, rows) {
   const q = $('filter').value.trim().toLowerCase()
@@ -67,7 +80,7 @@ const VIEWS = {
         .map(([k, v]) => h('tr', {}, h('th', {}, k), h('td', {}, v)))))]
     if (m) out.push(h('h3', { class: 'section' }, 'Items'), ...table(['Item', 'Type', 'Launch', 'Parameters', 'Mastery'], m.items.map(i => ['  '.repeat(i.depth) + (i.title || i.id), i.type, i.res?.path ?? i.res?.href ?? '', i.params, i.mastery])))
     const rows = []
-    for (const [file, s] of Object.entries(a.scan)) for (const [k, list] of Object.entries(s)) for (const x of list) rows.push([file, x.line, k, h('code', {}, x.text)])
+    for (const [file, s] of Object.entries(a.scan)) for (const [k, list] of Object.entries(s)) for (const x of list) rows.push([file, h('button', { type: 'button', class: 'link', onclick: () => openCode({ path: file, line: x.line }) }, String(x.line)), k, h('code', {}, x.text)])
     out.push(h('h3', { class: 'section' }, 'What the scripts say'), ...table(['File', 'Line', 'Kind', 'Code'], rows))
     return out
   },
@@ -97,7 +110,8 @@ const VIEWS = {
   },
   Scripts() {
     const r = run(); if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
-    return table(['s', 'Script', 'Size', 'Loaded by'], r.trace.scripts.map(s => [secs(s.t), short(s.url) || '(eval)', s.length, h('code', {}, (s.from || []).slice(0, 4).map(at).join('\n'))]))
+    return table(['s', 'Script', 'Size', 'Loaded by', ''], r.trace.scripts.map(s => [secs(s.t), short(s.url) || '(eval)', s.length, h('code', {}, (s.from || []).slice(0, 4).map(at).join('\n')),
+      /^lab:\/\/(?:run|content)\/pkg\//.test(s.url ?? '') ? h('button', { type: 'button', class: 'secondary', onclick: () => openCode({ run: r.id, path: decodeURIComponent(short(s.url)), line: 1 }) }, 'Code') : '']))
   },
   Errors() {
     const r = run(); if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
@@ -224,7 +238,8 @@ function editor() {
     out.push(h('div', { class: 'editor' }, gutter, area),
       h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => saveOverride({ content: f.crlf ? area.value.replace(/\r?\n/g, '\r\n') : area.value }) }, 'Save as override'),
         h('button', { type: 'button', class: 'secondary', disabled: !f.overridden, onclick: () => revert(f.path) }, 'Revert'),
-        h('button', { type: 'button', class: 'secondary', onclick: () => pick.click() }, 'Replace from a file…')))
+        h('button', { type: 'button', class: 'secondary', onclick: () => pick.click() }, 'Replace from a file…'),
+        /\.(?:m?js|cjs|html?|css)$/i.test(f.path) && h('button', { type: 'button', class: 'secondary', title: 'Read it formatted, with the coverage of the chosen run', onclick: () => openCode({ run: st.sel ?? undefined, path: f.path, line: 1 }) }, 'View code')))
   } else out.push(h('p', { class: 'muted' }, f.tooBig ? 'This file is too large to edit here. You can replace it with a file.' : 'This is not a text file, so it can’t be edited here. You can replace it with a file.'),
     h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => pick.click() }, 'Replace from a file…'), h('button', { type: 'button', class: 'secondary', disabled: !f.overridden, onclick: () => revert(f.path) }, 'Revert')))
   if (st.files.note) out.push(h('p', { class: 'muted small' }, st.files.note))
@@ -336,21 +351,12 @@ VIEWS['Server needs'] = () => {
 }
 
 // ---- Execution: the last events of a traced run, and the code of the one clicked ----
-st.exec = null   // { run, path, line, say, text }
-const showCode = (r, e) => act(async () => { st.exec = { run: r.id, path: e.file, line: e.line, say: e.say, text: await lab.invoke('source', { run: r.id, path: e.file }) }; render() })
-function codeView(x) {
-  const lines = x.text.split(/\r\n?|\n/), from = Math.max(0, x.line - 31), to = Math.min(lines.length, x.line + 30)
-  return h('div', { class: 'code-view' }, h('div', { class: 'row' }, h('b', {}, `${x.path}:${x.line}`), h('span', { class: 'muted small' }, x.say),
-    h('button', { type: 'button', class: 'secondary', onclick: () => { st.exec = null; render() } }, 'Close')),
-    x.text ? h('pre', { class: 'source' }, lines.slice(from, to).map((l, i) => h('div', { class: from + i + 1 === x.line ? 'hl' : null }, `${String(from + i + 1).padStart(6)}  ${l.length > 400 ? l.slice(0, 400) + ' …' : l}`)))
-      : h('p', { class: 'muted' }, 'The code isn’t available: open the run’s package to see a page’s code.'))
-}
+const showCode = (r, e) => openCode({ run: r.id, path: e.file, line: e.line, col: e.col })
 VIEWS.Execution = () => {
   const r = run(); if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
   const tail = r.trace.execTail
   if (!tail) return h('p', { class: 'muted' }, 'This run wasn’t traced. Tick “Trace the code” under More options and launch again to record which functions ran and which way each decision went.')
-  return [st.exec?.run === r.id ? codeView(st.exec) : null,
-    h('p', { class: 'muted small' }, `The last ${tail.length} of ${r.trace.execEvents} events before the run went quiet, newest last. Code opens the line.`),
+  return [h('p', { class: 'muted small' }, `The last ${tail.length} of ${r.trace.execEvents} events before the run went quiet, newest last. Code opens the line.`),
     ...table(['s', 'Where', 'What happened', ''], tail.map(e => [secs(e.t), e.file ? `${e.file}:${e.line}` : '', e.say, e.file ? h('button', { type: 'button', class: 'secondary', onclick: () => showCode(r, e) }, 'Code') : '']))]
 }
 
@@ -371,12 +377,12 @@ VIEWS['Drill-down'] = () => {
   if (!res) return out
   const open = id => id && st.runs.some(q => q.id === id) ? h('button', { type: 'button', class: 'link', onclick: () => { st.sel = id; st.tab = 'Execution'; render() } }, 'open') : null
   out.push(h('h3', { class: 'section' }, 'Why it stopped'),
-    res.chain.length ? h('ol', { class: 'chain' }, res.chain.map(s => h('li', {}, s.text))) : h('p', { class: 'muted' }, 'No chain.'),
+    res.chain.length ? h('ol', { class: 'chain' }, res.chain.map(s => h('li', {}, link(s.text)))) : h('p', { class: 'muted' }, 'No chain.'),
     h('p', { class: 'muted small' }, 'Traced run: ', open(res.traceRun) ?? 'this one', res.watchRun ? [' · watch run (', res.watch.join(', '), '): ', open(res.watchRun)] : ''),
     findingsList(res.findings))
   const others = res.decisions.filter(d => !res.chain.some(s => s.at === d.at && s.decision === d.code))
   if (others.length) out.push(h('h3', { class: 'section' }, 'Other decisions whose other branch never ran'),
-    ...table(['Where', 'Decision', 'Values', 'Would have run'], others.map(d => [d.at, `${d.code} → ${d.said}`, d.operands.map(o => `${o.code} = ${o.value}`).join(', '), h('code', {}, d.untaken.lines.join('\n'))])))
+    ...table(['Where', 'Decision', 'Values', 'Would have run'], others.map(d => [link(d.at), `${d.code} → ${d.said}`, d.operands.map(o => `${o.code} = ${o.value}`).join(', '), h('code', {}, d.untaken.lines.join('\n'))])))
   return out
 }
 
@@ -412,6 +418,7 @@ function liveWatch(on) {
 VIEWS.Live = () => st.running ? livePanel : h('p', { class: 'muted' }, 'Launch an item to see it here. It runs on the Mac; this view lets you watch and use it from here.')
 
 function render() {
+  if (!codePane.hidden && codePane.dataset.run !== '' && +codePane.dataset.run !== st.sel) { codePane.hidden = true; codePane.replaceChildren() }   // its run isn't the chosen one any more
   if (lab.web) liveWatch(st.tab === 'Live' && !!st.running)
   $('tabs').replaceChildren(...TABS.map(t => h('button', { type: 'button', role: 'tab', 'aria-selected': String(t === st.tab), onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))
   // Not while the file editor has focus: a redraw (a run or state event) would lose the cursor and scroll position.

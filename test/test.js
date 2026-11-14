@@ -33,6 +33,7 @@ import { originFindings, storageFindings } from '../src/rules.js'
 import { cycleFindings, cycleRows, readMacro, macroFromTrace, resumeOptions } from '../src/cycle.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import './packs.js'
+import './codeview.js'
 import vm from 'node:vm'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
@@ -1314,17 +1315,19 @@ if (!process.argv.includes('--unit')) {
   assert.ok(idx(g.furthest) >= idx('wrote'), 'good: reaches wrote: ' + g.furthest)
   assert.match(g.findings[0].title, /^Got as far as: /, 'good: the milestone finding is first')
   assert.equal(g.findings[0].sev, 'info')
-  assert.match(node(['run', good, '--wait', '3']).stdout, /Milestones: ✓ Launch page loaded/, 'cli: milestones line')
   assert.match(node(['report', out]).stdout, /<h2>Milestones<\/h2>/, 'report: milestones strip')
   assert.match(node(['report', out]).stdout, /<!doctype html>[\s\S]*What happened/, 'cli report (run)')
   const res = run(good, '--resume-from', out)
   // The sample only resumes after exit = suspend, which a timed-out run never sets; what carries over is its status.
   assert.ok(res.launch.resume && res.api.some(a => a.el === 'cmi.core.lesson_status' && a.call === 'LMSGetValue' && a.result === 'incomplete'), 'resume: stored data offered: ' + calls(res))
-  // The same options by flags and by --options give the same saved launch.options.
+  // The same options by flags and by --options give the same saved launch.options (--slow: two more runs; the fixtures' own flags are exercised below).
   const optFile = join(work, 'opts.json'); writeFileSync(optFile, JSON.stringify({ expose: 'both', depth: 1, wait: 3 }))
-  const byFlags = run(good, '--api', 'both', '--depth', '1'), byFile = JSON.parse(node(['run', good, '--options', optFile, '--json']).stdout)
-  assert.deepEqual(byFile.launch.options, byFlags.launch.options, 'options: file and flags agree')
-  assert.equal(byFile.launch.options.expose, 'both'); assert.equal(byFile.launch.expose, 'both', 'options: version 1 fields kept')
+  if (slow) {
+    assert.match(node(['run', good, '--wait', '3']).stdout, /Milestones: ✓ Launch page loaded/, 'cli: milestones line')
+    const byFlags = run(good, '--api', 'both', '--depth', '1'), byFile = JSON.parse(node(['run', good, '--options', optFile, '--json']).stdout)
+    assert.deepEqual(byFile.launch.options, byFlags.launch.options, 'options: file and flags agree')
+    assert.equal(byFile.launch.options.expose, 'both'); assert.equal(byFile.launch.expose, 'both', 'options: version 1 fields kept')
+  }
   assert.equal(node(['run', good, '--api', 'x']).status, 2, 'options: bad flag value fails')
   assert.equal(node(['run', good, '--wait', 'x']).status, 2, 'options: bad --wait fails')
   writeFileSync(optFile, '[]'); assert.match(node(['run', good, '--options', optFile]).stderr, /one JSON object/, 'options: array file rejected')
@@ -1332,13 +1335,13 @@ if (!process.argv.includes('--unit')) {
   assert.equal(mm.api.length, 0, 'mismatch: no calls')
   assert.equal(mm.furthest, 'looked', 'mismatch: reaches looked')
   assert.ok(titles(mm).some(t => /looked for API and found nothing/.test(t)), 'mismatch: lookup finding: ' + titles(mm))
-  assert.ok(calls(run(mismatch, '--api', 'both')).includes('LMSInitialize '), 'mismatch with both APIs: calls appear')
+  if (slow) assert.ok(calls(run(mismatch, '--api', 'both')).includes('LMSInitialize '), 'mismatch with both APIs: calls appear (the api preset below shows it too)')
   const hRun = run(hosted), hh = titles(hRun)
   assert.ok(hh.some(t => /asked the host for files outside the package/.test(t)), 'hosted: server request: ' + hh)
   assert.ok(hh.some(t => /set its own window.API/.test(t)), 'hosted: own API: ' + hh)
-  const rb = titles(run(blank))
+  const blankRun = run(blank), rb = titles(blankRun)
   assert.ok(rb.some(t => /blank page/.test(t) && /Not found: js\/app\.js/.test(t)), 'blank run: ' + rb)
-  assert.equal(run(blank).furthest, 'launched', 'blank: reaches launched only')
+  assert.equal(blankRun.furthest, 'launched', 'blank: reaches launched only')
   assert.ok(titles(run(order)).some(t => /run before what they need/.test(t)), 'order run: static finding')
   const rl = titles(run(loader))
   assert.ok(rl.some(t => /stuck on a loading screen/.test(t) && /JSON/.test(t)), 'loader run: ' + rl)
@@ -1416,13 +1419,15 @@ if (!process.argv.includes('--unit')) {
   assert.ok(idx(winRun.furthest) >= idx('wrote') && winRun.screens.some(s => /lesson\.html/.test(s.frame) && s.text > 20), 'window: content shown and data written: ' + winRun.furthest)
 
   // Blocked storage (P2.2): stored works as it is, and with storage blocked (by the option, or a profile) it never starts and says why.
-  assert.ok(calls(run(stored, '--wait', '2')).includes('LMSInitialize '), 'storage: stored works with normal storage')
+  if (slow) assert.ok(calls(run(stored, '--wait', '2')).includes('LMSInitialize '), 'storage: stored works with normal storage')
   const stOut = join(work, 'stored-blocked.json'), stRun = run(stored, '--storage', 'blocked', '--wait', '2', '--out', stOut), stSaved = JSON.parse(readFileSync(stOut, 'utf8')), stf = stRun.findings.find(f => f.title === 'The content needs storage the browser can block')
   assert.ok(stf && stf.sev === 'warn' && stf.evidence.some(e => /^localStorage in lesson\.html at .*boot\.js:2:/.test(e)) && /1 uncaught error came from it/.test(stf.detail), 'storage: blocked is explained: ' + titles(stRun))
   assert.ok(stRun.api.length === 0 && stRun.findings.some(f => /never looked for the SCORM API/.test(f.title)) && stSaved.launch.storage === 'blocked' && stSaved.launch.options.storage === 'blocked', 'storage: it never reaches the LMS, and the mode is saved: ' + titles(stRun))
   assert.ok(stSaved.trace.exceptions.some(e => /SecurityError/.test(e.text)) && stSaved.trace.probe.some(p => p.type === 'storage-blocked' && p.what === 'localStorage' && p.stack.length), 'storage: the refusal is in the trace')
-  const stPart = run(stored, '--storage', 'partitioned', '--wait', '2')
-  assert.ok(calls(stPart).includes('LMSInitialize ') && !stPart.findings.some(f => /needs storage/.test(f.title)), 'storage: partitioned keeps storage')
+  if (slow) {
+    const stPart = run(stored, '--storage', 'partitioned', '--wait', '2')
+    assert.ok(calls(stPart).includes('LMSInitialize ') && !stPart.findings.some(f => /needs storage/.test(f.title)), 'storage: partitioned keeps storage')
+  }
   assert.equal(node(['run', good, '--storage', 'nope']).status, 2, 'storage: a bad mode fails')
   if (slow) {
     assert.ok(titles(run(stored, '--profile', 'scorm-cloud', '--wait', '2')).some(t => /needs storage the browser can block/.test(t)), 'storage: the scorm-cloud profile blocks it too')
@@ -1590,8 +1595,10 @@ if (!process.argv.includes('--unit')) {
   const exTitles = ex.findings.map(f => f.title)
   assert.ok(exTitles.some(t => /^api both gets further/.test(t)) && exTitles.some(t => /^api 1\.2 gets further/.test(t)) && !exTitles.some(t => /api none gets further/.test(t)), 'experiment findings: ' + exTitles)
   assert.ok(existsSync(join(exDir, '02-api_both.json')) && JSON.parse(readFileSync(exBy['api both'].out, 'utf8')).format === 'scorm-lab-run', 'experiment: runs saved in --out')
+  if (slow) {   // --variants with a file: two more runs
   const exText = node(['experiment', mismatch, '--variants', (writeFileSync(join(work, 'variants.json'), JSON.stringify([{ name: 'deep', patch: { depth: 1 } }])), join(work, 'variants.json')), '--wait', '3'])
   assert.match(exText.stdout, /Variant\s+Furthest[\s\S]*deep[\s\S]*Nothing tried made a difference/, 'experiment: text table and --variants file: ' + exText.stdout)
+  }
   assert.equal(node(['experiment', mismatch, '--preset', 'nope']).status, 2, 'experiment: unknown preset fails')
   assert.equal(node(['experiment', mismatch, '--preset']).status, 2, 'experiment: --preset needs a value')
   assert.equal(node(['experiment', mismatch, '--preset', 'constructor']).status, 2, 'experiment: inherited names are not presets')

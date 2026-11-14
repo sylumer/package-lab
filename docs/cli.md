@@ -53,7 +53,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `drill <package.zip>` | Why it stopped: the decisions that led to the dead end, their values, and where each `undefined` came from |
 | `cycle <package.zip>` | Tests saving: runs, leaves the way a learner does, then resumes from what it left, and checks the content saved and read its place |
 | `diff <a.zip> <b.zip>` | What changed between two packages: files with text diffs, manifest, loading path and findings; with `--run`, how far each got |
-| `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run |
+| `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run. Each `file:line` in a finding's evidence links to a read-only excerpt (±20 lines) of that file, from the package or the saved run's sources |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
 | `help`, `version` | Help and the version. `scorm-lab <command> --help` shows the help too |

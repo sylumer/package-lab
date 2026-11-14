@@ -33,6 +33,7 @@ import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
 import { PROFILES, launchProfile } from './profiles.js'
 import { serveRequest, WEBKIT_ORIGINS, launchPlan, withProgress, runAnalysis, savedRun } from './launch.js'
+import { codeViewAsync } from './codeview.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -550,6 +551,23 @@ function buildExport({ only } = {}) {
 }
 
 // ---- What the interfaces can ask for. The desktop window calls these over IPC, web clients over HTTP. ----
+// A package file's text (a changed file as changed), or null when it isn't there or isn't text.
+function packageText(path) {
+  const ov = pkg && override(path), buf = ov ? entryBuffer(ov) : pkg?.files.get(path)
+  return buf && isText(buf) ? buf.toString('utf8') : null
+}
+// A script's source from a run, by address or package path (see the source handler).
+function sourceOf({ run, url, path }) {
+  const r = runs.get(run), src = r?.trace.sources ?? {}
+  if (url !== undefined) return src[url] ?? ''
+  const pathOf = u => { try { const x = new URL(u); return x.protocol === 'lab:' && x.pathname.startsWith('/pkg/') ? decodeURIComponent(x.pathname.slice(5)) : null } catch { return null } }
+  const hit = !/\.html?$/i.test(path) && Object.keys(src).find(u => pathOf(u) === path)
+  if (hit) return src[hit]
+  const files = r?.launch?.options?.files
+  if (files && Object.hasOwn(files, path)) return entryBuffer(files[path]).toString('utf8')
+  return (r?.package && r.package === pkg?.name && pkg.files.get(path)?.toString('utf8')) || ''
+}
+
 const handlers = {
   'open-package': async () => {
     const r = await dialog.showOpenDialog(ui, { title: 'Open a SCORM package', filters: [{ name: 'SCORM package', extensions: ['zip'] }], properties: ['openFile'] })
@@ -645,15 +663,17 @@ const handlers = {
   },
   // A script's source from a run, by address; or by package path (the Execution tab): the script as the run recorded it,
   // or for a page, the file the run was served (a changed file from its options, else the open package's, if it is that package).
-  source: ({ run, url, path }) => {
-    const r = runs.get(run), src = r?.trace.sources ?? {}
-    if (url !== undefined) return src[url] ?? ''
-    const pathOf = u => { try { const x = new URL(u); return x.protocol === 'lab:' && x.pathname.startsWith('/pkg/') ? decodeURIComponent(x.pathname.slice(5)) : null } catch { return null } }
-    const hit = !/\.html?$/i.test(path) && Object.keys(src).find(u => pathOf(u) === path)
-    if (hit) return src[hit]
-    const files = r?.launch?.options?.files
-    if (files && Object.hasOwn(files, path)) return entryBuffer(files[path]).toString('utf8')
-    return (r?.package && r.package === pkg?.name && pkg.files.get(path)?.toString('utf8')) || ''
+  source: o => sourceOf(o),
+  // The shared code view (P4.1): one file as written, formatted or from its source map, with the run's coverage and trace markers,
+  // at a line. With no run, the open package's file (a changed file as changed). See src/codeview.js.
+  // The package's own files (the text of a page, a script the run didn't record, a map file) are used only for a run of the open package, as `source` does.
+  'code-view': async ({ run, path, line, col, mode, source }) => {
+    path = String(path ?? '')
+    const r = run === undefined || run === null ? null : runs.get(run), own = !r || (!!r.package && r.package === pkg?.name)
+    let text = sourceOf({ run, path })
+    if (!text && !r) text = packageText(path) ?? ''
+    if (!text) return { path, empty: true, otherPackage: !own }
+    return codeViewAsync({ text, path, line, col, mode, source, trace: r?.trace, readFile: own ? packageText : () => null })
   },
   'live-input': e => live.input(e),
   // Macros: Record clicks starts keeping live-input events; Save macro stops and returns them. 'macro-from-run' returns the clicks and keys the probe saw in a run's content frames.

@@ -4,6 +4,8 @@
 import { bootRun } from './bootpath.js'
 import { isLab } from './diff.js'
 import { milestones } from './milestones.js'
+import { excerptor, urlPath } from './codeview.js'
+import { entryBuffer, isText } from './overlay.js'
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const short = u => String(u ?? '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
@@ -47,7 +49,8 @@ const CSS = `
 .sl td { word-break: break-word; }
 .sl details { margin: 6px 0; } .sl summary { cursor: pointer; }
 .sl pre.sl-diff { margin: 4px 0; padding: 6px 0; overflow-x: auto; background: var(--sl-code); border-radius: 6px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
-.sl .sl-diff div { padding: 0 8px; white-space: pre; } .sl .sl-diff .add { background: color-mix(in srgb, var(--sl-ok) 20%, transparent); } .sl .sl-diff .del { background: color-mix(in srgb, var(--sl-err) 20%, transparent); } .sl .sl-diff .hunk { color: var(--sl-muted); }
+.sl .sl-diff div { padding: 0 8px; white-space: pre; } .sl .sl-code .hl { background: color-mix(in srgb, var(--sl-warn) 25%, transparent); } .sl .sl-ln { display: inline-block; min-width: 4ch; margin-right: 1.5ch; text-align: right; color: var(--sl-muted); user-select: none; }
+.sl .sl-excerpt { margin: 4px 0; } .sl .sl-finding a { color: inherit; } .sl .sl-diff .add { background: color-mix(in srgb, var(--sl-ok) 20%, transparent); } .sl .sl-diff .del { background: color-mix(in srgb, var(--sl-err) 20%, transparent); } .sl .sl-diff .hunk { color: var(--sl-muted); }
 `
 const PAGE_CSS = `
 :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d9d9de; --err: #c4281c; --warn: #a15c00; --ok: #1e7d32; --code: #f0f0f3; color-scheme: light dark; }
@@ -62,9 +65,27 @@ function table(cols, rows, max = 500) {
   const more = rows.length > max ? `<p class="sl-muted">First ${max} of ${rows.length}.</p>` : ''
   return `<div class="sl-scroll"><table><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.slice(0, max).map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>${more}`
 }
-export function findingsHtml(findings) {
+// ex (optional, from excerptor): every file:line in the evidence becomes a link to a read-only excerpt (±20 lines) under the finding.
+const excerptHtml = x => `<details class="sl-excerpt"><summary class="sl-mono">${esc(x.title)}${x.ex.label ? ` <span class="sl-muted">(${esc(x.ex.label)})</span>` : ''}</summary><pre class="sl-diff sl-code" id="${x.id}">${x.ex.lines.map(l => `<div class="${l.hl ? 'hl' : ''}"><span class="sl-ln">${l.n}</span>${esc(l.text) || ' '}</div>`).join('')}</pre></details>`
+export function findingsHtml(findings, ex) {
   if (!findings?.length) return '<p class="sl-muted">No findings.</p>'
-  return findings.map(f => `<div class="sl-finding ${esc(f.sev)}"><h3><span class="sl-sev">${f.sev === 'warn' ? 'warning' : esc(f.sev)}</span>${esc(f.title)}</h3>${f.detail ? `<p>${esc(f.detail)}</p>` : ''}${f.evidence?.length ? `<ul>${f.evidence.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}${f.fix ? `<p><b>Try:</b> ${esc(f.fix)}</p>` : ''}</div>`).join('')
+  const evidence = e => ex ? ex.parts(e).map(p => p.id ? `<a href="#${p.id}">${esc(p.text)}</a>` : esc(p.text)).join('') : esc(e)
+  return findings.map(f => {
+    const list = f.evidence?.length ? `<ul>${f.evidence.map(e => `<li>${evidence(e)}</li>`).join('')}</ul>` : ''
+    return `<div class="sl-finding ${esc(f.sev)}"><h3><span class="sl-sev">${f.sev === 'warn' ? 'warning' : esc(f.sev)}</span>${esc(f.title)}</h3>${f.detail ? `<p>${esc(f.detail)}</p>` : ''}${list}${ex ? ex.take().map(excerptHtml).join('') : ''}${f.fix ? `<p><b>Try:</b> ${esc(f.fix)}</p>` : ''}</div>`
+  }).join('')
+}
+// The text of the package files a report can show excerpts of: the files the run was changed to (launch.options.files), else what the run
+// recorded, else the package's own files (Map path → Buffer).
+export function reportText(o) {
+  const rec = new Map(), files = o.files, changed = o.run?.launch?.options?.files ?? {}
+  for (const [u, t] of Object.entries(o.run?.trace?.sources ?? {})) { const p = urlPath(u); if (p && typeof t === 'string' && t) rec.set(p, t) }
+  return path => {
+    if (Object.hasOwn(changed, path)) { try { const b = entryBuffer(changed[path]); if (isText(b)) return b.toString('utf8') } catch { /* fall through */ } }
+    if (rec.has(path)) return rec.get(path)
+    const b = files?.get?.(path)
+    return b && !b.subarray(0, 8000).includes(0) ? Buffer.from(b).toString('utf8') : null
+  }
 }
 const FILE = { ok: 'in package', case: 'wrong capitals', missing: 'missing', server: 'server path', outside: 'outside package', local: 'author’s computer', remote: 'other site', 'remote-http': 'other site (http)' }
 export function bootHtml(boot, trace) {
@@ -114,16 +135,16 @@ function milestoneHtml(list) {
   return `<h2>Milestones</h2><p class="sl-mono">${list.map(s => `<span class="${s.reached ? '' : 'sl-bad'}" title="${esc(s.evidence)}">${s.reached ? '✓' : '✗'} ${esc(s.label)}</span>`).join(' &nbsp; ')}</p>`
 }
 
-// o: { title, subtitle, findings, boot, run (a saved run), analysis, fragment }
+// o: { title, subtitle, findings, boot, run (a saved run), analysis, fragment, files (Map path → Buffer: lets file:line in evidence link to an excerpt), excerpts (false: no excerpts, no links) }
 export function renderReport(o) {
   const run = o.run, findings = o.findings ?? run?.findings ?? [], v = verdict(findings), c = counts(findings)
-  const a = o.analysis, m = a?.manifest
+  const a = o.analysis, m = a?.manifest, ex = o.excerpts !== false && (o.files || run?.trace?.sources || run?.launch?.options?.files) ? excerptor(reportText(o)) : null
   const pkgTable = a ? `<h2>Package</h2>${table(['', ''], [['Manifest', m ? `SCORM ${m.version}${m.edition ? ' ' + m.edition + ' edition' : ''}` : 'none'], ['Scripts use', a.apiUse === 'none' ? 'no SCORM API names' : a.apiUse === 'both' ? 'both APIs' : 'SCORM ' + a.apiUse],
     ['Made with', a.fingerprints.join(', ') || 'not recognised'], ['Files', `${a.files} (${(a.size / 1048576).toFixed(1)} MB)`], ['Items', (m?.items ?? []).map(i => `${i.title || i.id} (${i.type || '?'})`).join('; ')]].map(([k, x]) => [`<b>${esc(k)}</b>`, esc(x)]))}` : ''
   const body = `<div class="sl"><style>${CSS}</style>
 ${o.fragment ? '' : `<h1>${esc(o.title ?? 'SCORM Lab report')}</h1>`}${o.subtitle ? `<p class="sl-muted">${esc(o.subtitle)}</p>` : ''}
 <div class="sl-verdict"><span class="sl-badge ${v.sev}">${v.sev === 'warn' ? 'warning' : v.sev === 'ok' ? 'ok' : 'error'}</span><b>${esc(v.title)}</b><span class="sl-muted">${c.errors} errors · ${c.warnings} warnings · ${c.info} notes</span></div>
-${run?.kind === 'package' ? milestoneHtml(Array.isArray(run.milestones) ? run.milestones : milestones(run.trace, run.boot)) : ''}<h2>Findings</h2>${findingsHtml(findings)}
+${run?.kind === 'package' ? milestoneHtml(Array.isArray(run.milestones) ? run.milestones : milestones(run.trace, run.boot)) : ''}<h2>Findings</h2>${findingsHtml(findings, ex)}
 ${run ? runHtml(run) : ''}
 ${o.boot ?? run?.boot ? `<h2>Loading path</h2>${bootHtml(o.boot ?? run.boot, run?.trace)}` : ''}
 ${pkgTable}

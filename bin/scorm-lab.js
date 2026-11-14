@@ -599,10 +599,10 @@ const commands = {
       const pkg = openZip(input, o)
       if (o.run) {
         const { run } = runPackage(pkg, { ...o, out: undefined })
-        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: run.label, run, analysis: pkg.analysis, fragment: !!o.fragment })
+        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: run.label, run, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment })
       } else {
         const { item, boot, findings } = check(pkg, o.item)
-        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: `${item.title || item.id} (${item.res.path ?? item.res.href}), from the files only. Run it to see what actually happens.`, findings, boot, analysis: pkg.analysis, fragment: !!o.fragment })
+        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: `${item.title || item.id} (${item.res.path ?? item.res.href}), from the files only. Run it to see what actually happens.`, findings, boot, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment })
       }
     }
     const out = o.out ? resolve(o.out) : o.open ? join(mkdtempSync(join(tmpdir(), 'scorm-lab-report-')), 'report.html') : null

@@ -75,3 +75,18 @@ input[type=text], textarea.answer { background: var(--bg); border: 1px solid var
 .pins-form { flex-wrap: wrap; } .pins-form input[type=text] { min-width: 140px; } textarea.answer { width: 100%; min-height: 80px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .source { padding: 6px 0; max-height: 50vh; overflow: auto; } .source div { padding: 0 8px; white-space: pre; } .source .hl { background: color-mix(in srgb, var(--warn, #c80) 25%, transparent); }
 ol.chain li { margin: .35em 0; }
+
+/* Code view (P4.1) */
+#code-pane { padding: 0 8px; border-bottom: 1px solid var(--line); }
+.cv-scroll { height: 360px; min-height: 120px; max-height: 80vh; resize: vertical; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font: 12px/18px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.cv-rows { min-width: max-content; }
+.cv-line { height: 18px; line-height: 18px; white-space: pre; display: flex; }
+.cv-g { position: sticky; left: 0; flex: none; display: inline-flex; background: var(--code); color: var(--muted); z-index: 1; }
+.cv-n { display: inline-block; min-width: 6ch; padding: 0 6px; text-align: right; user-select: none; }
+.cv-c { display: inline-block; min-width: 6ch; padding: 0 4px; text-align: right; font-size: 11px; user-select: none; }
+.cv-t { padding: 0 8px; } .cv-m { padding: 0 8px; color: var(--muted); font-style: italic; }
+.cv-line.cov-ran { background: color-mix(in srgb, #2a8a3e 14%, transparent); } .cv-line.cov-none { background: color-mix(in srgb, var(--err) 16%, transparent); } .cv-line.cov-part { background: color-mix(in srgb, var(--warn) 18%, transparent); }
+.cv-line.hit .cv-t { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.cv-line.hl { outline: 1px solid var(--warn); outline-offset: -1px; box-shadow: inset 3px 0 0 var(--warn); }
+.cv-key { padding: 0 6px; border-radius: 3px; } .cv-key.cov-ran { background: color-mix(in srgb, #2a8a3e 25%, transparent); } .cv-key.cov-none { background: color-mix(in srgb, var(--err) 28%, transparent); } .cv-key.cov-part { background: color-mix(in srgb, var(--warn) 30%, transparent); } .cv-modes { display: inline-flex; gap: 4px; }
+.cv input[type=number] { width: 7ch; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }

@@ -18,6 +18,7 @@ How SCORM Lab is built, the formats it reads and writes, and how to change it.
 - [Findings](#findings)
 - [Adding a finding](#adding-a-finding)
 - [Comparison](#comparison)
+- [Code views](#code-views-p41)
 - [Reports](#reports)
 - [Interfaces](#interfaces)
 - [Data formats](#data-formats)
@@ -59,10 +60,15 @@ src/
     shape-probe.js      Injected ahead of probe.js when a run answers with @probe: the recording Proxy (P1.3)
     trace-probe.js      Injected ahead of probe.js in a traced run: __labT, __labR, __labC and the event ring (P1.4)
   vendor/
+    beautifier.cjs      js-beautify 2.0.3: js/lib/beautifier.js from npm pack js-beautify (the JS, CSS and HTML formatters in one file), unchanged but for its name (a .cjs, because package.json says type: module) (MIT; js-beautify.LICENSE). format.js's formatter; not in package.json
     acorn.js            acorn 8.19.0: dist/acorn.mjs from npm pack acorn, unchanged (MIT; acorn.LICENSE). instrument.js's parser
   zip.js, xml.js        Readers
   pins.js               Pins and answers: matching, the probe's prefix, the findings, the CLI's spellings
   shape.js              What the content wants from its server: reads → shape, the discovery loop, its findings
+  format.js             Formatting with the vendored js-beautify, and the line map between original and formatted text (P4.1)
+  sourcemap.js          Source maps: VLQ decoder, finding a file's map, original positions (P4.1)
+  codeworker.js         The worker thread codeViewAsync uses: formatting and map decoding (P4.1)
+  codeview.js           What the shared code view shows: modes, coverage lines, trace markers, evidence links, report excerpts (P4.1)
   instrument.js         The execution trace: instrumenting scripts and pages, positions back to the originals, reading events
   drilldown.js          Why it stopped: key decisions, where each undefined came from, the chain and its finding
   overlay.js            Overrides: the file set a run is served from, and the findings about changed files
@@ -80,6 +86,7 @@ src/
   report.js             HTML reports, verdict, counts
   ui/                   The interface (desktop window and web)
     index.html, style.css, app.js
+    codeview.js         The shared code view (classic script, window.CodeView; P4.1)
     bridge.js           window.lab over HTTP when there is no preload (web)
 scripts/
   package.js            Builds SCORM Lab.app (and --install)
@@ -88,6 +95,7 @@ scripts/
 build/icon.svg          The app icon
 test/test.js            Tests; test/fixtures/base is the sample package
 test/packs.js           Rule pack tests (imported by test.js): synthetic packages and hand-made traces
+test/codeview.js        Code view tests (imported by test.js): VLQ, source maps, formatting, coverage, links, excerpts, the 2 MB timing; pure
 docs/                   User and developer documentation
 ```
 
@@ -190,6 +198,7 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `open-run` | — | Run summaries (desktop only: opens a dialog) |
 | `saved-runs` | — | `[{ file, size, mtime }]` from the runs folder |
 | `load-run` | `{ file }` | `[run summary]`. The name is reduced to a base name in the runs folder |
+| `code-view` | `{ run?, path, line?, col?, mode?, source? }` | The shared code view's data for one file (see [Code views](#code-views-p41)): `{ path, kind, mode, modes, later, text, target, cov, covNote, marks, source, sources, note, minified }`, or `{ path, empty: true }` when the text isn't available. With no run, the open package's file (a changed file as changed) |
 | `source` | `{ run, url }` or `{ run, path }` | A script's source from a run, by address; or by package path (the Execution tab): the script as recorded, or for a page, the file the run was served (its changed file, or the open package's if it is that package), else `''` |
 | `live-input` | an input event | `true` if delivered |
 | `macro-record` | `{ on? }` (default true) | Whether recording is on. Turning it on clears what was recorded |
@@ -901,9 +910,66 @@ Running is up to the caller. The CLI calls `runPackage` for each plan entry (a f
 experiment at a time; the runs also appear in the runs list as usual. The UI's Experiments tab keeps its table in
 `st.exp` and fills it from these events; it doesn't survive a page reload in the web interface.
 
+## Code views (P4.1)
+
+Three pure modules and one UI script. Nothing in them makes HTML except `report.js` and `ui/codeview.js`.
+
+**`src/format.js`.** `format(text, kind)` runs js-beautify (`kindOf(path)`: `js`, `html`, `css`, else null; indent 2) and
+returns `{ text, o, f }`, where `o` and `f` are `Int32Array`s of the offsets of the non-whitespace characters of the
+original and of the formatted text. They must have the same length and the same characters, or the result is
+`{ error }` (the formatter changed the code; we don't trust a map then). The n-th non-whitespace character of one is
+the n-th of the other, so `toFormatted(fmt, off)` and `toOriginal` are a binary search, and `lineMaps(text, fmt)` gives
+`toF` and `toO` (the line of each line's first character; -1 for blank lines). Over 5 MB a file isn't formatted.
+Formatting is about 4 MB/s (2 MB of dense code, about 0.5 s).
+
+**`src/sourcemap.js`.** `decodeVLQ(str)` (base64 VLQ → integers), `decodeMappings(mappings)` → `{ segs, lineStart }`
+(segs is flat, five numbers each: generated line, generated column, source, original line, original column, all
+0-based, relative fields undone; one-field segments are dropped), `mapUrlOf(text)` (the last
+`//# sourceMappingURL=` or `/*# … */`), `parseMap(json)` (version 3, not indexed; `sources[i] = { name, content }`,
+`content` null without `sourcesContent`), `loadMap(text, path, readFile)` (an inline data URL, or a file next to the
+script found with `readFile`; another site, a root-relative address or a path leaving the package is never read; a file over
+30 MB, or `mappings` over 5 MB, is refused; `mapJsonOf` is the reading half). Decoded maps are cached per map text (up to
+60 MB, a hit compared with the text; `cachedMap`, `rememberMap`) and `originalAt(map, line, col)` (the last segment at or before the column).
+
+**`src/codeview.js`.** `codeView({ text, path, line, col, mode, source, trace, readFile })` is the `code-view` handler's
+whole job, so tests and the report call it without Electron:
+- *Modes.* `auto` picks `mapped` (the map has the source at that position), else `formatted` for a minified file (a
+  line over 800 characters), else `original`. A file over 30 KB that isn't yet formatted opens `original` with
+  `later: 'formatted'`: the UI draws it, then asks again with that mode. (Formatted results are remembered up to 60 MB, oldest
+  dropped first, keyed by a hash and checked against the text.) A mode that isn't there falls back to `original` with `note`.
+- *Off the main thread.* `codeViewAsync(o)` (what the handler awaits) first formats a file over 30 KB (when the mode is
+  `formatted`) and decodes a map over 30 KB in a `worker_threads` Worker (`src/codeworker.js`, loaded lazily, referenced
+  only while a job is out), puts the results in the caches, then calls `codeView`. If the worker can't run, `codeView`
+  does the work itself. Tests, the CLI report and `excerptor` use the plain, synchronous functions.
+- *Coverage.* `charCounts(len, covs)` turns V8 ranges into a count per character (outer range first, innermost wins, the
+  highest count across frames, -1 for nothing); `lineCoverage(text, starts, counts)` makes one number per line (count,
+  -2 part of the line ran, -1 nothing, judged by the line's first character). Formatted mode moves each non-whitespace
+  character's count across by the map; mapped mode aggregates the counts at each segment's generated position by
+  original line. Coverage entries are those whose `url` is the file's `lab://…/pkg/` address; the offsets are already the
+  original's (`restoreTrace`). Pages (`.html`) have none: inline-script offsets are relative to each script.
+- *Markers.* `siteMarks(trace, path)` counts, per site of the file, calls (`kind` 1, and repeats of a function site) and
+  decision results (`kind` 3, and repeats); `marks` is `{ line: text }` placed in the mode shown.
+- *Links.* `evidenceParts(text)` splits text into plain parts and `{ text, path, line, col }` links for `file:line[:col]`
+  (known extensions only, not after a `/` or `:` so another site's address is left alone). `src/ui/codeview.js` has a copy
+  (`CodeView.parts`) because the renderer has no imports; the test runs the script in `vm` and compares the two.
+- *Excerpts.* `excerpt(view, 20)` and `excerptor(textOf)`, which `report.js` uses: `parts(evidence)` returns the parts with
+  an `id` (random prefix per `excerptor`, so two reports on a page don't clash) where an excerpt could be made (at most 24 per report; one per place; a file's formatting and map are done once, by the caches), `take()` the excerpts made since the last
+  call. A minified file is shown formatted, or from its map's source.
+
+**`src/ui/codeview.js`** (classic script, `window.CodeView`). `create(view, { col, ask, close })` returns the element. It
+draws every line up to 5,000 lines; over that it draws the lines in view and a buffer of 30 each way, with padding to give the
+scroll bar its length (fixed 18 px rows, no wrapping, long lines cut at 600 characters). `ask(options)` calls the handler
+again with another mode or source. `app.js` keeps one pane (`#code-pane`) above the tab; `openCode({ run, path, line, col })`
+fills it, and `link(text)` turns the file:lines of a piece of evidence into buttons that call it.
+
+**Report.** `renderReport({ …, files })` (a Map of package path → Buffer; the saved run's `trace.sources` are used first)
+makes every `file:line` of a finding's evidence an `<a href="#sl-x-N">` and puts a `<details class="sl-excerpt">` with the
+escaped lines under the finding. The text is the run's changed file (`launch.options.files`) first, then its recorded source, then `files`. `excerpts: false` leaves out excerpts and links (for the redacted report). Without any of them it is as before. `scorm-lab report` passes the package's
+files. The desktop and web reports aren't built from the interface.
+
 ## Reports
 
-`renderReport({ title, subtitle, findings, boot, run, analysis, fragment })` (`src/report.js`) returns a full HTML
+`renderReport({ title, subtitle, findings, boot, run, analysis, fragment, files })` (`src/report.js`) returns a full HTML
 page, or a `<div class="sl">` fragment with scoped styles. The fragment uses the host page's `--err`, `--warn`, `--ok`,
 `--line`, `--muted` and `--code` if they are defined. Everything interpolated goes through `esc()`. `counts()` and
 `screens()` are shared with the CLI's JSON output.
@@ -1030,6 +1096,8 @@ npm test
 
 `npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `SCORM_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers; P2.1: profiles with a delayed popup, a frameset, a late API and a CSP, and the `lms` experiment; P3.1: the corrected `blank` and `mismatch` run (no longer blank, API calls appear), and the corrected package as a web download). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
 `test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
+
+The code views (P4.1) have no end-to-end run: `test/codeview.js` is pure and runs in `--unit`. It tests the handler's own function (`codeView`), so the main process is only a thin wrapper, and measures a 2 MB file (opening, then formatting). The DOM part of `src/ui/codeview.js` (drawing, virtual scrolling, search) isn't in the suite; it was checked by hand in a browser against `codeView` output. The 300 ms goal is for opening (the original text with coverage, markers and any map); formatting 2 MB takes about 0.5 s and is a second step.
 
 | Fixture | Change | Tests |
 |---|---|---|
