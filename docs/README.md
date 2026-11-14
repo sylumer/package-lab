@@ -2,7 +2,8 @@
 
 For people using it:
 
-- [User guide](user-guide.md): the desktop app, from opening a package to reading a run, with a method for packages that don't work.
+- [User guide](user-guide.md): the desktop app, from opening a package to reading a run, with a method for packages that don't work. Every tab and toolbar button is listed in [The tabs and buttons, one by one](user-guide.md#the-tabs-and-buttons-one-by-one).
+- [Recipes](recipes.md): step-by-step diagnoses for the usual problems: works in the authoring tool but not in an LMS, a blank page, no API calls, doesn't resume, works in Chrome but not in Safari or on an iPad, and works in one LMS but not another.
 - [Findings](findings.md): every finding, what it means and what to try.
 - [Authoring tool notes](packs/README.md): what the rule packs know about Xyleme, Storyline, Adapt and the rest, and where it comes from.
 - [Command line](cli.md): `scorm-lab analyze`, `run`, `cycle`, `report`, `open`, `serve`; JSON output; live runs.

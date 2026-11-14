@@ -54,7 +54,7 @@ A comparison with a working run is an extra, for when one exists.
    (auto-attach, so cross-origin frames are recorded too). It records scripts as parsed (with the stack that loaded
    them), network requests with their initiators and outcomes, frame navigations, console output, uncaught and
    caught exceptions (with stacks), and precise block coverage (which functions and branches ran).
-4. **Diagnosis** (`src/rules.js`, and the milestone, stall and drill-down analyses to come), with comparison
+4. **Diagnosis** (`src/rules.js`, with `src/milestones.js`, `src/stall.js` and `src/drilldown.js`), with comparison
    (`src/diff.js`) as an optional extra: pure functions over two recorded runs and the
    static analysis. The comparison matches requests and scripts by path (ignoring host and package root), and
    functions by script and position, then lists what the reference did that the run didn't. Rules turn the
@@ -64,26 +64,39 @@ A comparison with a working run is an extra, for when one exists.
 
 All of them drive the same main process (`src/main.js`) and the same findings:
 
-- **Desktop window**: a toolbar (open package, launch settings, stop after, record reference), the runs list, and tabs
-  for Findings, Boot path, Package, API, Lookups, Network, Scripts, Errors, Console, Frames and Compare.
+- **Desktop window**: a toolbar (open package, launch settings, profile, stop after, test saving, export), the runs
+  list, and tabs for the package and each run: Findings, Boot path, Package, Files, API, xAPI, Lookups, Network,
+  Scripts, Execution, Drill-down, Timeline, Errors, Console, Frames, Compare, Package diff, Folder check, Experiments,
+  Test saving and Server needs. [The user guide](docs/user-guide.md) covers each one.
 - **Web interface** (`scorm-lab serve`): the same interface over HTTP with a token, plus a Live tab that streams the
   running course and sends clicks and keys back. For use from other devices.
-- **CLI** (`bin/scorm-lab.js`): analyze, items, run (headless, with a live folder for frames and input), report (HTML),
-  open, serve.
+- **CLI** (`bin/scorm-lab.js`): analyze, items, run (headless, with a live folder for frames and input), experiment,
+  discover, drill, cycle, diff, batch, fix, report (HTML, optionally redacted), doctor, open, serve, completion.
 - **Alfred workflow** and **Concierge module**: thin layers over the CLI.
 
 See docs/developer-guide.md.
 
 ## Roadmap
 
-- Phase 1 (done): harness, recorder, API lookup probe, static scan, first rules, optional comparison.
-- Interfaces (done): packaged app with Open With, CLI, web interface with live view, Alfred workflow, Concierge module,
-  HTML reports.
-- Phase 2: boot path and launch analysis (done); milestones and stall analysis (what the content was waiting for when it stopped); instrumented execution
-  trace with the ordered decisions before the dead end.
-- Phase 3: automatic drill-down (condition values and the origin of undefined values) and automatic experiments.
-- Phase 4: progress-save cycle run automatically (launch, exit, relaunch, check the content reads back what it wrote);
-  readable code views; rule packs per authoring tool; suggested fixes; redacted report.
+The first version (done) had the harness, recorder, API lookup probe, static scan, first rules, optional comparison,
+the packaged app with Open With, the CLI, the web interface with live view, the Alfred workflow, the Concierge module
+and HTML reports.
+
+[The build plan](docs/plan.md) then added six phases. Phases 0 to 4 are done; phase 5 is in progress. The status of each
+work package is in [plan-status.md](docs/plan-status.md).
+
+- **Phase 0, foundations (done):** one launch-options model used by every interface, milestones and progress on every
+  run, and the experiment runner.
+- **Phase 1, replacing hand work (done):** overlays (change a file and run it again), pins and answers, server-needs
+  discovery, the execution trace, drill-down, and stall analysis (what the content was waiting for).
+- **Phase 2, what a local run can't see yet (done):** LMS profiles and content on another origin, blocked storage and
+  cookies, WebKit runs and device sizes, and the save-and-resume cycle with input macros.
+- **Phase 3, from diagnosis to fix (done):** corrected package export with its autofixes, rule packs for eleven
+  authoring tools (with `--tool`), and comparing two packages.
+- **Phase 4, everyday use (done):** code views (formatting, source maps, coverage and trace markers), a timeline,
+  folder checks (`batch`), a redacted report, and cmi5 and xAPI support with a local LRS.
+- **Phase 5, interfaces, documentation and release (in progress):** the concierge module, Alfred and CLI polish, and
+  the documentation pass. The final check and release build come last.
 
 ## Limits
 

@@ -6,6 +6,7 @@ Concierge module use it too.
 - [Installing](#installing)
 - [Commands](#commands)
 - [Choosing an item](#choosing-an-item)
+- [cmi5 and Tin Can packages](#cmi5-and-tin-can-packages)
 - [analyze](#analyze)
 - [items](#items)
 - [run](#run)
@@ -13,11 +14,15 @@ Concierge module use it too.
 - [discover](#discover)
 - [drill](#drill)
 - [cycle](#cycle)
+- [fix](#fix)
+- [diff](#diff)
+- [batch](#batch)
 - [report](#report)
 - [doctor](#doctor)
 - [open](#open)
 - [serve](#serve)
 - [completion](#completion)
+- [help and version](#help-and-version)
 - [Exit statuses](#exit-statuses)
 - [JSON output](#json-output)
 - [Live runs](#live-runs)
@@ -38,7 +43,7 @@ To put `scorm-lab` on your PATH:
 npm link
 ```
 
-Without linking, use `node bin/scorm-lab.js`. Commands that run a package (`run`, `experiment`, `discover`, `report --run`, `open`, `serve`)
+Without linking, use `node bin/scorm-lab.js`. Commands that run a package (`run`, `experiment`, `discover`, `drill`, `cycle`, `diff --run`, `batch --run`, `report --run`, `open`, `serve`)
 need Electron. That is either this repo's own (installed by `npm install`) or `/Applications/SCORM Lab.app`. `analyze`,
 `items` and plain `report` need only Node.
 
@@ -301,6 +306,24 @@ either. `--viewport` works in both browsers: a preset (`iphone`, `ipad`, `androi
 cross for each step, and what the content was showing at the end (visible elements, any loading indicator, and the
 start of its text), the counts (API calls, requests, failures, uncaught errors), and the run's findings.
 
+#### Copy as CLI command
+
+**Copy as CLI command** (under More options, in the desktop app and the web interface) copies the `scorm-lab run` line
+for the current launch. It starts with the package's file name and adds `--item` when the item isn't the first. Each
+setting that a flag can express gets one; the rest go in a file the line names:
+
+| Printed | Means |
+|---|---|
+| `--override js/app.js=js/app.js` | A changed file. The line assumes a copy of it at the same path, relative to where you run the command. One for each changed file |
+| `--pin name=json`, `--answer pattern=status:body` | Pins for the content's frames only, and answers with no method or headers. Anything else is in `--options options.json` |
+| `--resume-from previous-run.json` | Resume is on. Put a run's data in a file of that name, or pass your own saved run |
+| `--macro macro.json` | A macro. Save it as a JSON list of events first |
+| `--profile name` or `--profile-file profile.json` | A preset by name, or a changed profile: save its fields in that file |
+| `--launch-params`, `--storage`, `--browser`, `--viewport`, `--tool`, `--trace`, `--record-input` | As the flags in the run table above |
+| `--options options.json` | Any other setting that is not the default. Save the options JSON shown under More options as that file |
+
+The line is a starting point: the files it names must be made before it runs.
+
 ## experiment
 
 Runs one item several ways, one after another, with the same headless runs as `run`, and prints a table of how far
@@ -318,7 +341,7 @@ progress goes to standard error.
 
 | Option | Default | What it does |
 |---|---|---|
-| `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), `standard` (both), `lms` (each [profile](#profiles)), `storage` (normal and blocked), or `browsers` (Chromium and WebKit) |
+| `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), `standard` (`api` and `frames` together: 8 variants besides the default), `lms` (each [profile](#profiles)), `storage` (normal and blocked), or `browsers` (Chromium and WebKit) |
 | `--variants` | none | Your own variants, from a JSON file: a list of `{ "name", "patch" }` or `{ "variants": [...] }`. `patch` is any [launch options](developer-guide.md#launch-options). Not with `--preset` |
 | `--out` | none | A folder; each run is kept in it as a saved run (`01-default.json`, `02-api_both.json`, …) as it finishes, and at the end the result (the same as `--json`) as `experiment.json`, and an HTML report of the variants and findings as `report.html` |
 | `--json` | off | Prints JSON (below) instead of a table |
@@ -803,6 +826,19 @@ To use it, save it as `_scorm-lab` in a folder on your `fpath` (`fpath=(~/.zfunc
 `--json` it prints `{ shell, script }`. The script is made from the command table in `src/completion.js`, which the
 tests check against the help text.
 
+## help and version
+
+```bash
+scorm-lab help [--json]
+scorm-lab version [--json]
+scorm-lab <command> --help
+```
+
+`help` prints the list of commands with a line each, and the options of every command. `<command> --help` prints the same
+help. `version` prints the version. `--json` gives `{ version, commands: [{ name, summary }] }` for `help` and `{ version }` for
+`version`. The command table, and each command's flags, are in `src/completion.js`; the tests check that the help text
+lists every command and flag.
+
 ## Exit statuses
 
 | Status | Meaning |
@@ -813,18 +849,27 @@ tests check against the help text.
 
 ## JSON output
 
-Every command takes `--json`, except that `serve` only has it with `--url`. The shapes below are the ones this section
-and the others give. The new ones (P5.2):
+Every command takes `--json`, except that `serve` only has it with `--url`. Each command's section gives its shape. Where a
+command has no section of its own, its shape is here:
 
-| Command | `--json` prints |
-|---|---|
-| `open` | `{ app: "installed" \| "repo", path, package }`: the app it opened, its path, and the package (absolute) or `null` |
-| `report` | `{ input, out, verdict: { sev, title }, counts, findings }`; with `--redact`, `{ input, out, redacted: true, verdict: { sev }, counts }` |
-| `serve --url` | `{ url }` |
-| `help` | `{ version, commands: [{ name, summary }] }` |
-| `version` | `{ version }` |
-| `completion zsh` | `{ shell, script }` |
-| `experiment` | the same JSON as below, and `report.html` is written too when `--out` is given |
+| Command | `--json` prints | Shape in |
+|---|---|---|
+| `analyze`, `items` | The package summary, items, verdict, counts and findings (`items` is just the items list) | [JSON output](#json-output), [items](#items) |
+| `run` | The launch, verdict, counts, milestones, findings, API calls and screens of the run | [JSON output](#json-output) |
+| `experiment` | The variants and findings (with `--out`, `report.html` is written too) | [experiment](#experiment) |
+| `discover` | The requests, the fields they read, the stand-in, rounds and findings | [discover](#discover) |
+| `drill` | The decisions, the chain, the cause and the findings | [drill](#drill) |
+| `cycle` | Both runs, the side-by-side rows and the findings | [cycle](#cycle) |
+| `fix` | What was applied, the notes and the proof | [fix](#fix) |
+| `diff` | Files, manifest, loading path, findings, and behaviour with `--run` | [diff](#diff) |
+| `batch` | A summary and one row per package | [batch](#batch) |
+| `report` | `{ input, out, verdict: { sev, title }, counts, findings }`; with `--redact`, `{ input, out, redacted: true, verdict: { sev }, counts }` | [report](#report) |
+| `doctor` | The checks, what this Mac can do, and the names the options accept | [doctor](#doctor) |
+| `open` | `{ app: "installed" \| "repo", path, package }`: the app it opened, its path, and the package (absolute) or `null` | [open](#open) |
+| `serve --url` | `{ url }` | [serve](#serve) |
+| `help` | `{ version, commands: [{ name, summary }] }` | [help and version](#help-and-version) |
+| `version` | `{ version }` | [help and version](#help-and-version) |
+| `completion zsh` | `{ shell, script }` | [completion](#completion) |
 
 `analyze --json`:
 

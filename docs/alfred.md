@@ -22,7 +22,7 @@ Preferences › Workflows › SCORM Lab › [x]. Its shell is in `scripts/alfred
 | In Alfred | Does |
 |---|---|
 | `scormlab` | Opens SCORM Lab |
-| `scorm <name>` | Finds `.zip` files by name (Spotlight). **↩** opens the package in SCORM Lab. **⌘↩** checks it from its files and opens the report in your browser. **⇧↩** runs the standard experiment (the [`standard` preset](cli.md#experiment): 10 variants) and opens its report. **⌥↩** runs it, then opens the report |
+| `scorm <name>` | Finds `.zip` files by name (Spotlight). **↩** opens the package in SCORM Lab. **⌘↩** checks it from its files and opens the report in your browser. **⇧↩** runs the standard experiment (the [`standard` preset](cli.md#experiment): 9 runs: the default and 8 variants) and opens its report. **⌥↩** runs it, then opens the report |
 | `scormweb` | Starts the [web interface](web.md) on this Mac if it isn't running, and opens it in your browser |
 
 File Actions: select a `.zip` in Alfred, or in Finder with Alfred's File Actions hotkey, then choose one of:
@@ -39,7 +39,7 @@ the folder's name, or the last line of the log if it fails.
 Checks and runs end with a notification. A run takes the wait plus a few seconds. Change the length with the
 workflow variable `wait`, in seconds.
 
-**⇧↩** (the standard experiment) runs 10 variants, each for `wait` seconds, one after another: with the default of 20
+**⇧↩** (the standard experiment) runs 9 times (the default and 8 variants), each for `wait` seconds, one after another: with the default of 20
 seconds that is about four minutes, and Alfred shows nothing until it ends. The report opens in your browser, with a table
 of the variants and their findings.
 

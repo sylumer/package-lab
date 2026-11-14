@@ -22,13 +22,18 @@ if there are no errors.
 - [From a run: finding the LMS](#from-a-run-finding-the-lms)
 - [From a run: requests and errors](#from-a-run-requests-and-errors)
 - [From a run: milestones](#from-a-run-milestones)
+- [From a run: what it was waiting for](#from-a-run-what-it-was-waiting-for)
 - [From a run: progress](#from-a-run-progress)
 - [From a cmi5 or Tin Can package](#from-a-cmi5-or-tin-can-package)
 - [From a cmi5 or Tin Can run: the LRS](#from-a-cmi5-or-tin-can-run-the-lrs)
+- [From a run: changed files](#from-a-run-changed-files)
+- [From a run: pins and answers](#from-a-run-pins-and-answers)
 - [From a run in WebKit](#from-a-run-in-webkit)
 - [From a run: tracing](#from-a-run-tracing)
 - [From an experiment](#from-an-experiment)
+- [From a save-and-resume test](#from-a-save-and-resume-test)
 - [From a discovery](#from-a-discovery)
+- [From a drill-down](#from-a-drill-down)
 - [From a comparison](#from-a-comparison)
 
 ## From the manifest
@@ -63,7 +68,8 @@ These come from following everything the launch page loads (see **Boot path** in
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
-| The launch page *X* isn't in the package (or has different capitals) | error | Nothing can load | Correct the resource `href` |
+| The launch page *X* isn't in the package | error | Nothing can load | Correct the resource `href` |
+| The launch page *X* is *Y* in the ZIP (different capitals) | error | Nothing can load | Correct the resource `href` |
 | *N* files the launch loads aren't in the package | error | Pages or scripts ask for them and get "not found". A missing script usually means what it would have built never appears. If a file with the same name exists elsewhere, the path is wrong. If a path works relative to the script but not the page, the script was written for another folder layout: fetch and `src` paths resolve from the page | Include the files, or correct the paths |
 | Scripts name *N* files that aren't in the package | warning | Paths that appear as text in scripts; some may be unused | A run shows which are actually asked for |
 | Paths differ from the files only in capitals | error | Works on Windows and macOS, fails on Linux servers | Make each reference match exactly. **Autofix:** `case` |
@@ -79,7 +85,7 @@ These come from following everything the launch page loads (see **Boot path** in
 | The content uses JavaScript modules | info | Needs the server to send `.js` and `.mjs` as JavaScript, and CORS for files on a CDN | If an LMS run shows a MIME type error, ask the LMS to fix the type |
 | *file*.json isn't valid JSON | error | A config file read at start-up that won't parse usually stops start-up | Fix it (often a trailing comma or byte-order mark) |
 | Scripts on *page* run before what they need | error | A script uses a name that only a later, deferred or async script defines: "… is not defined" | Move it after the script it needs, or remove `defer`/`async` from that one |
-| *page* sets `<base href>` outside the package | warning | Every relative path then points elsewhere | Remove it or point it inside |
+| *page* sets `<base href="*URL*">`, outside the package | warning | Every relative path then points elsewhere | Remove it or point it inside |
 | The launch page has no content of its own | info | Everything is built by scripts, so any failure leaves it blank | Context for a blank page |
 
 ## From authoring-tool packs
@@ -93,6 +99,9 @@ end of its detail:
 - **Confirmed in the package's files.** SCORM Lab read the setting or the file itself (a config key, a driver
   setting). These can be warnings.
 - **Confirmed in this run.** The recording shows it happening. These can be warnings.
+
+When you choose the tool yourself (the **Authoring tool** setting, or `--tool`), each of its findings says so in its
+detail, whether or not SCORM Lab recognised the package.
 
 Recognition is by file names and text the research notes ([docs/packs](packs/README.md)) list, so a package with no
 such marker gets no pack unless you choose one (the **Authoring tool** option, or `--tool`). The rules below are what each pack can say.
@@ -116,10 +125,10 @@ such marker gets no pack unless you choose one (the **Authoring tool** option, o
 | Adapt: tracking is off (`_spoor._isEnabled` is false) | warning | package | The package is valid but sends nothing to the LMS | Set `_isEnabled` to true and build again |
 | Adapt: config.json says SCORM *x*, but the manifest says SCORM *y* | warning | package | `_scormVersion` (default 1.2) differs from the manifest | Make them agree and build again |
 | Adapt: SCORM 2004 is not officially supported by spoor | info | pattern | The README says 1.2 only | Try 1.2 if tracking is wrong |
-| Adapt: the debug window is on | warning | package | `_showDebugWindow` is true | Set it to false |
+| Adapt: the debug window is on (_showDebugWindow) | warning | package | `_showDebugWindow` is true | Set it to false |
 | dominKnow: there is no imsmanifest.xml | info | pattern | May be a Web package, not an LMS publish | Choose the LMS target and a SCORM standard |
-| Evolve: the package is SCORM 2004 | info | pattern | Guidance for Evolve content recommends 1.2 | Publish as 1.2 if tracking fails |
-| Evolve: the manifest is inside a folder | info | pattern | Re-zipping adds a wrapper folder | Zip the folder's contents, or upload the original export |
+| Evolve: the package is SCORM 2004; guidance for Evolve content recommends SCORM 1.2 | info | pattern | Guidance for Evolve content recommends 1.2 | Publish as 1.2 if tracking fails |
+| Evolve: the manifest is inside a folder; Evolve guidance says upload the ZIP as exported | info | pattern | Re-zipping adds a wrapper folder | Zip the folder's contents, or upload the original export |
 | SCORM Driver (Rustici): strLMSStandard is "*x*" … but the manifest says SCORM *y* | info | pattern | Read only in `scormdriver*.js`; "SCORM" as 1.2 and "SCORM2004" as 2004, a reading the vendor docs read don't confirm. Other values are reported without a reading | Check the driver's configuration; run it to see which API it looks for |
 | SCORM Driver (Rustici): indexAPI.html points to a start page that isn't in the package | warning | package | `strContentLocation` names a missing file | Point it at the real start page |
 | SCORM Driver (Rustici): the driver loaded but nothing looked for the LMS | info | run | The driver may be set not to use an LMS | Check `strLMSStandard` and the errors |
@@ -133,7 +142,7 @@ such marker gets no pack unless you choose one (the **Authoring tool** option, o
 | The launch page *X* wasn't found / was never requested / never got as far as showing anything | error | The launch itself failed. The evidence lists what went wrong, in order | Start with the first line of evidence |
 | The content shows a blank page | error | At the end, no frame of the content showed text or images. The evidence, in loading order, covers files not found, requests to the server outside the package, the first errors, things the browser refused, requests still waiting, problems from the files, a page hidden by its own style, and what each frame showed | Fix the first cause; later ones often follow from it. With no cause listed, the content is waiting for something: see the boot path and Lookups |
 | The content is stuck on a loading screen (*element*) | error | As above, with only a loading indicator showing | As above |
-| The content may be stuck on a loading screen | warning | A loading indicator was still showing, with a little text | Check whether it ever finishes |
+| The content may be stuck on a loading screen (*element*) | warning | A loading indicator was still showing, with a little text | Check whether it ever finishes |
 | Loading stopped part way through *page* | error | Files named in the page's own tags were never requested: parsing stopped (a script that blocked, failed during `document.write`, or navigated away) | Look at the last script before them |
 | Code that loads the next part of the content never ran | warning | Scripts that loaded contain code to load these files, but it never ran: the content went another way or stopped first | Look at the code around the first one, and what it waits for |
 
@@ -227,8 +236,9 @@ completion statement*. "The content never looked for the SCORM API" and the SCOR
 | *N* requests to the LRS had no Authorization header, or weren't authorised | error | The LRS answers 401 until the request carries `Authorization: Basic <token>` (cmi5: the token from the fetch URL; Tin Can: the `auth` parameter) | Send the token on every request |
 | Statements were sent with the wrong Content-Type | error | Statements must be sent as `application/json` | Set the header |
 | *N* requests asked the LRS for something it doesn't have | warning | The LRS has the statements, state, activity profile, agent profile and about resources | Check the path the content builds from the endpoint |
+| *N* requests to the LRS was / were too large | error | A request body over 10 MB is refused (status 413) and nothing in it is stored | Send less in one request |
 | The content used the alternate request syntax | info | A POST with `method=` and the headers in the body, meant for old browsers | None needed |
-| The LRS rejected *N* statements | error | A statement that breaks xAPI 1.0.3 is refused with status 400 and lost. The evidence lists each problem and where it is in the statement (for example `result.score.scaled: must be from -1 to 1`) | Correct the statement where the content builds it |
+| The LRS rejected *N* statements | error | A statement that breaks xAPI 1.0.3 is refused with status 400 and lost. The evidence lists each problem and where it is in the statement (for example `result.score.scaled: must be from -1 to 1`). Also here: two statements in one request with the same id, an id that doesn't match the `statementId` in a PUT's URL, and a different statement sent with an id that is already stored (status 409). Sending the same statement again is fine: the LRS keeps one copy | Correct the statement where the content builds it |
 | *N* statements have a verb id that isn't an IRI | error | A verb id must be an absolute IRI, such as `http://adlnet.gov/expapi/verbs/completed`; "completed" alone is not | Use the full IRI |
 | *N* statements break xAPI recommendations | warning | Accepted by the LRS, because the standard only recommends them: a verb without `display`, a timestamp without a time zone, `contextActivities` given as an object instead of a list | Correct them |
 
@@ -237,7 +247,9 @@ What the validation checks (xAPI 1.0.3): the properties a statement may have; `a
 IRI, Agent, Group, SubStatement, StatementRef with a UUID); `result` (`score.scaled` from -1 to 1, `raw` between `min`
 and `max`, `min` below `max`, `success` and `completion` true or false, `duration` an ISO 8601 duration); `context`
 (`registration` a UUID, `contextActivities`, `language`, extension keys that are IRIs); `timestamp` and `stored`
-(ISO 8601); `id` a UUID; attachments. A statement with an error is not stored; one with only warnings is.
+(ISO 8601); `id` a UUID; attachments. A statement with an error is not stored; one with only warnings is. The cmi5 rules are the exception: the LRS records a
+broken cmi5 rule and accepts the statement (a cmi5 LMS is what would object), so those statements are stored and their
+findings say what was wrong.
 
 **cmi5 only**
 
@@ -249,12 +261,12 @@ and `max`, `min` below `max`, `success` and `completion` true or false, `duratio
 | cmi5: The AU sent "*verb*" after "terminated" | error | "terminated" must be the last statement | Send nothing after it |
 | cmi5: The AU sent "*verb*" *N* times | error | "initialized", "completed" and "terminated" are sent once per session | Guard against sending twice (a reload, a second frame) |
 | cmi5: The AU sent both "passed" and "failed" in one session | error | Only one of them is allowed | Decide once |
-| cmi5: statements without the cmi5 category activity | error | `context.contextActivities.category` must hold an activity with the id `https://w3id.org/xapi/cmi5/context/categories/cmi5` | Start each statement's context from the `contextTemplate` in LMS.LaunchData and add the category |
-| cmi5: statements without the session id | error | `context.extensions` must carry the `…/cmi5/context/extensions/sessionid` value from the `contextTemplate` | Copy it |
-| cmi5: statements that don't match the launch | error | The actor, registration and object (the AU's id, the `activityId` parameter) must be the ones the AU was launched with | Use the launch parameters unchanged |
-| cmi5: statements without an id | error | An AU must give every statement a UUID `id` | Generate one |
-| cmi5: statements without a duration | error | "completed", "passed", "failed" and "terminated" must have `result.duration` | Add it |
-| cmi5: statements with the wrong result | error | "completed" has `completion` true, "passed" `success` true, "failed" `success` false, and only "passed" and "failed" have a score | Correct them |
+| cmi5: statements without the cmi5 category activity (*N*) | error | `context.contextActivities.category` must hold an activity with the id `https://w3id.org/xapi/cmi5/context/categories/cmi5` | Start each statement's context from the `contextTemplate` in LMS.LaunchData and add the category |
+| cmi5: statements without the session id (*N*) | error | `context.extensions` must carry the `…/cmi5/context/extensions/sessionid` value from the `contextTemplate` | Copy it |
+| cmi5: statements that don't match the launch (*N*) | error | The actor, registration and object (the AU's id, the `activityId` parameter) must be the ones the AU was launched with | Use the launch parameters unchanged |
+| cmi5: statements without an id (*N*) | error | An AU must give every statement a UUID `id` | Generate one |
+| cmi5: statements without a duration (*N*) | error | "completed", "passed", "failed" and "terminated" must have `result.duration` | Add it |
+| cmi5: statements with the wrong result (*N*) | error | "completed" has `completion` true, "passed" `success` true, "failed" `success` false, and only "passed" and "failed" have a score | Correct them |
 | cmi5: moveOn *X* isn't satisfied | warning (note if the AU had not terminated) | An LMS counts the AU as done only after the statements `moveOn` asks for ("completed", "passed", both, or either) | Check the AU sends them |
 | cmi5: "*passed*" with a score that disagrees with masteryScore | error | A "passed" score must reach the masteryScore in LMS.LaunchData, a "failed" score must stay below it | Decide pass or fail from the masteryScore |
 
@@ -276,9 +288,8 @@ Added to a package run that used pins or responses. See
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
 | The content tried to change a pinned value | warning | The content assigned a different value to something you pinned. The pin held. The evidence names the code that did it (`previewMode = true from boot.js:12:3`), which is usually where the content decides its mode | Look at that code. Change it with a file override, or take the pin off if you wanted the content to choose |
-| Couldn’t pin *name* | warning | The browser refused: the name is on a frozen or locked object, or can't be redefined | Use a file override instead |
+| Couldn’t pin *name* | warning | The browser refused: the name is on a frozen or locked object, or can't be redefined. Also when the content redefined or deleted the pinned name after the pin was set (checked when the page has loaded), so the pin no longer applies | Use a file override instead |
 | Couldn’t pin *name*: the script declares it with let or const | warning | A `let` or `const` at the top of a script makes a name of its own, which a pin can't replace. The content kept its own value. The evidence gives the file and line | Use a file override instead: change that line in the Files tab |
-| Couldn’t pin *name*: the content redefined it | warning | The content redefined or deleted the pinned name after the pin was set (checked when the page has loaded), so the pin no longer applies. A pin is an ordinary window property and content can replace it | Use a file override instead |
 | Couldn’t answer *N* requests | warning | The browser refused a response, so the request went to the server as normal | Check the status, headers and body |
 | Pinned value never read | info | The content never looked at the pinned value (the name may be wrong, the code that reads it never ran, or the name is declared with `let` or `const` somewhere other than the start of a line, which SCORM Lab can’t see). `navigator.userAgent` pins aren't checked | Check the spelling, and whether the content got as far as the code that reads it |
 | Answered *N* requests with your responses | info | These requests never reached a server: the content got your response. The evidence lists them | Compare with a run without the answer to see what changed |

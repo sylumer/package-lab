@@ -234,7 +234,7 @@ Concierge's `docs/writing-modules.md`). It does no analysis itself: it calls SCO
 | Upload | `scorm-lab analyze <zip> --json`, saved as `analysis.json` |
 | Reports from the files | `scorm-lab report <zip> --item n --fragment`, cached |
 | What the form offers | `scorm-lab doctor --json`: the profiles, tools, device sizes, presets and fixes, and whether WebKit works |
-| Run | A detached worker (`run --worker <package> <run>`) calls `scorm-lab run <zip> … --live <folder> --out run.json --json` (with `--profile`, `--browser`, `--viewport`, `--storage`, `--tool`, `--trace`, `--override`, `--pin` and `--answer` as set), then `scorm-lab report run.json --fragment`, then writes `done.json` |
+| Run | A detached worker (`run --worker <package> <run>`) calls `scorm-lab run <zip> … --live <folder> --out run.json --json` (with `--api`, `--depth`, `--window`, `--resume-from`, `--profile`, `--browser`, `--viewport`, `--storage`, `--tool`, `--trace` and `--override` as set; pins and responses go in a file given with `--options`), then `scorm-lab report run.json --fragment`, then writes `done.json` |
 | Test saving | The same worker calls `scorm-lab cycle <zip> … --out <folder> --json`; the second run becomes `run.json` |
 | Try variants | A detached worker calls `scorm-lab experiment <zip> --preset <name> --out <folder>`; the page reads the saved runs as they appear, then `experiment.json` |
 | Drill-down, Discover | A detached worker calls `scorm-lab drill` or `discover <zip> --options-from run.json --json` |

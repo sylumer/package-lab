@@ -58,10 +58,79 @@ Only one SCORM Lab window runs at a time. Opening another package sends it to th
   - the status line
 - **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the tabs.
   The **R** and **F** buttons are for comparing.
-- **Tabs:** Findings, Boot path, Package, Files, API, Lookups, Network, Scripts, Errors, Console, Frames, Compare, Package diff, Experiments and Server needs. The
-  **Filter** box filters whichever table is showing.
+- **Tabs:** Findings, Boot path, Package, Files, API, xAPI, Lookups, Network, Scripts, Execution, Drill-down, Timeline,
+  Errors, Console, Frames, Compare, Package diff, Folder check, Experiments, Test saving and Server needs. (The web
+  interface has a **Live** tab instead of Folder check.) The **Filter** box filters whichever table is showing.
 
 When no run is selected, the tabs show the package as read from its files. When a run is selected, they show that run.
+[The tabs and buttons, one by one](#the-tabs-and-buttons-one-by-one) says what each one is for.
+
+## The tabs and buttons, one by one
+
+Each tab below says what it shows and what its buttons do. Where a feature has a section of its own, the tab links to it.
+
+**Tabs**
+
+- **Findings**: the problems, worst first, with the **Milestones** strip above them. **Save report…** (with **Take the
+  course content out** ticked for a redacted report) is at the top of the tab. See [Reading a run](#reading-a-run) and
+  [Sending a report](#sending-a-report-without-the-course-content).
+- **Boot path**: the loading path of the selected item, and in a run, when each file was asked for. See [Before
+  running](#before-running-findings-and-boot-path).
+- **Package**: the manifest, the items, and every match from the static scan of the scripts. Each line number opens the
+  code.
+- **Files**: the package's files as a tree, a text editor, and the changes you've made. **Save as override**, **Revert**,
+  **Replace from a file…**, **Show changes** and **Revert all**. See [Changing files](#changing-files-and-running-again).
+- **API**: every SCORM API call in order (element, value, result, error), and the stored values at the end. It fills in
+  while the course runs.
+- **xAPI**: for cmi5 and Tin Can packages: the statements, their validation, the documents and the requests to the LRS.
+  See [The xAPI tab](#the-xapi-tab).
+- **Lookups**: every time the content read `window.API` or `API_1484_11`, in any frame, and the code that looked. Pins
+  appear here too (each read, and each try to change one). See [Forcing values](#forcing-values-and-answering-requests).
+- **Network**: every request, with its status and the code that made it. **Answer this request…** appears on failed and
+  server requests.
+- **Scripts**: every script the browser read, in order, with what loaded it. **Code** opens it.
+- **Execution**: the last events of a traced run, with the filter box to narrow them. **Code** opens the line. See
+  [Tracing the code](#tracing-the-code).
+- **Drill-down**: why the run stopped, as a chain of decisions. **Drill down** runs the item again if it has to, and
+  **Stop** ends a run in progress. See [Why it stopped](#why-it-stopped-drill-down).
+- **Timeline**: one run on one time axis. See [Timeline](#timeline).
+- **Errors**: uncaught errors, caught errors (if **Record caught errors** is on) and browser warnings, in time order.
+- **Console**: the content's console output.
+- **Frames**: frame navigations and their targets: cross-origin frames, workers and popups.
+- **Compare**: a comparison of the reference (R) and a failing run (F). See [Comparing with a working
+  copy](#comparing-with-a-working-copy-optional).
+- **Package diff**: the comparison of two packages, from their files. See [Comparing two packages](#comparing-two-packages).
+- **Folder check**: the result of **Check a folder…**, one row per package. Desktop app only. See [Checking a folder of
+  packages](#checking-a-folder-of-packages).
+- **Experiments**: a preset, **Run all** and **Stop**, and a table that fills in. See [Trying every setting at
+  once](#trying-every-setting-at-once-experiments).
+- **Test saving**: the two runs of a save-and-resume test, side by side, with **Test saving** and **Stop**. See [Testing
+  that progress is saved and resumed](#testing-that-progress-is-saved-and-resumed).
+- **Server needs**: the server requests of the run, with **Discover all server requests**, **Rounds**, **Discover** on
+  each request, **Save as response** and **Stop**. See [What the content wants from its server](#what-the-content-wants-from-its-server).
+- **Live** (web interface only): the course window as it runs, with clicks and keys sent back. See [Live view](web.md#live-view).
+
+**Toolbar buttons**
+
+| Button or control | What it does | Where it's described |
+|---|---|---|
+| **Open package…** | Opens a `.zip` | [Opening a package](#opening-a-package) |
+| **Item**, **API**, **Frame depth**, **In a new window**, **Resume last run's data** | The launch settings | [Testing a theory](#testing-a-theory-launch-settings) |
+| **Profile** | Hosts the content the way an LMS does | [Profiles](#running-it-the-way-an-lms-does-profiles) |
+| **Stop after** | How long a run lasts, or until you stop it | [Launching an item](#launching-an-item) |
+| **Launch** | Starts a run | [Launching an item](#launching-an-item) |
+| **Test saving** | Runs the save-and-resume test | [Testing saving](#testing-that-progress-is-saved-and-resumed) |
+| **Compare packages…** | Compares this package with another `.zip` | [Comparing two packages](#comparing-two-packages) |
+| **Check a folder…** | Checks every package in a folder (desktop only) | [Checking a folder](#checking-a-folder-of-packages) |
+| **Export corrected package…** | Saves a corrected `.zip` | [Exporting a corrected package](#exporting-a-corrected-package) |
+| **Working copy** and **Record reference** | Records a working copy for comparison | [Comparing with a working copy](#comparing-with-a-working-copy-optional) |
+| **Record caught errors** | Records errors the content catches itself | [Errors](#reading-a-run) |
+| **Stop and analyse** | Ends the run and analyses it | [Launching an item](#launching-an-item) |
+| **Filter** | Narrows the table in the tab you're on | [The window](#the-window) |
+| **R** and **F** (in Runs), **Compare** | Chooses a reference and a failing run and compares them | [Comparing with a working copy](#comparing-with-a-working-copy-optional) |
+| **Open saved…** | Opens a saved run | [Saved runs](#saved-runs) |
+| **More options** | Every launch option, the profile fields, pins, answers and macro | [Testing a theory](#testing-a-theory-launch-settings) |
+| **Copy as CLI command** (under More options) | Copies the `scorm-lab run` line for this launch | [cli.md](cli.md#copy-as-cli-command) |
 
 ## Opening a package
 
@@ -275,7 +344,7 @@ profile's, and a new window puts the API on the opener.
 Under the toolbar, **More options** shows every option the next launch will use, as JSON, and the profile's fields,
 which you can change (see below).
 **Copy as CLI command** copies the `scorm-lab run …` line that repeats the launch from the command line. Options that
-have no flag are left out of the line; it adds `--options options.json` to say a file is needed.
+have no flag are left out of the line; it adds `--options options.json` to say a file is needed. [The CLI guide](cli.md#copy-as-cli-command) lists the other file names it uses.
 
 ## Running it the way an LMS does: profiles
 

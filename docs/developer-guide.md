@@ -87,11 +87,17 @@ src/
   analyze.js            Manifest and script scan
   bootpath.js           Boot graph (how the launch should load) and bootRun (against a run)
   rules.js              Findings: static, run, launch, comparison
-  packs/                Rule packs for authoring tools (index.js registers them; util.js shared readers)
+  packs/                Rule packs for authoring tools: index.js registers them (PACKS); util.js shared readers and
+                        the confidence sentences; one file per tool: adapt, captivate, dominknow, evolve, ispring,
+                        lectora, pipwerks, rise, scormdriver, storyline, xyleme (P3.2)
   diff.js               Comparison of two runs
   report.js             HTML reports, verdict, counts, the redaction banner, the experiment's variants table (experimentHtml, P5.2)
   completion.js         The command table (names, summaries, flags, value kinds) and the zsh completion script (P5.2)
   redact.js             Redacted reports (P4.4): redactRun, the copy of a run with the course content taken out
+  fixes.js              Corrected package export: FIXES (the six autofixes, in run order), correct, prove, exportFixed (P3.1)
+  experiments.js        Experiments: PRESETS (api, frames, standard, lms, storage, browsers), planVariants, runResult, summarise, experimentFindings (P0.3)
+  cycle.js              Save and resume: macros (readMacro, macroFile), resumeOptions, cycleFindings, cycleRows (P2.4)
+  timeline.js           The Timeline: timelineModel (lanes in ms) and timelineView (fractions of the window shown), for the tab and the report (P4.2)
   ui/                   The interface (desktop window and web)
     index.html, style.css, app.js
     codeview.js         The shared code view (classic script, window.CodeView; P4.1)
@@ -333,6 +339,39 @@ is the option as given), passes it to `begin`, and the run's label says it when 
   empty start. Nothing is refused.
 - `storageFindings(trace)` in `rules.js` (called from `runFindings` for package runs) makes "The content needs storage the
   browser can block" from the `storage-blocked` reports; `experimentFindings` makes "With storage blocked, the content gets less far".
+
+### Adding a profile
+
+A preset is one entry in `PROFILES` (`src/profiles.js`). To add one:
+
+1. Copy the `generic` entry and change only what its public documents say. Give it `notes` (what the LMS does and what
+   is unknown), `sources` (the URLs read, never a query with package content), and `approximation: true`. A field the
+   documents don't cover keeps its `generic` value, and the notes say so.
+2. Nothing else lists the names in code. `PROFILE_NAMES` is read from `PROFILES` by the `--profile` completion, by
+   `doctor --json` (its `profiles`), by the `lms` experiment preset, and by the **Profile** list in the apps (which adds
+   "(approximation)" to a preset that has the flag).
+3. Update the text that lists the names by hand: the `--profile` line of the help in `bin/scorm-lab.js`, the profile
+   paragraph in `docs/user-guide.md`, and the `--profile` line in `docs/cli.md`.
+4. Add a unit check if the preset has a combination `launchProfile` must refuse (for example a frameset with a sandbox),
+   and run `node test/test.js --unit`.
+
+The `lms` experiment then includes it, so `scorm-lab experiment course.zip --preset lms` shows how it compares.
+
+## Vendored libraries
+
+Two libraries are copied into `src/vendor/`, unchanged except for their file names, and each has its licence beside it:
+
+- **acorn 8.19.0**, the JavaScript parser. `src/vendor/acorn.js` is `dist/acorn.mjs` from the npm package. The execution
+  trace (`src/instrument.js`) and the drill-down (`src/drilldown.js`) use it to find decision points and operands.
+  Licence: `acorn.LICENSE` (MIT).
+- **js-beautify 2.0.3**, the formatter for JavaScript, CSS and HTML. `src/vendor/beautifier.cjs` is
+  `js/lib/beautifier.js` from the npm package, saved as `.cjs` because `package.json` sets `"type": "module"`. The code
+  views (`src/format.js`) use it. Licence: `js-beautify.LICENSE` (MIT).
+
+To update one, unpack its npm package into an empty folder outside the repo (`npm pack <name>@<version>`, then `tar`),
+copy the file above over the vendored one, keep the licence, change the version in the [Layout](#layout) and the
+comment at the top of the file, and run the tests. `test/codeview.js` covers formatting and source maps, and the
+drill-down and trace checks in `test/test.js` run acorn.
 
 ## The probe
 
@@ -1217,11 +1256,31 @@ folder:
   "resumeFrom": null, "wait": 10, "out": "/abs/run.json", "live": null }
 ```
 
-It then runs Electron with `--run=<job>` (stdout ignored, stderr to a log), waits for `out`, and reads the run back. With `--browser webkit` it runs `src/webkit-runner.js` in Node instead (see Other browsers and device sizes).
+The job also carries `options`, the normalised launch options (P0.1); the headless run normalises them again. It then
+runs Electron with `--run=<job>` (stdout ignored, stderr to a log), waits for `out`, and reads the run back. With `--browser webkit` it runs `src/webkit-runner.js` in Node instead (see Other browsers and device sizes).
 `item` here is the manifest item index; the CLI's `--item` numbers are positions among launchable items. Electron is
 chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Applications/SCORM Lab.app`.
 
 ## Data formats
+
+Every file or object the tools read and write, and where each is described:
+
+| Format | Where it's written | Described in |
+|---|---|---|
+| Launch options (`options`, normalised) | A run's `launch.options`; a `--options` file; the apps' More options | [Launch options](#launch-options) |
+| Saved run (`scorm-lab-run`, version 1) | `runs/` in the data folder; `run --out`; each experiment, drill and cycle run | [Saved run](#saved-run-scorm-lab-run-version-1) |
+| Execution trace (`trace.exec`, `trace.sites`) | A traced run's saved run | [The execution trace](#the-execution-trace) |
+| Milestones | Each package run (`milestones`, `furthest`) | [Milestones](#milestones) and [below](#milestones-in-a-saved-run) |
+| Discovery (`scorm-lab-discovery`, version 1) | `discoveries/` in the data folder; `discover --out` | [Saved discovery](#saved-discovery-scorm-lab-discovery-version-1) |
+| Experiment result (`experiment.json`) | `experiment --out`; the Experiments tab | [below](#experiment-result-experimentjson) |
+| Cycle result | `cycle --json`; `cycle --out` keeps the two runs | [below](#cycle-result) |
+| Macro (`scorm-lab-macro`, version 1) | A macro file; the `macro` option | [below](#macro-scorm-lab-macro-version-1) |
+| Profile | The `profile` option (a name or an object); `--profile-file` | [LMS profiles](#lms-profiles) |
+| Rule pack | `src/packs/<tool>.js` | [Rule packs](#rule-packs-p32) |
+| Boot graph | `analysis.boot`; a run's `boot` | [The boot graph](#the-boot-graph) |
+| LRS record (`trace.lrs`) | A cmi5 or Tin Can run's saved run | [The LRS record](#the-lrs-record-tracelrs) |
+| Corrected package and its changes file | `fix`; Export corrected package | [Corrected package export](#corrected-package-export-p31) |
+| Drill-down result (`drill.json`) | `drill --out` | [drill](cli.md#drill) |
 
 ### Saved run (`scorm-lab-run`, version 1)
 
@@ -1290,6 +1349,54 @@ A frame is `{ fn, url, line, col }`. Older runs without `format` (from before ve
 
 `kind` is page, script, style, data, flash, wasm or asset. `how` is launch, tag, `require.js data-main`,
 `meta refresh`, import, worker, request, src, navigate, amd or literal.
+
+### Milestones in a saved run
+
+`milestones` is the list `milestones(trace, boot)` returns: `[{ id, label, reached, t, evidence }]`, in order.
+`t` is in milliseconds from the start of the run. (P1.6 fixed some steps of older saved runs, whose times were absolute.) `furthest` is the last reached step's id, and `null` when none was reached. A cmi5 or Tin Can run uses
+its own list, `CMI5_STEPS` or `TINCAN_STEPS` in `src/milestones.js` (`stepsFor(format)` picks it), so read `id`s
+against that list, not against `STEPS`.
+
+### Macro (`scorm-lab-macro`, version 1)
+
+A macro file is a list of events, or this object (`macroFile(events)` in `src/cycle.js` writes it; `readMacro` reads
+either form):
+
+```js
+{ format: 'scorm-lab-macro', version: 1,
+  events: [{ t, type: 'click' | 'move' | 'wheel' | 'key' | 'text', x, y, dy, key, text, approx? }] }
+```
+
+`t` is the time in milliseconds from the start of the run (0 to 3,600,000). Limits: 2,000 events and 100 KB of typed text
+in all (`normaliseOptions` checks them). A `click` from a frame of another origin has `approx: true` and is not
+replayed. The option keeps the events sorted by `t`, and a saved run keeps the option.
+
+### Experiment result (`experiment.json`)
+
+`experiment --out` writes the same object as `experiment --json` (see [experiment](cli.md#experiment)). In the code, each
+row of the table starts as `runResult(name, options, savedRun, extra)` in `src/experiments.js`:
+
+```js
+{ name, options, milestones, counts, errors, verdict, ...extra }   // counts: runCounts(trace)
+```
+
+`summarise(results)` adds `progress` and `better` to each row (`results[0]` is the base), and
+`experimentFindings(results)` gives the findings. The JSON rows also carry `furthest`, `apiCalls`, `errors`, `verdict`
+and `out` (the saved run's path, or `null`), as in [experiment](cli.md#experiment).
+
+### Cycle result
+
+`cycle --json` gives (the desktop and web interfaces send the same `runs`, `rows` and `findings` in the `done` event):
+
+```js
+{ package, item, base,                           // base: the options of the first run, macro included
+  runs: [{ furthest, verdict, apiCalls, out }],  // run 1 (the leave) and run 2 (the resume)
+  rows: [{ label, a, b }],                       // cycleRows(runs): the side-by-side table
+  findings }                                     // cycleFindings({ runs, macro })
+```
+
+With `--out`, both runs are kept as saved runs (`01-first.json`, `02-resumed.json`). The second has `resume: true`
+and no macro in its `launch.options` (`resumeOptions` makes it), and its `trace.cmi` holds what it was offered.
 
 ## Tests
 
