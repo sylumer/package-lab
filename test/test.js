@@ -31,6 +31,7 @@ import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, a
 import { originFindings, storageFindings } from '../src/rules.js'
 import { cycleFindings, cycleRows, readMacro, macroFromTrace, resumeOptions } from '../src/cycle.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
+import './packs.js'
 import vm from 'node:vm'
 
 const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
@@ -312,7 +313,7 @@ assert.deepEqual(verdict([]).sev, 'ok')
 // Launch options: defaults, validation, unknown fields, the CLI line.
 const dflt = normaliseOptions()
 assert.deepEqual(dflt, { expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10, profile: 'generic', browser: 'chromium', viewport: null,
-  files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false, macro: [], recordInput: false }, 'options: defaults')
+  files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false, macro: [], recordInput: false, tool: null }, 'options: defaults')
 assert.deepEqual(normaliseOptions({}), dflt); assert.notEqual(normaliseOptions().files, normaliseOptions().files, 'options: defaults are not shared')
 assert.deepEqual(normaliseOptions({ depth: '3', auto: '20', expose: '1.2', viewport: { width: 390, height: 844 } }), { ...dflt, depth: 3, auto: 20, expose: '1.2', viewport: { width: 390, height: 844, deviceScaleFactor: 1, mobile: false, touch: false, userAgent: '' } }, 'options: a saved { width, height } viewport reads as a plain size')
 for (const [o, re] of [[{ nope: 1 }, /Unknown option: nope/], [{ nope: 1, other: 2 }, /Unknown options: nope, other/], [{ expose: 'x' }, /expose.*one of/], [{ depth: 6 }, /depth/], [{ depth: 1.5 }, /depth/],
@@ -1199,6 +1200,11 @@ if (!process.argv.includes('--unit')) {
   const an = JSON.parse(node(['analyze', blank, '--json']).stdout)
   assert.equal(an.verdict.sev, 'error'); assert.ok(an.findings.some(f => /capitals/.test(f.title)), 'cli analyze: capitals')
   assert.equal(an.item.number, 1, 'cli analyze: item number')
+  // --tool applies a rule pack the package doesn't show (hosted asks the server root, so Xyleme's static rule fires).
+  const tl = JSON.parse(node(['analyze', hosted, '--tool', 'xyleme', '--json']).stdout)
+  assert.ok(tl.findings.some(f => /^Xyleme: the content expects its platform/.test(f.title) && /chosen by you/.test(f.detail)), 'cli --tool: ' + tl.findings.map(f => f.title))
+  assert.ok(!JSON.parse(node(['analyze', hosted, '--json']).stdout).findings.some(f => /^Xyleme:/.test(f.title)), 'cli: no pack without --tool')
+  assert.notEqual(node(['analyze', hosted, '--tool', 'nope']).status, 0, 'cli --tool: unknown id fails')
   assert.equal(node(['analyze', blank, '--strict']).status, 1, 'cli --strict fails on errors')
   assert.equal(node(['analyze', good, '--strict']).status, 0, 'cli --strict passes a good package')
   assert.equal(node(['analyze', join(work, 'nope.zip')]).status, 2, 'cli: missing file is status 2')
@@ -1274,6 +1280,13 @@ if (!process.argv.includes('--unit')) {
     assert.ok(plf && plf.evidence.some(e => /polls every 250 ms/.test(e) && (process.env.SCORM_LAB_FORCE_TRACE === '1' || !/tests/.test(e))), 'polling: a poller without a trace: ' + titles(pl))
     const plt = run(polling, '--wait', '4', '--trace'), pltf = plt.findings.find(f => /was waiting for/.test(f.title))
     assert.ok(pltf && /`window\.API` to change \(checked every 250 ms\)/.test(pltf.title) && pltf.evidence.some(e => /boot\.js:1 polls every 250 ms \(\d+ runs\); tests `window\.API → undefined`, \d+ times/.test(e)), 'polling: the condition when traced: ' + titles(plt))
+  }
+  if (slow) {
+    // P3.2: a pack's run rules in a real run. The hosted fixture (server request, own API) with a Xyleme marker in its script.
+    const xyleme = fixture('xyleme', d => { cpSync(join(work, 'hosted'), d, { recursive: true }); writeFileSync(join(d, 'boot.js'), readFileSync(join(d, 'boot.js'), 'utf8') + '\n// Xyleme player\n') })
+    const xr = run(xyleme), xt = titles(xr)
+    assert.ok(xr.packs?.some(p => p.id === 'xyleme') || xt.some(t => /^Made with Xyleme/.test(t)), 'xyleme: detected: ' + xt)
+    assert.ok(xt.some(t => /^Xyleme: the content asked its host for data outside the package/.test(t)) && xt.some(t => /^Xyleme: the content built its own SCORM API in this run/.test(t)), 'xyleme: run rules: ' + xt)
   }
   if (slow) {
     // P3.1: the corrected packages run. A package whose only fault is a script reference in the wrong capitals, once fixed, has

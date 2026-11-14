@@ -486,7 +486,7 @@ lab.invoke('profiles').then(p => {
 }).catch(() => {})
 $('profile').addEventListener('change', () => { st.profileEdits = {}; showProfile() })
 const launchOptions = () => ({ macro: st.macro, recordInput: $('record-input').checked, expose: $('expose').value, profile: profileOption(), depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
-  pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim(), trace: $('trace').checked, storage: $('storage').value,
+  pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim(), trace: $('trace').checked, storage: $('storage').value, tool: $('tool').value || null,
   browser: $('browser').value, viewport: $('viewport').value === 'custom' ? `${+$('viewport-w').value}x${+$('viewport-h').value}` : $('viewport').value || null })
 // The Macro box under More options: how long it is, the clicks the selected run's probe saw, and Clear.
 function showMacro() {
@@ -502,7 +502,7 @@ async function showOptions() {
     $('options-json').textContent = JSON.stringify(r.options, null, 2); $('cli-line').textContent = r.command
   } catch (e) { $('options-json').textContent = e.message; $('cli-line').textContent = '' }
 }
-for (const id of ['item', 'expose', 'profile', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params', 'trace', 'record-input', 'storage', 'browser', 'viewport', 'viewport-w', 'viewport-h']) $(id).addEventListener('change', showOptions)
+for (const id of ['item', 'expose', 'profile', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params', 'trace', 'record-input', 'storage', 'tool', 'browser', 'viewport', 'viewport-w', 'viewport-h']) $(id).addEventListener('change', showOptions)
 $('viewport').addEventListener('change', () => { $('viewport-custom').hidden = $('viewport').value !== 'custom' })
 $('more').addEventListener('toggle', showOptions)
 $('cycle').onclick = startCycle

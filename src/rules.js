@@ -4,6 +4,7 @@ import { isLab } from './diff.js'
 import { bootRun } from './bootpath.js'
 import { pinFindings } from './pins.js'
 import { traceFindings } from './instrument.js'
+import { packRun } from './packs/index.js'
 
 const where = f => f ? `${f.fn || '(anonymous)'} ${f.url ? f.url.replace(/^lab:\/\/(?:run|content)\/pkg\//, '') : ''}:${f.line}` : ''
 const short = u => (u || '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
@@ -39,6 +40,7 @@ export function staticFindings(a) {
     evidence: defines, fix: 'Run it: if the content sets its own API, find the condition that makes it do so.' })
   const modes = evidenceFrom(a.scan, 'modeSwitches', 8)
   if (modes.length) out.push({ sev: 'info', title: 'Scripts have mode switches (preview, standalone, LMS…)', detail: 'Content that behaves differently on its authoring host and in an LMS usually decides here.', evidence: modes, fix: '' })
+  out.push(...a.packFindings ?? [])
   if (a.fingerprints.length) out.push({ sev: 'info', title: `Made with ${a.fingerprints.join(', ')}`, evidence: [], fix: '' })
   return out
 }
@@ -49,7 +51,7 @@ function evidenceFrom(scan, key, max) {
 }
 
 // launch: { kind: 'package' | 'reference', version, expose ('1.2' | '2004' | 'both' | 'none'), itemType }
-export function runFindings(trace, launch = {}) {
+export function runFindings(trace, launch = {}, analysis = null) {
   const out = [], probe = trace.probe ?? []
   const allApi = probe.filter(p => p.type === 'api'), lookups = probe.filter(p => p.type === 'lookup')
   // In a package run, calls the probe logged (host: true) went to an API object that isn't SCORM Lab's LMS.
@@ -121,6 +123,7 @@ export function runFindings(trace, launch = {}) {
     if (init.length && !sets(v === '1.2' ? 'cmi.core.exit' : 'cmi.exit').length) out.push({ sev: 'info', title: 'The content never set exit', detail: 'Without exit set to suspend, many LMSs start a new attempt next time instead of resuming.', evidence: [], fix: '' })
     if (init.length && !sets(v === '1.2' ? 'cmi.core.lesson_status' : 'cmi.completion_status').length) out.push({ sev: 'info', title: 'The content never reported completion', evidence: [], fix: '' })
   }
+  if (launch.kind === 'package' && analysis) out.push(...packRun(analysis, trace, launch))
   return out
 }
 

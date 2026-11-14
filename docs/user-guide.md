@@ -591,6 +591,24 @@ The macro is kept with your other options (**More options** shows how many event
 at the start of every launch from then on, and is saved in each run's launch options. **Use this run's clicks** and
 **Record clicks** replace the macro you had. Macros need Chromium; with WebKit chosen, the launch says so.
 
+## Checks for particular authoring tools
+
+If SCORM Lab recognises the tool that made a package, it adds findings that know that tool. They start with its name
+("Adapt: …", "SCORM Driver (Rustici): …") and appear with the other findings, before and after a run. Tools covered:
+Xyleme, Articulate Storyline and Rise, Adobe Captivate, iSpring, Lectora, Adapt, dominKnow, Evolve, the SCORM Driver
+and the pipwerks wrapper.
+
+Each says how sure it is:
+- **Matches a known pattern**: it comes from forum reports and the like. It is only information, and worth checking.
+- **Confirmed in the package's files**: SCORM Lab read the setting itself, such as Adapt's `_isEnabled` or the SCORM
+  Driver's `strLMSStandard`.
+- **Confirmed in this run**: the recording shows it.
+
+Public information about some tools is thin, so these checks are cautious: they stay information until a run or the
+files confirm them. For Xyleme, they rest on what SCORM Lab records for any package: requests to the platform's
+server, another site, or content that builds its own API. Their advice points to **Discover**, pins and answers. A
+package that carries no tool name is treated like any other, unless you set **Authoring tool** (under More options, or `--tool` on the command line) to the tool: its rules then run whether or not SCORM Lab recognises it, and say you chose it. [Findings](findings.md#from-authoring-tool-packs) lists them all.
+
 ## Comparing with a working copy (optional)
 
 If the course does work somewhere, such as the authoring tool's hosted preview, another LMS or SCORM Cloud, you can

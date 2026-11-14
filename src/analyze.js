@@ -1,6 +1,8 @@
 // Static analysis of a package: its manifest, launch paths and what its scripts say about how they find the LMS
 // and what they fetch. Pure: takes the files Map (name → Buffer) from unzip.
 import { xmlTree, xKid, xKids, xFind } from './xml.js'
+import { detectPacks, packStatic } from './packs/index.js'
+import { textOf } from './packs/util.js'
 
 // A path inside the package from a base folder and an href: '..' and '.' resolved, %XX decoded, query and fragment
 // dropped. null for a link to another site or scheme.
@@ -42,20 +44,6 @@ export function parseManifest(text, base = '') {
   return { version, edition, schemaversion, title: title(xKid(orgs[0], 'title')), resources, items, namespaces: ns }
 }
 
-// Authoring tools and wrappers, recognised by file names or text. [name, test on the file list, test on script text]
-const FINGERPRINTS = [
-  ['Xyleme', /xyleme/i, /\bxyleme\b/i],
-  ['Articulate Storyline', /story_content\/|story\.html$/i, /DS\.(presentation|playerGlobals)|storyline/i],
-  ['Articulate Rise', /scormcontent\/|lib\/rise/i, /articulate.*rise|__rise/i],
-  ['Adobe Captivate', /CPM\.js$|captivate/i, /cp\.CPProjInit|captivate/i],
-  ['iSpring', /ispring|data\/player\.js/i, /ispring/i],
-  ['Lectora', /trivantis|a001index\.html/i, /\b(trivantis|lectora)\b/i],
-  ['Adapt', /adapt\/js\/|adapt-contrib/i, /adapt-contrib|adaptlearning/i],
-  ['dominKnow', /dominknow/i, /dominknow/i],
-  ['Evolve', /evolve(authoring)?\//i, /\bevolveauthoring\b/i],
-  ['pipwerks SCORM wrapper', /SCORM_API_wrapper/i, /pipwerks\.SCORM/],
-  ['SCORM Driver (Rustici)', /scormdriver\.js$/i, /scormdriver|Rustici/i],
-]
 const TEXT = /\.(js|mjs|html?|json|xml|css|txt)$/i
 const SCRIPTY = /\.(js|mjs|html?)$/i
 
@@ -84,7 +72,8 @@ export function scanText(name, text) {
   return out
 }
 
-export function analyze(files) {
+// tool: a rule pack's id to apply whether or not it recognises the package (the Authoring tool option).
+export function analyze(files, { tool = null } = {}) {
   const names = [...files.keys()]
   const lower = new Map(names.map(n => [n.toLowerCase(), n]))
   const res = { files: names.length, size: names.reduce((t, n) => t + files.get(n).length, 0), problems: [], fingerprints: [], scan: {} }
@@ -113,13 +102,17 @@ export function analyze(files) {
   const all = { api12: 0, api04: 0 }
   for (const n of names) {
     if (!TEXT.test(n) || files.get(n).length > 20e6) continue
-    const text = files.get(n).toString('utf8')
-    for (const [fp, nameRe, textRe] of FINGERPRINTS) if ((nameRe.test(n) || SCRIPTY.test(n) && textRe.test(text)) && !res.fingerprints.includes(fp)) res.fingerprints.push(fp)
+    const text = textOf(files, n)   // decoded once and shared with the packs
     if (!SCRIPTY.test(n)) continue
     const s = scanText(n, text)
     all.api12 += s.api12.length; all.api04 += s.api04.length
     if (Object.values(s).some(l => l.length)) res.scan[n] = s
   }
   res.apiUse = all.api12 && all.api04 ? 'both' : all.api12 ? '1.2' : all.api04 ? '2004' : 'none'
+  // Authoring tools and wrappers are recognised by the rule packs (src/packs); their static findings are kept for staticFindings.
+  res.tool = tool
+  res.packs = detectPacks(res, files, tool)
+  res.fingerprints = res.packs.map(p => p.name)
+  res.packFindings = packStatic(res, files, res.packs)
   return res
 }

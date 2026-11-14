@@ -324,6 +324,7 @@ function bootFor(path, files = pkg.files) {
 async function launchItem({ item: itemIndex, cmi: givenCmi, leave = false, ...rest }) {
   if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
   const norm = normaliseOptions({ ...rest, files: rest.files ?? pkg?.overrides })
+  if ((norm.tool ?? null) !== (pkg.analysis.tool ?? null)) pkg.analysis = analyze(pkg.files, { tool: norm.tool })   // the Authoring tool setting changes the pack findings
   const cmi = givenCmi ?? (norm.resume && pkg.lastCmi ? pkg.lastCmi : null)
   const plan = launchPlan({ pkg, item: itemIndex, cmi, options: { ...norm, ...(process.env.SCORM_LAB_FORCE_TRACE === '1' && norm.browser === 'chromium' ? { trace: true } : {}) },   // tests: every Electron run traced
     origins: norm.browser === 'webkit' ? WEBKIT_ORIGINS : undefined })
@@ -386,7 +387,9 @@ function readRun(file) {
   if (!d.trace) throw new Error(`${basename(file)} isn’t a SCORM Lab run.`)
   const id = nextId++
   const run = { id, kind: d.kind, label: (d.label ?? basename(file)) + ' (saved)', launch: d.launch, trace: d.trace, file, boot: d.boot, package: d.package,
-    ...withProgress(d.kind, d.trace, d.boot, [...launchFindings(d.trace, d.boot), ...runFindings(d.trace, { kind: d.kind, ...d.launch }), ...(d.boot?.risks ?? [])], d.launch) }
+    ...withProgress(d.kind, d.trace, d.boot, [...launchFindings(d.trace, d.boot), ...runFindings(d.trace, { kind: d.kind, ...d.launch }), ...(d.boot?.risks ?? []),
+      // The package isn't here to analyse again, so the pack findings saved with the run are kept.
+      ...(d.findings ?? []).filter(f => f.pack)], d.launch) }
   runs.set(id, run)
   return summary(run)
 }

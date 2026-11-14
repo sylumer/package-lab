@@ -17,6 +17,7 @@ if there are no errors.
 - [From the manifest](#from-the-manifest)
 - [From the scripts](#from-the-scripts)
 - [From the boot path](#from-the-boot-path)
+- [From authoring-tool packs](#from-authoring-tool-packs)
 - [From a run: launching and showing](#from-a-run-launching-and-showing)
 - [From a run: finding the LMS](#from-a-run-finding-the-lms)
 - [From a run: requests and errors](#from-a-run-requests-and-errors)
@@ -78,6 +79,50 @@ These come from following everything the launch page loads (see **Boot path** in
 | Scripts on *page* run before what they need | error | A script uses a name that only a later, deferred or async script defines: "… is not defined" | Move it after the script it needs, or remove `defer`/`async` from that one |
 | *page* sets `<base href>` outside the package | warning | Every relative path then points elsewhere | Remove it or point it inside |
 | The launch page has no content of its own | info | Everything is built by scripts, so any failure leaves it blank | Context for a blank page |
+
+## From authoring-tool packs
+
+When SCORM Lab recognises the tool that made a package (the "Made with" note), a **rule pack** for that tool adds
+its own findings. Each title starts with the tool's name, such as "Xyleme: …". Every one says how sure it is, at the
+end of its detail:
+
+- **Matches a known pattern.** It comes from forum reports or thin public documentation, and nothing in this run
+  confirms it. These are always **info**.
+- **Confirmed in the package's files.** SCORM Lab read the setting or the file itself (a config key, a driver
+  setting). These can be warnings.
+- **Confirmed in this run.** The recording shows it happening. These can be warnings.
+
+Recognition is by file names and text the research notes ([docs/packs](packs/README.md)) list, so a package with no
+such marker gets no pack unless you choose one (the **Authoring tool** option, or `--tool`). The rules below are what each pack can say.
+
+| Finding | Severity | Basis | Meaning | What to try |
+|---|---|---|---|---|
+| Xyleme: the content expects its platform at the server root | info | pattern | Scripts ask for `/api/…` paths that only the platform serves | Run it, then Discover on the request; save the stand-in as a pin or answer |
+| Xyleme: the content builds its own SCORM API | info | pattern | A preview or standalone path may talk to its own object | Run it; find what makes it choose that path |
+| Xyleme: the launch page is small and points to another site | info | pattern | A cloud-player style launch: the content comes from an outside host | Run it and look at the requests to that host |
+| Xyleme: scripts refer to a Xyleme address | info | pattern | The content may depend on that host | Check these requests succeed from the LMS's network |
+| Xyleme: the content asked its host for data outside the package | info (warning if a Xyleme host is named and a request failed) | run | Requests went to the host root, not the package: the pattern a platform-hosted export shows | Server needs tab, Discover, then pins and answers |
+| Xyleme: the content fetches from another site | info (warning if a Xyleme host is named and a request failed) | run | A cloud-player style launch: it works only while that host answers | Check the failed requests; Discover |
+| Xyleme: the content built its own SCORM API in this run | info (warning if a Xyleme host is named) | run | It set `window.API` itself, so it may not talk to the LMS | Answer the request that makes it do so, run again |
+| Articulate Storyline: story.html is here but there is no scormdriver.js | info | pattern | May be a Web publish, which has no LMS code | Publish for LMS and run that package |
+| Articulate Storyline: story.html loaded, nothing looked for the LMS, and the package has no scormdriver.js | info | run | Fits a Web publish launched as an LMS package, but the run shows only these facts | Publish for LMS if that was meant |
+| Articulate Rise: this looks like an xAPI export, not SCORM | info | pattern | `tincan.xml` and no manifest | Publish again as SCORM |
+| Adobe Captivate: the package has an older Captivate SCORM support file | info | pattern | `scorm_support.js` or `SCORM_utilities.js`, from old templates | Republish with a current Captivate if the score isn't saved |
+| Adobe Captivate: "cp is not defined" was thrown | warning | run | Reported cause: a line break in a Project Info field, or a clash in `CPM.js` | Remove line breaks from the Project Info fields and publish again |
+| iSpring: the manifest has *n* SCOs; iSpring exports one | info | pattern | The manifest was edited or combined | Republish as one package |
+| Lectora: the ZIP holds a Lectora source project | info | pattern | A `.awt` file is the project, not the publish | Publish for SCORM and upload that ZIP |
+| Adapt: tracking is off (`_spoor._isEnabled` is false) | warning | package | The package is valid but sends nothing to the LMS | Set `_isEnabled` to true and build again |
+| Adapt: config.json says SCORM *x*, but the manifest says SCORM *y* | warning | package | `_scormVersion` (default 1.2) differs from the manifest | Make them agree and build again |
+| Adapt: SCORM 2004 is not officially supported by spoor | info | pattern | The README says 1.2 only | Try 1.2 if tracking is wrong |
+| Adapt: the debug window is on | warning | package | `_showDebugWindow` is true | Set it to false |
+| dominKnow: there is no imsmanifest.xml | info | pattern | May be a Web package, not an LMS publish | Choose the LMS target and a SCORM standard |
+| Evolve: the package is SCORM 2004 | info | pattern | Guidance for Evolve content recommends 1.2 | Publish as 1.2 if tracking fails |
+| Evolve: the manifest is inside a folder | info | pattern | Re-zipping adds a wrapper folder | Zip the folder's contents, or upload the original export |
+| SCORM Driver (Rustici): strLMSStandard is "*x*" … but the manifest says SCORM *y* | info | pattern | Read only in `scormdriver*.js`; "SCORM" as 1.2 and "SCORM2004" as 2004, a reading the vendor docs read don't confirm. Other values are reported without a reading | Check the driver's configuration; run it to see which API it looks for |
+| SCORM Driver (Rustici): indexAPI.html points to a start page that isn't in the package | warning | package | `strContentLocation` names a missing file | Point it at the real start page |
+| SCORM Driver (Rustici): the driver loaded but nothing looked for the LMS | info | run | The driver may be set not to use an LMS | Check `strLMSStandard` and the errors |
+| pipwerks SCORM wrapper: the wrapper is in the package, but no script calls SCORM.init() | info | pattern | The content may use another wrapper | Look at the API lookups in a run |
+| pipwerks SCORM wrapper: SCORM.API.find found no API | warning | run | The wrapper found no API, so `SCORM.init()` is false | Check the SCORM version and frame depth |
 
 ## From a run: launching and showing
 

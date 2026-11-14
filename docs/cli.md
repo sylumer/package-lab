@@ -68,8 +68,13 @@ The default is the first SCO.
 ## analyze
 
 ```bash
-scorm-lab analyze course.zip [--item n] [--json] [--strict]
+scorm-lab analyze course.zip [--item n] [--json] [--strict] [--tool id]
 ```
+
+`--tool` applies an authoring tool's [rule pack](findings.md#from-authoring-tool-packs) even when the package shows no sign of it (a
+Xyleme export may carry no marker): `xyleme`, `storyline`, `rise`, `captivate`, `ispring`, `lectora`, `adapt`, `dominknow`, `evolve`,
+`scormdriver` or `pipwerks`. It works the same on `report`, `run`, `experiment` and the other commands that open a package, and is
+the `tool` field of an options file. Its findings say the pack was chosen by you.
 
 Prints a summary line, then the findings from the files, worst first, and the verdict. Each finding has its
 severity, title, explanation, evidence (`·` lines) and **Try:**.
@@ -126,6 +131,7 @@ app.
 | `--launch-params` | none | Extra query parameters added to the launch address, like `a=1&b=2` |
 | `--profile` | `generic` | Hosts the content the way an LMS does: `generic` (SCORM Lab's own), `moodle`, `scorm-cloud`, `cornerstone`, `successfactors`, `docebo`, `totara`, `blackboard` or `canvas` (see [Profiles](#profiles)) |
 | `--profile-file` | none | A custom profile from a JSON file (see [Profiles](#profiles)). With `--profile` too, that preset is its base unless the file names one |
+| `--tool` | auto | An authoring tool's rule pack to apply whether or not the package shows it (see [analyze](#analyze)) |
 | `--storage` | `normal` | Storage in the content's frames: `blocked` makes `localStorage` and `sessionStorage` throw a `SecurityError`, `document.cookie` read empty and `indexedDB.open` fail, as Safari does for content in another site's page; `partitioned` empties the run window's storage first. With `normal`, a profile whose `cookies` is `third-party-blocked` (`scorm-cloud`) blocks it too. See the [user guide](user-guide.md#storage-blocked-in-the-contents-frames). In an options file: `"storage": "blocked"` |
 | `--browser` | `chromium` | `webkit` runs the content in Safari's engine through Playwright (see [WebKit](#webkit)) |
 | `--viewport` | none | A device size: `iphone`, `ipad`, `android-phone`, or a width and height like `390x844`. The preset's touch, pixel ratio and user agent come with it. With no `--viewport` the window is as it is |

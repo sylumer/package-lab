@@ -74,6 +74,7 @@ src/
   analyze.js            Manifest and script scan
   bootpath.js           Boot graph (how the launch should load) and bootRun (against a run)
   rules.js              Findings: static, run, launch, comparison
+  packs/                Rule packs for authoring tools (index.js registers them; util.js shared readers)
   diff.js               Comparison of two runs
   report.js             HTML reports, verdict, counts
   ui/                   The interface (desktop window and web)
@@ -85,6 +86,7 @@ scripts/
   alfred.js             Builds the Alfred workflow
 build/icon.svg          The app icon
 test/test.js            Tests; test/fixtures/base is the sample package
+test/packs.js           Rule pack tests (imported by test.js): synthetic packages and hand-made traces
 docs/                   User and developer documentation
 ```
 
@@ -471,7 +473,7 @@ as an LMS player for phones does, so a `mobile` emulation lays the content out a
 `analyze(files)` (`src/analyze.js`) returns:
 
 ```
-{ files, size, root, problems: [{ code, text }], fingerprints: [tool], scan: { file: { api12, api04, search, requests,
+{ files, size, root, problems: [{ code, text }], fingerprints: [tool], packs, packFindings, scan: { file: { api12, api04, search, requests,
   absolute, serverPaths, hostChecks, modeSwitches, apiDefine } }, manifest, apiUse: '1.2' | '2004' | 'both' | 'none' }
 ```
 
@@ -479,8 +481,52 @@ as an LMS player for phones does, so a `mobile` emulation lays the content out a
   resource, parameters, mastery score and the other run-time values from the manifest.
 - `scanText` is a set of regular expressions over every script and page. Each list holds up to 20 `{ line, match,
   text }` per file.
-- `FINGERPRINTS` recognises authoring tools by file names and text. Text patterns use word boundaries, so
-  `querySelectorAll` isn't Lectora.
+- `fingerprints` is the names of the packs that recognise the package (`detectPacks`, below); `packs` is
+  `[{ id, name, confidence }]` and `packFindings` the packs' static findings, which `staticFindings` returns. Text
+  patterns use word boundaries, so `querySelectorAll` isn't Lectora.
+
+## Rule packs (P3.2)
+
+`src/packs/<tool>.js` holds what is known about one authoring tool or wrapper; `src/packs/index.js` registers them
+(`PACKS`, in the order the "Made with" list shows them). The research behind each is in `docs/packs/<tool>.md`.
+
+```js
+{ id, name, detect(analysis, files) → 0..1, staticRules({ analysis, files, confidence, detected }) → [rule],
+  runRules({ analysis, launch, confidence, detected }, trace) → [rule], detectRun?(trace) → 0..1, notes, sources }
+```
+
+- `detect` returns a confidence (0 is no). Any value above 0 counts as recognised and puts `name` in `fingerprints`.
+  Weights: 0.8–0.9 for a marker the notes call strong, 0.6 for a usual one, 0.3 for a loose text hit. Use `score()`
+  from `util.js`, which takes `[kind, regex, weight]` signals (`'name'` over file names, `'text'` over scripts and
+  pages) and decodes each file once.
+- `detectRun` is for a pack whose tell is in the run, not the files (Xyleme: a request to a Xyleme host). `packRun`
+  runs `runRules` of detected packs and of those that `detectRun` recognises.
+- A rule is `{ sev, basis, title, detail, evidence, fix }`. `basis` is `'pattern'` (a known pattern, not confirmed
+  here), `'package'` (read in the package's files) or `'run'` (seen in the trace). `finish()` in `index.js` puts the
+  pack's name before the title, adds the confidence sentence (`BASIS` in `util.js`) to the detail, keeps a
+  `pattern` rule at `info` whatever it says, and adds `pack` and `basis` to the finding. Write titles without the
+  prefix.
+- The `tool` launch option (null or a pack id; validated against `PACKS`) forces a pack: `analyze(files, { tool })` adds it to
+  `analysis.packs` with `chosen: true` and confidence 1, `packRun` adds it from `launch.options.tool`, and `finish()` says it was
+  chosen by you. The desktop handler re-analyses the open package when a launch's `tool` differs from the analysis's; the CLI reads
+  `--tool`, the options file or the saved run when it opens the ZIP.
+- A saved run opened without its package keeps the pack findings it was saved with (`readRun`).
+- File-name signals in `score()` count only text files under 20 MB (`'any'` is for a name that matters whatever its type, such as `.awt`).
+- Static rules run once, in `analyze()`, and are kept in `analysis.packFindings`. Run rules run in
+  `runFindings(trace, launch, analysis)`, which `runAnalysis` calls with the package's analysis; a saved run opened
+  without its package has no analysis, so no pack run findings. Both are guarded: a pack that throws is skipped.
+- Run rules read only what the recorder already captures (`util.js` has the readers: `apiCalls`, `lookups`,
+  `ownApi`, `serverNeeds`, `outsideHosts`). They are pure over an analysis and a trace.
+
+**Adding a pack.**
+1. Write `docs/packs/<tool>.md` from public sources (no package content in any query): layout, config keys, known
+   problems, export settings, detection hints, sources, and what is unconfirmed.
+2. Write `src/packs/<tool>.js`. Use only hints the notes list. Claim `package` or `run` only for what a file or trace
+   shows; everything from forum knowledge is `pattern`.
+3. Import and add it to `PACKS` in `src/packs/index.js`.
+4. Add a synthetic package for it to `cases` in `test/packs.js` (built from the notes' layout, never a real export)
+   that triggers detection and a rule, and a hand-made trace test for any run rule.
+5. List its findings in `docs/findings.md` and the notes in `docs/packs/README.md`.
 
 ## The boot graph
 
@@ -726,7 +772,7 @@ A finding is:
 
 | Function | Input | Covers |
 |---|---|---|
-| `staticFindings(analysis)` | `analyze()` | Manifest problems, version mismatch, server paths, own API, mode switches, tool |
+| `staticFindings(analysis)` | `analyze()` | Manifest problems, version mismatch, server paths, own API, mode switches, tool, and the packs' static findings |
 | `bootGraph().risks` | files | Everything in [the boot graph](#the-boot-graph) |
 | `launchFindings(trace, boot)` | a run and its boot graph | Launch page not loaded, blank page, stuck loading screen (with causes in loading order), loading stopped, loading code never ran |
 | `pinFindings(trace, options)` | a run and its launch options | Pinned value changed, couldn't be pinned (frozen, `let`/`const`), never read; requests answered, responses nothing matched. Called by `runFindings` |

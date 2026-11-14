@@ -3,9 +3,10 @@
 // Later work packages add fields here and nowhere else. Defaults live here and only here.
 import { pinPathProblem, PIN_MODES, matcher, USER_AGENT } from './pins.js'
 import { checkProfile, launchProfile } from './profiles.js'
+import { PACKS } from './packs/index.js'
 const DEFAULTS = Object.freeze({
   expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10,
-  profile: 'generic', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false, macro: [], recordInput: false,
+  profile: 'generic', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false, macro: [], recordInput: false, tool: null,
 })
 const MAX_PIN = 1024 ** 2, MAX_BODY = 10 * 1024 ** 2, MAX_BODIES = 20 * 1024 ** 2, MAX_LIST = 100   // a pin's value, a response's body, entries in pins or responses
 // A macro (P2.4): events, at most this many, with at most this much typed text in all, none later than an hour into the run.
@@ -40,6 +41,8 @@ export const packagePath = p => typeof p === 'string' && !!p && !p.startsWith('/
 const obj = v => v && typeof v === 'object' && !Array.isArray(v)
 
 const check = {
+  // An authoring-tool rule pack (src/packs) to apply whether or not it recognises the package; null leaves it to detection.
+  tool: (k, v) => v === null ? null : str(k, v, PACKS.map(p => p.id)),
   expose: (k, v) => str(k, v, EXPOSE),
   depth: (k, v) => { const n = num(k, v, 0, 5); return Number.isInteger(n) ? n : bad(k, 'must be a whole number from 0 to 5') },
   opener: bool, resume: bool, caught: bool, trace: bool,
@@ -188,7 +191,7 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   // Pins and responses with a flag's worth of settings get one; anything else (frames, headers, a method) goes in the options file.
   const pinFlag = o.pins.every(p => p.frames === 'content' && p.mode === 'force'), answerFlag = o.responses.every(r => !r.method && !Object.keys(r.headers).length)
   const vpFlag = o.viewport ? viewportFlag(o.viewport) : ''
-  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', 'profile', 'storage', 'browser', 'macro', 'recordInput', ...vpFlag || !o.viewport ? ['viewport'] : [], ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
+  const flagged = ['expose', 'depth', 'opener', 'resume', 'caught', 'auto', 'wait', 'files', 'launchParams', 'trace', 'profile', 'storage', 'browser', 'macro', 'recordInput', 'tool', ...vpFlag || !o.viewport ? ['viewport'] : [], ...pinFlag ? ['pins'] : [], ...answerFlag ? ['responses'] : []]
   const rest = Object.keys(DEFAULTS).filter(k => !flagged.includes(k) && JSON.stringify(o[k]) !== JSON.stringify(DEFAULTS[k]))
   // Changed files: --override path=path, which assumes a local copy saved at the same relative path.
   for (const p of Object.keys(o.files)) a.push('--override', quote(`${p}=${p}`))
@@ -200,6 +203,7 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (o.browser !== DEFAULTS.browser) a.push('--browser', o.browser)
   if (o.macro.length) a.push('--macro', 'macro.json')
   if (o.recordInput) a.push('--record-input')
+  if (o.tool) a.push('--tool', o.tool)
   if (vpFlag) a.push('--viewport', vpFlag)
   // A preset by name; a custom profile in a file of its own.
   if (typeof o.profile === 'string' && o.profile !== DEFAULTS.profile) a.push('--profile', o.profile)

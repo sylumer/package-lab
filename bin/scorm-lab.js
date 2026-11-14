@@ -68,6 +68,7 @@ Options for run (and report --run)
   --answer <pattern>=<reply>  Answer matching requests yourself: --answer '/api/player/config=@config.json' (a file) or
                             --answer '/api/player/config=200:{}' (status:body). The pattern is a glob or a /regex/. Repeatable.
   --launch-params <a=1&b=2> Extra query parameters on the launch address.
+  --tool <id>               Apply an authoring tool's rule pack even if the package doesn't show it: xyleme, storyline, rise, captivate, ispring, lectora, adapt, dominknow, evolve, scormdriver, pipwerks.
   --profile <name>          Host the content the way an LMS does: generic (default), moodle, scorm-cloud, cornerstone,
                             successfactors, docebo, totara, blackboard or canvas. Presets are approximations.
   --profile-file <x.json>   A custom profile: { "base": "moodle", "contentOrigin": "other", … } (see the user guide).
@@ -136,7 +137,7 @@ function parse(args) {
     const a = args[i]
     if (!a.startsWith('--')) { o._.push(a); continue }
     const [k, v] = a.slice(2).split(/=(.*)/s)
-    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'macro', 'profile', 'profile-file', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds', 'only']
+    const takes = ['item', 'api', 'depth', 'resume-from', 'wait', 'options', 'options-from', 'override', 'pin', 'answer', 'launch-params', 'storage', 'browser', 'viewport', 'macro', 'profile', 'profile-file', 'tool', 'out', 'live', 'port', 'host', 'variants', 'preset', 'request', 'rounds', 'only']
     const val = v !== undefined ? v : takes.includes(k) ? args[++i] : true
     if (k === 'override' || k === 'pin' || k === 'answer') (o[k] ??= []).push(val); else o[k] = val
   }
@@ -149,12 +150,17 @@ const paint = (code, s) => tty ? `\x1b[${code}m${s}\x1b[0m` : s
 const SEV = { error: s => paint('31;1', s), warn: s => paint('33;1', s), info: s => paint('2', s), ok: s => paint('32;1', s) }
 
 // ---- Packages ----
-function openZip(path) {
+// The rule pack to apply whatever the package shows: --tool, else the options file's or saved run's tool.
+function toolOf(o = {}) {
+  const t = o.tool ?? (o.options !== undefined ? optionsFile(o.options).tool : undefined) ?? (o['options-from'] !== undefined ? optionsFromRun(o['options-from']).tool : undefined) ?? null
+  try { return normaliseOptions({ tool: t }).tool } catch (e) { fail(e.message) }
+}
+function openZip(path, o) {
   if (!path) fail('Name a package: scorm-lab <command> <package.zip>')
   if (!existsSync(path)) fail(`No such file: ${path}`)
   let files
   try { files = unzip(readFileSync(path)) } catch (e) { fail(`${basename(path)} isn’t a readable ZIP: ${e.message}`) }
-  return { name: basename(path), path: resolve(path), files, analysis: analyze(files) }
+  return { name: basename(path), path: resolve(path), files, analysis: analyze(files, { tool: toolOf(o) }) }
 }
 const launchable = a => (a.manifest?.items ?? []).map((it, index) => ({ ...it, index })).filter(i => i.res)
 function pickItem(a, want) {
@@ -272,6 +278,7 @@ function flagOptions(o) {
   if (o.viewport !== undefined) f.viewport = o.viewport
   if (o.macro !== undefined) f.macro = macroFile(o.macro)
   if (o['record-input']) f.recordInput = true
+  if (o.tool !== undefined) f.tool = o.tool
   // --profile-file holds a custom profile: { base?, …fields }. With --profile too, that name is its base unless it names one.
   if (o['profile-file'] !== undefined) {
     const p = jsonFile(o['profile-file'], 'a profile, like { "base": "moodle", "contentOrigin": "other" }')
@@ -358,7 +365,7 @@ function printRows(rows, first = 'Variant', base = 'the default') {
 // ---- Commands ----
 const commands = {
   analyze(o) {
-    const pkg = openZip(o._[0]), { item, boot, findings } = check(pkg, o.item), a = pkg.analysis
+    const pkg = openZip(o._[0], o), { item, boot, findings } = check(pkg, o.item), a = pkg.analysis
     if (o.json) console.log(JSON.stringify({ package: pkg.name, manifest: a.manifest && { version: a.manifest.version, edition: a.manifest.edition, schemaversion: a.manifest.schemaversion, title: a.manifest.title },
       apiUse: a.apiUse, fingerprints: a.fingerprints, files: a.files, size: a.size, items: launchable(a).map(itemJson), item: itemJson(item, launchable(a).findIndex(i => i.index === item.index)),
       verdict: verdict(findings), counts: counts(findings), findings, boot }, null, 1))
@@ -366,7 +373,7 @@ const commands = {
     return o.strict && findings.some(f => f.sev === 'error') ? 1 : 0
   },
   fix(o) {
-    const pkg = openZip(o._[0])
+    const pkg = openZip(o._[0], o)
     for (const k of ['only', 'out']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
     let r
     try { r = exportFixed(pkg.files, { only: o.only, overrides: overrideFiles(o.override), version: VERSION, name: pkg.name }) } catch (e) { if (e instanceof Fail) throw e; fail(e.message) }
@@ -389,13 +396,13 @@ const commands = {
     return 0
   },
   items(o) {
-    const pkg = openZip(o._[0]), list = launchable(pkg.analysis)
+    const pkg = openZip(o._[0], o), list = launchable(pkg.analysis)
     if (o.json) console.log(JSON.stringify(list.map(itemJson), null, 1))
     else for (const [k, i] of list.entries()) console.log(`${String(k + 1).padStart(3)}  ${'  '.repeat(i.depth)}${i.title || i.id}  ${paint('2', `${i.type || '?'} · ${i.id} · ${i.res.path ?? i.res.href}`)}`)
     return 0
   },
   run(o) {
-    const pkg = openZip(o._[0]), { wait } = buildOptions(o)
+    const pkg = openZip(o._[0], o), { wait } = buildOptions(o)
     if (!o.json) process.stderr.write(`Running ${pkg.name} for ${wait} s…\n`)
     const { run, item, out } = runPackage(pkg, o)
     if (o.json) console.log(JSON.stringify(runJson(pkg, item, run, out), null, 1))
@@ -411,7 +418,7 @@ const commands = {
     return o.strict && run.findings.some(f => f.sev === 'error') ? 1 : 0
   },
   experiment(o) {
-    const pkg = openZip(o._[0]), options = buildOptions(o), item = pickItem(pkg.analysis, o.item)
+    const pkg = openZip(o._[0], o), options = buildOptions(o), item = pickItem(pkg.analysis, o.item)
     for (const k of ['variants', 'preset']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
     if (o.variants && o.preset) fail('Use --variants or --preset, not both.')
     if (o.preset !== undefined && !Object.hasOwn(PRESETS, o.preset)) fail(`No preset “${o.preset}”. Presets: ${Object.keys(PRESETS).join(', ')}.`)
@@ -443,7 +450,7 @@ const commands = {
     return 0
   },
   async discover(o) {
-    const pkg = openZip(o._[0]), options = buildOptions(o), item = pickItem(pkg.analysis, o.item)
+    const pkg = openZip(o._[0], o), options = buildOptions(o), item = pickItem(pkg.analysis, o.item)
     for (const k of ['request', 'rounds']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
     const rounds = o.rounds === undefined ? 5 : /^\d+$/.test(o.rounds) ? +o.rounds : NaN
     try { checkDiscover({ request: o.request, rounds }) } catch (e) { fail(e.message) }
@@ -473,7 +480,7 @@ const commands = {
   },
   // A traced run, then (if the drill-down asks to watch values) the same run with watch pins, then the chain.
   drill(o) {
-    const pkg = openZip(o._[0]), options = { ...buildOptions(o), trace: true }, item = pickItem(pkg.analysis, o.item), files = overlayFiles(pkg.files, options.files)
+    const pkg = openZip(o._[0], o), options = { ...buildOptions(o), trace: true }, item = pickItem(pkg.analysis, o.item), files = overlayFiles(pkg.files, options.files)
     const dir = o.out ? resolve(o.out) : null
     if (dir) mkdirSync(dir, { recursive: true })
     if (!o.json) process.stderr.write(`Tracing ${pkg.name} for ${options.wait} s…\n`)
@@ -502,7 +509,7 @@ const commands = {
   },
   // Test saving (P2.4): the first run plays the macro and leaves like a learner; the second resumes from what it left.
   cycle(o) {
-    const pkg = openZip(o._[0]), options = buildOptions(o), item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'scorm-lab-cycle-')), keep = o.out ? resolve(o.out) : null
+    const pkg = openZip(o._[0], o), options = buildOptions(o), item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'scorm-lab-cycle-')), keep = o.out ? resolve(o.out) : null
     if (options.browser === 'webkit') { rmSync(dir, { recursive: true, force: true }); fail('The save-and-resume test runs in Chromium only: WebKit runs have no input to replay.') }
     if (keep) mkdirSync(keep, { recursive: true })
     const f1 = join(keep ?? dir, '01-first.json'), f2 = join(keep ?? dir, '02-resumed.json')
@@ -536,7 +543,7 @@ const commands = {
       if (!run.trace) fail(`${basename(input)} isn’t a SCORM Lab run.`)
       html = renderReport({ title: `SCORM Lab: ${run.package ?? run.label}`, subtitle: run.label, run, fragment: !!o.fragment })
     } else {
-      const pkg = openZip(input)
+      const pkg = openZip(input, o)
       if (o.run) {
         const { run } = runPackage(pkg, { ...o, out: undefined })
         html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: run.label, run, analysis: pkg.analysis, fragment: !!o.fragment })
