@@ -1343,7 +1343,13 @@ The end-to-end part covers:
 - **Web:** 401 without the token, the token exchange, upload, launch with auto-stop, live frames over SSE, the run in
   `state`, saved runs, and `load-run` refusing paths outside the runs folder, the `options` handler building the pin and answer flags and refusing `bodyFile`.
 - **Concierge module:** run as Concierge would (CGI environment, temp data folder): upload, the static report, a run,
-  the report, widget and download. Skipped if `../concierge` isn't there.
+  the report, widget and download. Skipped if `../concierge` isn't there. P5.1 adds, quickly: the form's lists against
+  `doctor --json`, escaping of a package name, the CSRF token on every POST form, override paths refused (`..`,
+  leading `/`, `=`), pins, responses, Fix (the ticked fixes and a replacement file in a valid zip), diff, the redacted
+  report, and the run page's sections in order. With `--slow`: the form's settings reaching a run, Drill-down,
+  Discover, Test saving and Try variants end to end.
+- **doctor (P5.1):** the check ids in order, capabilities following the checks, the name lists, `SCORM_LAB_NO_PLAYWRIGHT`
+  turning WebKit off, and a busy port reported. `experiment --out` also keeps `experiment.json`.
 
 - **Browsers and device sizes (P2.3):** unit checks cover the options (presets, `WxH`, the saved `{ width, height }`, bad values), `cliCommand`,
   the `browsers` preset, `launchPlan` and `serveRequest`, and every reader of a trace with no coverage, caught errors, sources, scripts or log.
@@ -1394,7 +1400,19 @@ for what it calls. Points to keep when changing it:
 - Ids in URLs are digits only (`num()`), and file names are made by the module.
 - Uploaded names are reduced to a safe base name.
 - Input events are re-built from known fields before they are written.
-- The worker is fully detached (`start_new_session`, no inherited pipes), as Concierge requires.
+- The worker is fully detached (`start_new_session`, no inherited pipes), as Concierge requires. There are three:
+  a run (`--worker`), an experiment (`--exp-worker`), and Drill-down or Discover for a run (`--task-worker`).
+- The lists in the run form (profiles, tools, device sizes, presets, fixes, whether WebKit works) come from
+  `scorm-lab doctor --json`, kept in `doctor.json` for five minutes. A new profile or tool shows up with no change to the
+  module. If `doctor` fails, the form falls back to the plain settings.
+- Replacement files are stored under a number (`overrides/<k>`) and the package path is only ever an argument
+  (`--override path=file`), never a path the module opens. Paths with `..`, a leading `/`, a backslash or `=` are refused;
+  so are pin names and response patterns with `=` (the CLI splits there).
+- A run copies the package's overrides, pins and responses into its `job.json` when it starts, so it can be reproduced.
+- Experiments run `experiment --out <folder>` and the page reads the saved runs as they appear (names from the CLI's
+  progress lines in the log), then `experiment.json` when it is done. Test saving is `cycle --out`; its second run
+  is copied to `run.json`, so the report, downloads and Run again work as for a run.
+- Drill-down and Discover run `drill`/`discover --options-from run.json --json`, so they repeat the run's own options.
 - It is tested from `test/test.js` here.
 
 ## Debugging

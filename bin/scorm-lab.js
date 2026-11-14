@@ -8,11 +8,15 @@ import { createRequire } from 'node:module'
 import { tmpdir, homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { unzip } from '../src/zip.js'
-import { exportFixed, fixedName, FIX_IDS } from '../src/fixes.js'
+import { exportFixed, fixedName, FIX_IDS, FIXES } from '../src/fixes.js'
 import { analyze } from '../src/analyze.js'
 import { bootGraph } from '../src/bootpath.js'
 import { staticFindings, sortFindings } from '../src/rules.js'
-import { normaliseOptions } from '../src/options.js'
+import { normaliseOptions, VIEWPORTS } from '../src/options.js'
+import { PROFILE_NAMES } from '../src/profiles.js'
+import { PACKS } from '../src/packs/index.js'
+import { loadPlaywright } from '../src/webkit-runner.js'
+import { createServer } from 'node:net'
 import { parsePinFlag, parseAnswerFlag } from '../src/pins.js'
 import { entryFor } from '../src/overlay.js'
 import { furthest, strip } from '../src/milestones.js'
@@ -41,6 +45,7 @@ Usage: scorm-lab <command> [options]
 
 Commands
   analyze <package.zip>     Check the package without running it: manifest, scripts, launch path.
+  doctor                    Check this Mac can run SCORM Lab: Node, Electron, Playwright and WebKit, the data folder, port 4880.
   fix <package.zip>         Write a corrected copy of the package: the mechanical fixes, plus any --override files.
   items <package.zip>       List the items that can be launched, with their numbers.
   run <package.zip>         Launch an item in a hidden browser, record it, and report what went wrong.
@@ -93,6 +98,10 @@ Options for run (and report --run)
   --no-caught               Don't record errors the content catches itself.
   --show                    Show the content window while it runs.
 
+Options for doctor
+  --port <n>                The port to check is free. Default 4880.
+  --json                    Print JSON instead of text: the checks, what this Mac can do, and the names the options accept.
+
 Options for fix
   --only <id,…>             Only these fixes (default: all): ${FIX_IDS.join(', ')}.
   --override <path>=<file>  Put a changed file in the corrected package (as for run). Repeatable.
@@ -102,7 +111,7 @@ Options for fix
 Options for experiment (also the run options above, which set the default launch)
   --variants <file.json>    Your own variants: [{ "name": "deep", "patch": { "depth": 2 } }, …].
   --preset <name>           Built-in variants: standard (default), api, frames, lms (one per LMS profile), storage (normal and blocked), browsers (chromium and webkit).
-  --out <folder>            Keep each run in <folder> as a saved run.
+  --out <folder>            Keep each run in <folder> as a saved run, and the result as experiment.json.
   --json                    Print JSON instead of a table.
 
 Options for discover (also the run options above, which set every round's launch)
@@ -491,6 +500,32 @@ const commands = {
     }
     return 0
   },
+  // What this Mac can do (P5.1): the checks, then the names the options accept, so a program (the Concierge module) can build its forms.
+  // P5.2 extends it. Exit status is 0 unless the command fails: a missing optional part is a finding, not a failure.
+  async doctor(o) {
+    if (o.port !== undefined && !(typeof o.port === 'string' && /^[0-9]+$/.test(o.port) && +o.port >= 1 && +o.port <= 65535)) fail(`--port needs a whole number from 1 to 65535, not “${o.port}”.`)
+    const port = +(o.port ?? 4880), data = process.env.SCORM_LAB_DATA ?? DATA_DIR, checks = [], add = (id, label, ok, detail) => checks.push({ id, label, ok, detail })
+    const major = +process.versions.node.split('.')[0]
+    add('node', 'Node.js 20 or later', major >= 20, `Node ${process.versions.node}`)
+    let app = null; try { app = electron()[0] } catch { /* shown below */ }
+    add('electron', 'Electron, to run packages', !!app, app ? `${app}` : 'Not installed: run npm install in the scorm-lab folder, or install SCORM Lab.app. Checking packages still works.')
+    let webkit = false, wkDetail
+    try { const pw = await loadPlaywright(); webkit = existsSync(pw.webkit.executablePath()); wkDetail = webkit ? 'Playwright and its WebKit are installed.' : 'Playwright is installed but not WebKit: npx playwright install webkit' } catch (e) { wkDetail = e.message }
+    add('webkit', 'Playwright and WebKit, for --browser webkit', webkit, wkDetail)
+    add('data', 'Data folder', existsSync(data), existsSync(data) ? data : `${data} doesn’t exist yet: the desktop app or serve creates it.`)
+    // Free on this Mac only (127.0.0.1) and on the network (0.0.0.0): a server bound to either one blocks `serve`.
+    const bindable = host => new Promise(done => { const s = createServer(); s.once('error', () => done(false)); s.listen({ port, host, exclusive: true }, () => s.close(() => done(true))) })
+    const free = (await bindable('127.0.0.1')) && (await bindable('0.0.0.0'))
+    add('port', `Port ${port} free, for serve`, free, free ? `Nothing is listening on ${port}.` : `Something is already listening on ${port}: use serve --port.`)
+    const json = { version: VERSION, ok: checks.every(c => c.ok), checks, capabilities: { analyze: major >= 20, run: !!app, webkit },
+      profiles: PROFILE_NAMES, tools: PACKS.map(p => p.id), viewports: Object.keys(VIEWPORTS), presets: Object.keys(PRESETS), fixes: FIX_IDS.map(id => ({ id, label: FIXES[id].label })) }
+    if (o.json) console.log(JSON.stringify(json, null, 1))
+    else {
+      console.log(paint('1', `SCORM Lab ${VERSION} · doctor`))
+      for (const c of checks) console.log(`${c.ok ? SEV.ok('ok   ') : SEV.warn('check')} ${c.label}${paint('2', ` · ${clean(c.detail)}`)}`)
+    }
+    return 0
+  },
   items(o) {
     const pkg = openZip(o._[0], o), list = launchable(pkg.analysis)
     if (o.json) console.log(JSON.stringify(list.map(itemJson), null, 1))
@@ -537,7 +572,9 @@ const commands = {
       results.push(runResult(v.name, v.options, run, { out: file ?? null }))
     }
     const rows = summarise(results).map((r, i) => ({ ...r, options: results[i].options, out: results[i].out })), findings = experimentFindings(results)
-    if (o.json) console.log(JSON.stringify({ package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), base: options, variants: rows, findings }, null, 1))
+    const json = { package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), base: options, variants: rows, findings }
+    if (dir) writeFileSync(join(dir, 'experiment.json'), JSON.stringify(json, null, 1))
+    if (o.json) console.log(JSON.stringify(json, null, 1))
     else {
       printHeader(pkg, item)
       printRows(rows)

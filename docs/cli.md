@@ -14,6 +14,7 @@ Concierge module use it too.
 - [drill](#drill)
 - [cycle](#cycle)
 - [report](#report)
+- [doctor](#doctor)
 - [open](#open)
 - [serve](#serve)
 - [Exit statuses](#exit-statuses)
@@ -54,6 +55,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `cycle <package.zip>` | Tests saving: runs, leaves the way a learner does, then resumes from what it left, and checks the content saved and read its place |
 | `diff <a.zip> <b.zip>` | What changed between two packages: files with text diffs, manifest, loading path and findings; with `--run`, how far each got |
 | `batch <folder \| zips…>` | Checks every package in a folder (or the zips named): one row each, with its verdict. `--run` runs each one too. [Details](#batch) |
+| `doctor` | Checks this Mac can run SCORM Lab (Node, Electron, Playwright and WebKit, the data folder, port 4880) and lists the names the options accept |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run. Each `file:line` in a finding's evidence links to a read-only excerpt (±20 lines) of that file, from the package or the saved run's sources |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
@@ -316,7 +318,7 @@ progress goes to standard error.
 |---|---|---|
 | `--preset` | `standard` | Built-in variants: `api` (manifest, both, 1.2, 2004, none), `frames` (depth 0 to 3, and a new window), `standard` (both), `lms` (each [profile](#profiles)), `storage` (normal and blocked), or `browsers` (Chromium and WebKit) |
 | `--variants` | none | Your own variants, from a JSON file: a list of `{ "name", "patch" }` or `{ "variants": [...] }`. `patch` is any [launch options](developer-guide.md#launch-options). Not with `--preset` |
-| `--out` | none | A folder; each run is kept in it as a saved run (`01-default.json`, `02-api_both.json`, …) |
+| `--out` | none | A folder; each run is kept in it as a saved run (`01-default.json`, `02-api_both.json`, …) as it finishes, and at the end the result (the same as `--json`) as `experiment.json` |
 | `--json` | off | Prints JSON (below) instead of a table |
 
 ```json
@@ -722,6 +724,39 @@ With `--redact-names`, every folder and file name appears as a hash such as `f4c
 (`f4c278f5e9.html`). The key file (`scorm-lab-redaction-key`, version 1) holds the secret and the table. It is written
 as a new file after the report is written, so a failed report leaves none. `--key` must name a JSON key file from
 `--key-out`, or the command stops with an error.
+
+## doctor
+
+```bash
+scorm-lab doctor [--port n] [--json]
+```
+
+Checks what this Mac can do, so a program (the Concierge module builds its run form from it) or you can tell why
+something won't run. A missing optional part is a result, not a failure: the exit status is 0 unless the command
+itself fails. The checks:
+
+| Check | Passes when |
+|---|---|
+| `node` | Node.js is 20 or later |
+| `electron` | Electron is installed in this repo, or SCORM Lab.app is installed: packages can be run |
+| `webkit` | Playwright is installed with its WebKit: `--browser webkit` works |
+| `data` | SCORM Lab's data folder (`SCORM_LAB_DATA`, or the default) exists |
+| `port` | The port (default 4880, or `--port`, a whole number from 1 to 65535: anything else is an error, status 2) is free for `serve`, both on this Mac only (127.0.0.1) and on every address (0.0.0.0) |
+
+`doctor --json`:
+
+```json
+{
+  "version": "0.1.0", "ok": true,
+  "checks": [{ "id": "electron", "label": "Electron, to run packages", "ok": true, "detail": "/path/to/Electron" }, "…"],
+  "capabilities": { "analyze": true, "run": true, "webkit": false },
+  "profiles": ["generic", "moodle", "…"], "tools": ["xyleme", "…"], "viewports": ["iphone", "ipad", "android-phone"],
+  "presets": ["standard", "api", "…"], "fixes": [{ "id": "manifest-case", "label": "Rename the manifest to imsmanifest.xml" }, "…"]
+}
+```
+
+`ok` is true when every check passes. `capabilities.run` needs Electron; `capabilities.webkit` needs Playwright and its WebKit (a WebKit run uses no Electron). The lists are the names `--profile`, `--tool`, `--viewport`, `experiment --preset` and
+`fix --only` accept. The full `doctor` (the installed app, a text summary with advice) is P5.2's.
 
 ## open
 

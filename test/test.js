@@ -4,9 +4,10 @@
 // package from toolbox. See docs/developer-guide.md.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { randomBytes } from 'node:crypto'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { unzip, zip, crc32, crc32Table } from '../src/zip.js'
 import { FIXES, FIX_IDS, correct, exportFixed, fixedName, prove, staticAll } from '../src/fixes.js'
@@ -1473,6 +1474,27 @@ if (!process.argv.includes('--unit')) {
   assert.notEqual(node(['analyze', hosted, '--tool', 'nope']).status, 0, 'cli --tool: unknown id fails')
   assert.equal(node(['analyze', blank, '--strict']).status, 1, 'cli --strict fails on errors')
   assert.equal(node(['analyze', good, '--strict']).status, 0, 'cli --strict passes a good package')
+
+  // doctor (P5.1): the checks and the names the Concierge module builds its form from.
+  {
+    const dr = JSON.parse(node(['doctor', '--json']).stdout)
+    assert.deepEqual(dr.checks.map(c => c.id), ['node', 'electron', 'webkit', 'data', 'port'], 'doctor: the checks')
+    assert.ok(dr.capabilities.analyze && dr.capabilities.run === dr.checks[1].ok, 'doctor: capabilities follow the checks')
+    assert.ok(dr.profiles.includes('moodle') && dr.tools.includes('rise') && dr.viewports.includes('iphone') && dr.presets.includes('storage'), 'doctor: names')
+    assert.deepEqual(dr.fixes.map(f => f.id), FIX_IDS, 'doctor: every fix, with a label')
+    const nopw = JSON.parse(node(['doctor', '--json'], { env: { ...process.env, SCORM_LAB_NO_PLAYWRIGHT: '1' } }).stdout)
+    assert.ok(!nopw.checks[2].ok && !nopw.capabilities.webkit && /Install it with/.test(nopw.checks[2].detail), 'doctor: no Playwright means no WebKit')
+    const busy = await new Promise(res => { const srv = createServer(); srv.listen(0, '127.0.0.1', () => res(srv)) })
+    const bj = JSON.parse(node(['doctor', '--json', '--port', String(busy.address().port)]).stdout)
+    busy.close()
+    assert.ok(!bj.checks[4].ok && !bj.ok, 'doctor: a port in use is reported')
+    const wide = await new Promise(res => { const srv = createServer(); srv.listen(0, '0.0.0.0', () => res(srv)) })
+    const wj = JSON.parse(node(['doctor', '--json', '--port', String(wide.address().port)]).stdout)
+    wide.close()
+    assert.ok(!wj.checks[4].ok, 'doctor: a server bound on every address is reported')
+    for (const bad of ['0', '65536', 'abc', '80x', '-1', '']) { const r = node(['doctor', '--port', bad]); assert.equal(r.status, 2, 'doctor: --port ' + bad + ' is refused'); assert.match(r.stderr, /--port needs a whole number from 1 to 65535/) }
+    assert.match(node(['doctor']).stdout, /doctor[\s\S]*Node\.js 20 or later/, 'doctor: text')
+  }
   assert.equal(node(['analyze', join(work, 'nope.zip')]).status, 2, 'cli: missing file is status 2')
   assert.match(node(['items', good]).stdout, /1 {2}Lesson and quiz/)
   assert.match(node(['report', good, '--fragment']).stdout, /class="sl"[\s\S]*Loading path/, 'cli report (static)')
@@ -1907,6 +1929,7 @@ if (!process.argv.includes('--unit')) {
   const exTitles = ex.findings.map(f => f.title)
   assert.ok(exTitles.some(t => /^api both gets further/.test(t)) && exTitles.some(t => /^api 1\.2 gets further/.test(t)) && !exTitles.some(t => /api none gets further/.test(t)), 'experiment findings: ' + exTitles)
   assert.ok(existsSync(join(exDir, '02-api_both.json')) && JSON.parse(readFileSync(exBy['api both'].out, 'utf8')).format === 'scorm-lab-run', 'experiment: runs saved in --out')
+  assert.deepEqual(JSON.parse(readFileSync(join(exDir, 'experiment.json'), 'utf8')).variants.map(v => v.name), ex.variants.map(v => v.name), 'experiment: --out also keeps the result as experiment.json')
   if (slow) {   // --variants with a file: two more runs
   const exText = node(['experiment', mismatch, '--variants', (writeFileSync(join(work, 'variants.json'), JSON.stringify([{ name: 'deep', patch: { depth: 1 } }])), join(work, 'variants.json')), '--wait', '3'])
   assert.match(exText.stdout, /Variant\s+Furthest[\s\S]*deep[\s\S]*Nothing tried made a difference/, 'experiment: text table and --variants file: ' + exText.stdout)
@@ -2221,14 +2244,18 @@ if (!process.argv.includes('--unit')) {
   // The Concierge module, if the concierge repo is next to this one.
   const mod = join(root, '..', 'concierge', 'modules', 'scorm-lab', 'run')
   if (existsSync(mod)) {
-    const dataDir = mkdtempSync(join(tmpdir(), 'scorm-lab-concierge-'))
+    const t0 = Date.now(), dataDir = mkdtempSync(join(tmpdir(), 'scorm-lab-concierge-'))
     writeFileSync(join(dataDir, 'config.json'), JSON.stringify({ scormlab: root, node: process.execPath }))
+    const cgiRaw = (method, path, query = '', input = '') => spawnSync(mod, [], { cwd: dataDir, input, encoding: input instanceof Buffer ? undefined : 'utf8', timeout: 60000,
+      env: { HOME: process.env.HOME, USER: process.env.USER, PATH: '/usr/bin:/bin', CONCIERGE_BASE: '/m/scorm-lab', CONCIERGE_CSRF: 'tok', CONCIERGE_MODULE: join(mod, '..'), REQUEST_METHOD: method, PATH_INFO: path, QUERY_STRING: query } })
     const cgi = (method, path, query = '', input = '') => {
-      const r = spawnSync(mod, [], { cwd: dataDir, input, encoding: input instanceof Buffer ? undefined : 'utf8', timeout: 60000,
-        env: { HOME: process.env.HOME, USER: process.env.USER, PATH: '/usr/bin:/bin', CONCIERGE_BASE: '/m/scorm-lab', CONCIERGE_CSRF: 'tok', CONCIERGE_MODULE: join(mod, '..'), REQUEST_METHOD: method, PATH_INFO: path, QUERY_STRING: query } })
+      const r = cgiRaw(method, path, query, input)
       assert.equal(r.status, 0, `module ${path}: ${r.stderr}`)
       return String(r.stdout)
     }
+    const waitFor = async (f, re, ms = 90000) => { let page = ''; for (const end = Date.now() + ms; Date.now() < end && !re.test(page); await new Promise(r => setTimeout(r, 1000))) page = f(); assert.match(page, re, 'module: waited for ' + re); return page }
+    const fileOf = out => { const m = /^Concierge-File: (.*)$/m.exec(out); assert.ok(m && existsSync(m[1]), 'module: a file to download: ' + out); return m[1] }
+    const form = (path, body) => cgi('POST', path, '', 'csrf=tok&' + body)
     assert.match(cgi('POST', '/upload', 'name=blank.zip', readFileSync(blank)), /data-scorm-lab-id="1"/)
     assert.match(cgi('GET', '/pkg', 'id=1'), /wrong capitals/, 'module: static report')
     cgi('POST', '/run', '', 'csrf=tok&id=1&item=1&api=manifest&depth=0&wait=10')
@@ -2237,7 +2264,121 @@ if (!process.argv.includes('--unit')) {
     assert.match(page, /blank page/, 'module: run report')
     assert.match(cgi('GET', '/widget'), /badge err/, 'module: widget')
     assert.match(cgi('GET', '/download', 'id=1&run=1&what=run'), /^Concierge-File: \/.*\.json/, 'module: download')
-    console.log('concierge module: ok')
+    // P5.1: the run form, escaping, CSRF on every form, overrides, fixes, diffs, redacted report (all without running anything more).
+    {
+      const doctor = JSON.parse(node(['doctor', '--json']).stdout)
+      const pkgPage = cgi('GET', '/pkg', 'id=1')
+      for (const re of [/name="profile"/, /name="browser"|Chromium/, /name="viewport"/, /name="storage"/, /name="tool"/, /name="trace"[^>]*checked/, /Test saving/, /Try variants/, /Corrected package/, /Change what the content gets/]) assert.match(pkgPage, re, 'module: run form has ' + re)
+      assert.equal(/value="webkit"/.test(pkgPage), doctor.capabilities.webkit, 'module: WebKit is offered only if doctor says so')
+      assert.ok(/value="moodle"/.test(pkgPage) && /value="blocked"/.test(pkgPage) && /value="iphone"/.test(pkgPage), 'module: profile, storage and device lists')
+      assert.match(pkgPage, /value="case" checked/, 'module: the fix the files showed is ticked')
+      const same = page => assert.equal((page.match(/<form method="post"/g) ?? []).length, (page.match(/name="csrf" value="tok"/g) ?? []).length, 'module: every POST form carries the CSRF token')
+      same(pkgPage)
+      // Escaping: a package named with HTML shows as text, in the list and on its page.
+      assert.match(cgi('POST', '/upload', 'name=' + encodeURIComponent('x<img src=x onerror=alert(1)>.zip'), readFileSync(blank)), /data-scorm-lab-id="2"/)
+      for (const page of [cgi('GET', '/'), cgi('GET', '/pkg', 'id=2')]) assert.ok(page.includes('x&lt;img src=x onerror=alert(1)&gt;') && !page.includes('<img src=x'), 'module: names are escaped')
+      assert.match(cgi('POST', '/upload', 'name=good.zip', readFileSync(good)), /data-scorm-lab-id="3"/)
+      // Overrides: the path is checked, the file is kept under a number.
+      for (const bad of ['../x', '/etc/passwd', 'a/../b', 'a=b', '']) assert.match(cgi('POST', '/override', 'id=1&path=' + encodeURIComponent(bad), 'x'), /class="error"/, 'module: override path refused: ' + bad)
+      assert.match(cgi('POST', '/override', 'id=1&path=notes.txt', 'from the module'), /<p>ok<\/p>/)
+      assert.deepEqual(readdirSync(join(dataDir, 'packages', '1', 'overrides')), ['1'], 'module: replacement files are kept by number')
+      // A second upload for the same path replaces the stored file (the old one is deleted); an over-size file is refused and leaves nothing.
+      assert.match(cgi('POST', '/override', 'id=1&path=notes.txt', 'from the module'), /<p>ok<\/p>/)
+      assert.deepEqual(readdirSync(join(dataDir, 'packages', '1', 'overrides')), ['2'], 'module: the replaced file is deleted')
+      assert.match(cgi('POST', '/override', 'id=1&path=big.bin', Buffer.alloc(51 * 1024 * 1024)), /class="error">[^<]*over 50\.0 MB/, 'module: an upload is capped')
+      assert.deepEqual(readdirSync(join(dataDir, 'packages', '1', 'overrides')), ['2'], 'module: a refused upload leaves no file')
+      assert.match(form('/ovr', 'id=1&action=pin&name=previewMode&value=false'), /previewMode<\/code> is pinned to <code>false/)
+      assert.match(form('/ovr', 'id=1&action=pin&name=previewMode&value=nope'), /class="error">[^<]*JSON/, 'module: a pin needs JSON')
+      assert.match(form('/ovr', 'id=1&action=pin&name=a%3Db&value=1'), /class="error"/, 'module: a pin name has no =')
+      assert.match(form('/ovr', 'id=1&action=answer&pattern=%2Fapi%2Fx&status=200&body=%7B%7D'), /\/api\/x<\/code> answers 200/)
+      assert.match(form('/ovr', 'id=1&action=answer&pattern=a%3Db&status=200&body=1'), /class="error"/, 'module: a response pattern has no =')
+      const withOvr = cgi('GET', '/pkg', 'id=1'); same(withOvr)
+      assert.match(withOvr, /name="ovr" checked/, 'module: the form offers to use the overrides')
+      assert.match(form('/ovr', 'id=1&action=remove&kind=pins&idx=0'), /Saved/)
+      assert.deepEqual(JSON.parse(readFileSync(join(dataDir, 'packages', '1', 'overrides.json'), 'utf8')).pins, [], 'module: a pin can be removed')
+      // Fix: the ticked fixes and the replacement file, in a zip that passes unzip -t.
+      const fixPage = form('/fix', 'id=1&fix=case&fix=http-to-https')
+      assert.match(fixPage, /Download the corrected package/); assert.match(fixPage, /Findings cleared/)
+      const fixed = fileOf(cgi('GET', '/download', 'id=1&what=fixed'))
+      assert.equal(spawnSync('unzip', ['-t', fixed]).status, 0, 'module: the corrected package is a valid zip')
+      const fixedFiles = unzip(readFileSync(fixed)); assert.ok(fixedFiles.has('js/app.js') || [...fixedFiles.keys()].some(k => /app\.js$/i.test(k)), 'module: the fix is in it'); assert.equal(fixedFiles.get('notes.txt')?.toString(), 'from the module', 'module: so is the replacement file')
+      assert.match(form('/fix', 'id=1&fix=nope'), /Tick at least one fix/, 'module: an unknown fix is not run')
+      // Diff against another upload, and its report.
+      assert.match(cgi('GET', '/diff', 'id=1&other=3'), /Compare them/, 'module: a GET makes no comparison'); assert.match(cgiRaw('GET', '/download', 'id=1&other=3&what=diff').stderr, /Compare the two packages first/)
+      const diffPage = form('/diff', 'id=1&other=3'); assert.match(diffPage, /<h2>Files<\/h2>/); assert.match(diffPage, /Download the diff as a report/)
+      assert.match(readFileSync(fileOf(cgi('GET', '/download', 'id=1&other=3&what=diff')), 'utf8'), /<html/i, 'module: the diff report is a page')
+      assert.match(form('/diff', 'id=1&other=99'), /No such package/); assert.match(cgi('GET', '/diff', 'id=1&other=3'), /<h2>Files<\/h2>/, 'module: the comparison is kept')
+      // Ids are ASCII digits only.
+      for (const q of ['id=%D9%A1', 'id=%C2%B2']) assert.match(cgi('GET', '/pkg', q), /No such package/, 'module: a non-ASCII digit is not an id: ' + q)
+      assert.match(cgi('GET', '/show', 'id=1&run=%D9%A1'), /No such run/)
+      // Downloads that need node are made by a POST, then served; a GET never makes them.
+      assert.match(cgiRaw('GET', '/download', 'id=1&item=1&what=static').stderr, /Make the report first/)
+      assert.match(form('/make', 'id=1&item=1'), /Made/); fileOf(cgi('GET', '/download', 'id=1&item=1&what=static'))
+      // Report fragments from the CLI escape the package's own text.
+      const htmlPkg = fixture('htmltitle', d => { sub(d, 'imsmanifest.xml', 'Fire Safety Basics (sample)', '&lt;img src=x onerror=alert(1)&gt;'); sub(d, 'imsmanifest.xml', 'Lesson and quiz', '&lt;script&gt;alert(2)&lt;/script&gt;') })
+      assert.match(cgi('POST', '/upload', 'name=html.zip', readFileSync(htmlPkg)), /data-scorm-lab-id="4"/)
+      const htmlPage = cgi('GET', '/pkg', 'id=4')
+      assert.ok(/&lt;script&gt;alert\(2\)|&lt;img src=x/.test(htmlPage) && !htmlPage.includes('<img src=x') && !htmlPage.includes('<script>alert(2)'), 'module: the package page escapes the package text')
+      // Limits: at most three workers at once, and a package count.
+      const fake = (id, extra = {}) => { const d = join(dataDir, 'packages', '1', 'runs', String(id)); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'job.json'), JSON.stringify({ item: 1, api: 'manifest', depth: 0, wait: 10, started: Date.now() / 1000, ...extra })); return d }
+      const busy = [91, 92, 93].map(id => { const d = fake(id); writeFileSync(join(d, 'worker.pid'), String(process.pid)); return d })
+      for (const [path, body] of [['/run', 'id=1&item=1&wait=10'], ['/exp', 'id=1&item=1&preset=storage&wait=10'], ['/task', 'id=1&run=1&what=drill']]) {
+        const r = cgiRaw('POST', path, '', 'csrf=tok&' + body)
+        assert.ok(r.status === 1 && /at most 3 at once/.test(r.stderr), `module: ${path} refused at the limit: ${r.stderr}`)
+      }
+      assert.deepEqual(readdirSync(join(dataDir, 'packages', '1', 'runs')).sort(), ['1', '91', '92', '93'], 'module: a refused run leaves no folder')
+      assert.match(cgiRaw('POST', '/delete', '', 'csrf=tok&id=1').stdout, /still going/, 'module: a package with a live worker is not deleted')
+      for (const d of busy) rmSync(d, { recursive: true, force: true })
+      // Run again on a Test saving run stays Test saving.
+      const cyc = fake(95, { mode: 'cycle' }); writeFileSync(join(cyc, 'done.json'), '{"ok":true}'); writeFileSync(join(cyc, 'summary.json'), JSON.stringify({ cycle: true, verdict: { sev: 'ok', title: 'x' }, rows: [], findings: [] })); writeFileSync(join(cyc, 'run.json'), '{}'); writeFileSync(join(cyc, 'report.html'), '<p>r</p>')
+      assert.match(cgi('GET', '/show', 'id=1&run=95'), /name="mode" value="cycle"/, 'module: Run again keeps Test saving')
+      assert.doesNotMatch(cgi('GET', '/show', 'id=1&run=1'), /name="mode" value="cycle"/)
+      rmSync(cyc, { recursive: true, force: true })
+      const stubs = []; for (let k = 100; readdirSync(join(dataDir, 'packages')).filter(x => /^\d+$/.test(x)).length < 50; k++) { mkdirSync(join(dataDir, 'packages', String(k))); stubs.push(k) }
+      const many = cgiRaw('POST', '/upload', 'name=more.zip', 'x'); assert.ok(many.status !== 0 && /50 packages/.test(many.stderr), 'module: at most 50 packages: ' + many.stderr)
+      for (const k of stubs) rmSync(join(dataDir, 'packages', String(k)), { recursive: true, force: true })
+      // The finished run: Milestones first, then the downloads, what it waited for, Drill-down and Server needs; and the redacted report.
+      const runPage = cgi('GET', '/show', 'id=1&run=1'); same(runPage)
+      assert.ok(runPage.indexOf('<h2>Milestones</h2>') > 0 && runPage.indexOf('<h2>Milestones</h2>') < runPage.indexOf('Download the report'), 'module: Milestones come first')
+      for (const re of [/<h2>What it waited for<\/h2>/, /<h2>Drill-down<\/h2>[\s\S]*Work out why it stopped/, /<h2>Server needs<\/h2>[\s\S]*>Discover</, /Download the report with the course content taken out/]) assert.match(runPage, re, 'module: run page has ' + re)
+      const plain = readFileSync(fileOf(cgi('GET', '/download', 'id=1&run=1&what=report')), 'utf8'), red = readFileSync(fileOf(cgi('GET', '/download', 'id=1&run=1&what=redacted')), 'utf8')
+      assert.ok(red !== plain && /redact|taken out|removed/i.test(red), 'module: the redacted report differs from the plain one')
+      assert.match(cgiRaw('GET', '/download', 'id=1&run=1&what=../../x').stderr, /No such download/, 'module: only known downloads')
+      assert.ok(cgiRaw('POST', '/delete', '', 'csrf=tok&id=3').status === 0 && !existsSync(join(dataDir, 'packages', '3')), 'module: delete')
+    }
+    if (slow) {   // P5.1 end to end: the form's settings reach the CLI, Test saving, Try variants, Drill-down and Discover.
+      cgi('POST', '/ovr', '', 'csrf=tok&id=1&action=pin&name=previewMode&value=false')
+      cgi('POST', '/run', '', 'csrf=tok&id=1&item=1&api=manifest&depth=0&wait=10&profile=moodle&storage=blocked&viewport=iphone&trace=on&ovr=on')
+      const job = JSON.parse(readFileSync(join(dataDir, 'packages', '1', 'runs', '2', 'job.json'), 'utf8'))
+      assert.deepEqual([job.profile, job.storage, job.viewport, job.trace, job.pins.length, job.files.length], ['moodle', 'blocked', 'iphone', true, 1, 1], 'module slow: the form reaches the job')
+      const done = await waitFor(() => cgi('GET', '/show', 'id=1&run=2'), /Download the report/)
+      assert.match(done, /LMS: moodle[\s\S]*device iphone[\s\S]*traced/, 'module slow: settings shown')
+      const saved = JSON.parse(readFileSync(join(dataDir, 'packages', '1', 'runs', '2', 'run.json'), 'utf8')).launch.options
+      assert.deepEqual([saved.profile, saved.storage, saved.pins.length, Object.keys(saved.files)], ['moodle', 'blocked', 1, ['notes.txt']], 'module slow: the CLI got the settings')
+      assert.ok(saved.trace, 'module slow: traced')
+      // Drill-down and Discover on the run.
+      form('/task', 'id=1&run=2&what=drill')
+      assert.match(await waitFor(() => cgi('GET', '/show', 'id=1&run=2'), /Work it out again/), /<h2>Drill-down<\/h2>/)
+      assert.ok(existsSync(join(dataDir, 'packages', '1', 'runs', '2', 'tools', 'drill', 'result.json')), 'module slow: the drill result is kept')
+      assert.match(cgiRaw('POST', '/task', '', 'csrf=tok&id=1&run=2&what=rm').stderr, /finished run/, 'module slow: only drill and discover')
+      form('/task', 'id=1&run=2&what=discover')
+      assert.match(await waitFor(() => cgi('GET', '/show', 'id=1&run=2'), /Discover again/), /<h2>Server needs<\/h2>/)
+      form('/run', 'id=4&item=1&wait=10')
+      const htmlRun = await waitFor(() => cgi('GET', '/show', 'id=4&run=1'), /Download the report/)
+      assert.ok(!htmlRun.includes('<img src=x') && !htmlRun.includes('<script>alert(2)'), 'module slow: the run page escapes the package text')
+      // Test saving: two runs, one table.
+      form('/run', 'id=1&item=1&api=manifest&depth=0&wait=10&mode=cycle')
+      const cyc = await waitFor(() => cgi('GET', '/show', 'id=1&run=3'), /Run 2: resumes/)
+      assert.ok(cyc.indexOf('<h2>Test saving</h2>') < cyc.indexOf('Download the report') && !/Drill-down/.test(cyc), 'module slow: Test saving shows its table at the top')
+      // Try variants: a table that fills in as runs finish.
+      form('/exp', 'id=1&item=1&preset=storage&wait=10')
+      const expPage = await waitFor(() => cgi('GET', '/exp', 'id=1&exp=1'), /Against the default/)
+      assert.match(expPage, /storage blocked/); assert.match(cgi('GET', '/expframe', 'id=1&exp=1'), /"state": ?"done"|&quot;state&quot;: ?&quot;done&quot;/)
+      assert.match(cgi('GET', '/pkg', 'id=1'), /Experiment 1/)
+      assert.match(cgi('GET', '/pkg', 'id=1'), /Test saving/)
+      console.log('concierge module (slow): ok')
+    }
+    console.log(`concierge module: ok (${Math.round((Date.now() - t0) / 1000)} s)`)
   } else console.log('concierge module: skipped (no ../concierge)')
 
   // Tracing (slow): the overhead on good (when its page has loaded, the median of three runs), and every end-to-end
