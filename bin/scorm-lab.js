@@ -14,6 +14,7 @@ import { normaliseOptions } from '../src/options.js'
 import { parsePinFlag, parseAnswerFlag } from '../src/pins.js'
 import { entryFor } from '../src/overlay.js'
 import { furthest, strip } from '../src/milestones.js'
+import { stall } from '../src/stall.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { discover, checkDiscover } from '../src/shape.js'
 import { drill, watchPins } from '../src/drilldown.js'
@@ -263,8 +264,10 @@ function runPackage(pkg, o, options) {
   rmSync(dir, { recursive: true, force: true }) // the job folder; --out is outside it
   return { run, item, out: o.out ? out : null }
 }
+// What the content was waiting for (src/stall.js), without the full evidence lines of the finding.
+const waitingFor = run => { const { pollers, unanswered, listeners, pending, last, stalled } = stall(run.trace, run.milestones); return { stalled, pollers, unanswered, listeners, pending, last } }
 const runJson = (pkg, item, run, out) => ({ package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), launch: run.launch,
-  verdict: verdict(run.findings), counts: counts(run.findings, run.trace), milestones: run.milestones ?? null, furthest: run.milestones ? furthest(run.milestones)?.id ?? null : null, findings: run.findings,
+  verdict: verdict(run.findings), counts: counts(run.findings, run.trace), milestones: run.milestones ?? null, waitingFor: run.milestones ? waitingFor(run) : null, furthest: run.milestones ? furthest(run.milestones)?.id ?? null : null, findings: run.findings,
   api: run.trace.probe.filter(p => p.type === 'api').slice(0, 200).map(({ call, el, value, result, err }) => ({ call, el, value, result, err })),
   screens: screens(run.trace).map(({ frame, readyState, text, visible, media, loader, hidden, sample }) => ({ frame, readyState, text, visible, media, loader, hidden, sample })),
   out })

@@ -114,6 +114,16 @@ of the Findings tab, in the report, and in `run --json`. See [Milestones](user-g
 |---|---|---|---|
 | Got as far as: *step*. Didn't reach: *step*. | info | The last step of the SCORM path the run reached, and the first it didn't. If every step was reached it says so | Start at the step it didn't reach: the findings below say why |
 
+## From a run: what it was waiting for
+
+Added to a package run that stopped short of **Wrote data**, when the probe saw something the content was still waiting
+for. It sits under the blank-page and loading-screen findings when there is one, and with the warnings otherwise.
+See [Why it stalled](user-guide.md#why-it-stalled-what-the-content-was-waiting-for).
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| The content was waiting for: *summary* | warning | Nothing failed outright: the content went quiet because it was waiting. The title sums up up to three things; the evidence lists all of them: **a reply to a message** the content sent (its type is named) to a window with no listener, a listener that didn't run, or one that ran and sent nothing back within 2 s; **a poller**, a timer still firing at the end, with the test it made and its last value when the run was traced (`tests `window.API` → undefined, 120 times`); **a message that never came**, for a listener in the content that never ran; **requests** with no answer at the end. The last line gives the last code that ran: the last events of a traced run, or the last functions that ran | Work out what answers each of these in a real LMS or player, then give the content the same: a pin can set a value, a file override can change the page. Trace the run to see the test a poller makes |
+
 ## From a run: progress
 
 These appear only when the content called the API.

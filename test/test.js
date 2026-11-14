@@ -22,6 +22,8 @@ import { STEPS, milestones, furthest, firstMissing, milestoneFinding, progress, 
 import { probeBody, shapePrefix, requestPattern, serverRequests, sourceHint, shapeReads, inferShape, discover, discoverFindings, checkDiscover } from '../src/shape.js'
 import { servedBody } from '../src/pins.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, show, traceFindings } from '../src/instrument.js'
+import { stall, stallFinding } from '../src/stall.js'
+import { Recorder, shiftTimes } from '../src/recorder.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import vm from 'node:vm'
 
@@ -83,6 +85,24 @@ fetch('data/config.json').then(function (r) { return r.text() }).then(function (
 const gated = fixture('gated', d => sub(d, 'lesson.js', /\nstart\(\)\s*$/, '\nif (window.startOK) start()\n'))
 const gatedFix = join(work, 'lesson-fixed.js')
 writeFileSync(gatedFix, readFileSync(join(work, 'gated', 'lesson.js'), 'utf8').replace('if (window.startOK) start()', 'start()'))
+
+// handshake: tells its parent it is ready and waits for {type: 'launch'}, which no LMS here sends. polling: checks
+// window.API every 250 ms (the LMS offers it on the parent, so it never finds it on its own window).
+const handshake = fixture('handshake', d => {
+  writeFileSync(join(d, 'boot.js'), `parent.postMessage({ type: 'player-ready' }, '*')
+addEventListener('message', function (e) { if (e.data && e.data.type === 'launch') scorm.start() })
+`)
+  sub(d, 'lesson.html', /<script/, '<script src="boot.js"></script><script')
+  sub(d, 'lesson.js', /scorm\.start\(\)/g, 'true')
+})
+const polling = fixture('polling', d => {
+  writeFileSync(join(d, 'boot.js'), `var waited = setInterval(function () {
+  if (window.API) { clearInterval(waited); scorm.start() }
+}, 250)
+`)
+  sub(d, 'lesson.html', /<script/, '<script src="boot.js"></script><script')
+  sub(d, 'lesson.js', /scorm\.start\(\)/g, 'true')
+})
 
 // pinned: a mode flag the content sets itself (a pin holds it), a settings object, a frozen object, and the user agent.
 // lexical: the same flag declared with let, which a pin can't replace.
@@ -709,6 +729,109 @@ assert.deepEqual(['window.player', 'cfg?.lms.version', 'a[0]', 'f()', "self['x']
   assert.deepEqual([r.cause.kind, r.watch], ['request', []], 'drill: a local is not watched')
 }
 assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothing to drill into', 'drill: an untraced run')
+
+// Times in a saved run are relative to its start, including the test LMS's API calls, which carry their own Date.now().
+{
+  const rec = new Recorder({ debugger: {} }, { label: 'x' })
+  rec.t0 = Date.now() - 1500
+  await rec.onEvent('Runtime.bindingCalled', { name: '__labReport', payload: JSON.stringify({ type: 'api', t: Date.now(), call: 'LMSInitialize', result: 'true' }) }, '')
+  const t = rec.trace.probe[0].t
+  assert.deepEqual(shiftTimes('exec', [{ t: 5, events: [[10, 1, 0], 'x'] }], 100), [{ t: 105, events: [[110, 1, 0], 'x'] }], 'recorder: a popup’s exec times move onto the run’s clock')
+  assert.deepEqual(shiftTimes('coverage', [{ id: 1 }], 100), [{ id: 1 }], 'recorder: lists without times are left alone')
+  assert.ok(t >= 1500 && t < 5000, 'recorder: an API call’s t is relative to the run start, not an absolute time: ' + t)
+}
+// Why it stalled (P1.6). The probe's timers, listeners and postMessage under vm: everything passes through, and the reports say what happened.
+{
+  const reports = [], queue = new Map(), sent = []
+  let nid = 0
+  class ET { addEventListener(type, fn) { (this.l ??= []).push([type, fn]); return 'added' } removeEventListener(type, fn) { this.l = (this.l ?? []).filter(x => x[1] !== fn); return 'removed' } fire(type, ev) { return (this.l ?? []).filter(x => x[0] === type).map(x => x[1].call(this, ev)) } }
+  const sb = { __labReport: x => reports.push(JSON.parse(x)), location: { href: 'lab://run/pkg/a.html' }, document: { referrer: '', addEventListener() {} }, addEventListener() {}, EventTarget: ET,
+    setTimeout: (f, ms, ...a) => { queue.set(++nid, { f, a }); return nid }, setInterval: (f, ms, ...a) => { queue.set(++nid, { f, a }); return nid }, clearTimeout: id => { queue.delete(id); return 'cleared' }, clearInterval: id => { queue.delete(id) },
+    requestAnimationFrame: () => 1, postMessage(m, o) { sent.push([this, m, o]); return 'sent' } }
+  const ctx = vm.createContext(sb)
+  sb.window = sb; sb.parent = sb; sb.top = sb; sb.opener = null
+  const tm0 = sb.setTimeout; sb.__timer = tm0; sb.setTimeout = vm.runInContext('(function setTimeout(f, ms, ...a) { return __timer(f, ms, ...a) })', ctx)   // made in the page's realm, as a browser's are
+  const beforeText = vm.runInContext('String(setTimeout)', ctx), nativeToString = vm.runInContext('Function.prototype.toString.toString()', ctx)
+  vm.runInContext(readFileSync(new URL('../src/host/probe.js', import.meta.url), 'utf8'), ctx)
+  const seen = []
+  const id = sb.setTimeout(function (a, b) { seen.push([this === sb || this === undefined, a, b]); return 'ignored' }, 10, 'x', 'y')
+  assert.equal(id, nid, 'stall probe: setTimeout returns the id'); queue.get(id).f.call(sb, ...queue.get(id).a)
+  assert.deepEqual(seen, [[true, 'x', 'y']], 'stall probe: this and extra arguments reach the callback')
+  const sid = sb.setTimeout('alert(1)', 5); assert.equal(queue.get(sid).f, 'alert(1)', 'stall probe: a string callback passes through untouched')
+  const iv = sb.setInterval(function () { seen.push('tick') }, 250)
+  for (let i = 0; i < 4; i++) queue.get(iv).f()
+  assert.equal(sb.clearTimeout(999), 'cleared', 'stall probe: a clear passes its result on')
+  sb.requestAnimationFrame(() => {}); sb.__labFlushT()
+  const tm = reports.findLast(r => r.type === 'timers')
+  assert.equal(tm.raf, 1); assert.deepEqual(tm.list.filter(l => l[0] === 'interval').map(l => l.slice(0, 5)), [['interval', 250, 1, 4, 0]], 'stall probe: the interval, its delay and runs: ' + JSON.stringify(tm.list))
+  assert.match(tm.sites[tm.list.findIndex(l => l[0] === 'interval')], /test\.js:\d+:\d+/, 'stall probe: the site is the caller, not the probe')
+  sb.clearInterval(iv); sb.__labFlushT()
+  assert.equal(reports.findLast(r => r.type === 'timers').list.find(l => l[0] === 'interval')[4], 1, 'stall probe: a clear is counted')
+  const w = new ET(); w.window = w
+  const handler = function (e) { return [this === w, e] }
+  assert.equal(w.addEventListener('message', handler), 'added', 'stall probe: addEventListener returns what it did')
+  assert.deepEqual(w.fire('message', 5), [[true, 5]], 'stall probe: this and the argument reach a listener')
+  assert.ok(reports.some(r => r.type === 'listener' && r.id === 0) && reports.some(r => r.type === 'msg-run' && r.id === 0), 'stall probe: registration and run reported')
+  assert.equal(w.removeEventListener('message', handler), 'removed'); assert.deepEqual(w.fire('message', 1), [], 'stall probe: removeEventListener finds the wrapped listener')
+  w.addEventListener('click', handler); assert.equal(w.l.at(-1)[1], handler, 'stall probe: other events are not wrapped')
+  const objectListener = { handleEvent() {} }; w.addEventListener('message', objectListener); assert.equal(w.l.at(-1)[1], objectListener, 'stall probe: a listener object is passed as it is')
+  assert.equal(sb.postMessage({ type: 'player-ready', long: 'x'.repeat(200), n: 1, nested: { a: 1 } }, '*'), 'sent', 'stall probe: postMessage returns its result')
+  assert.deepEqual(sent[0].slice(1), [{ type: 'player-ready', long: 'x'.repeat(200), n: 1, nested: { a: 1 } }, '*'], 'stall probe: postMessage arguments pass through')
+  assert.equal(vm.runInContext('String(setTimeout) + String(addEventListener) + String(String)', ctx), beforeText + vm.runInContext('String(addEventListener) + String(String)', ctx), 'stall probe: String(setTimeout) is what it was before the probe')
+  assert.equal(vm.runInContext('Function.prototype.toString.toString()', ctx), nativeToString, 'stall probe: toString of the patched toString is unchanged')
+  const longKey = 'k'.repeat(200); sb.postMessage({ [longKey]: 1, f() {} , s: Symbol('x') }, 'o'.repeat(200)); sb.postMessage(function () {}); sb.postMessage(new (class P {})())
+  const posts = reports.filter(r => r.type === 'post')
+  assert.deepEqual([posts.at(-3).origin.length, posts.at(-3).shape.keys[0].length, posts.at(-2).shape], [80, 80, { kind: 'function' }], 'stall probe: strings capped at 80, no value for functions')
+  assert.deepEqual(posts.at(-1).shape, { kind: 'object' }, 'stall probe: a class instance’s keys are not read')
+  const post = reports.find(r => r.type === 'post')
+  assert.deepEqual([post.to, post.origin, post.shape], ['lab://run/pkg/a.html', '*', { kind: 'object', keys: ['type', 'long', 'n', 'nested'], vals: { type: 'player-ready', n: 1 } }], 'stall probe: message shape: long values and objects left out')
+}
+// stall(): hand-made traces.
+{
+  const F = 'lab://run/pkg/a.html', HOST = 'lab://run/__lab/host.html', at = (l, c = 5) => `lab://run/pkg/a.html:${l}:${c}`
+  const ms = (...reachedIds) => STEPS.map(([id, label]) => ({ id, label, reached: reachedIds.includes(id) }))
+  const st = (probe, extra = {}, m = ms('launched')) => stall(trace({ duration: 10000, probe, ...extra }), m)
+  const timers = (list, sites = [at(3)]) => ({ type: 'timers', t: 9990, frame: F, sid: '', raf: 0, sites, list })
+  // pollers
+  let r = st([timers([['interval', 250, 1, 40, 0, 100]])])
+  assert.deepEqual(r.pollers.map(p => [p.kind, p.every, p.fired]), [['interval', 250, 40]], 'stall: an interval still firing at the end'); assert.match(r.pollers[0].say, /a\.html:3 polls every 250 ms \(40 runs\)$/)
+  assert.equal(st([timers([['interval', 250, 1, 40, 1, 100]])]).pollers.length, 0, 'stall: a cleared interval is not active')
+  assert.equal(st([timers([['interval', 250, 1, 40, 0, 6000]])]).pollers.length, 0, 'stall: not firing at the end')
+  assert.equal(st([timers([['interval', 250, 1, 2, 0, 100]])]).pollers.length, 0, 'stall: two runs is not polling')
+  assert.equal(st([timers([['timeout', 500, 1, 30, 1, 100]])]).pollers.length, 0, 'stall: one timeout is not a chain'); assert.equal(st([timers([['timeout', 500, 30, 30, 0, 100]])]).pollers.length, 1, 'stall: a chain of timeouts is')
+  assert.equal(st([{ ...timers([['interval', 250, 1, 40, 0, 100]]), frame: HOST }]).pollers.length, 0, 'stall: SCORM Lab’s own frames are not content')
+  // the condition, with a trace: the poll's test, and its last value
+  const POLL = "var t = setInterval(function () { if (window.API_1484_11) { clearInterval(t) } }, 500)\n", ins = instrument(POLL, { file: 'a.html' })
+  const di = ins.sites.findIndex(s => s.kind === 'if'), tr = { sites: ins.sites, exec: [{ frame: F, events: [[100, 3, di, 0, ['undefined']], [300, 3, di, 0, ['undefined']], [9000, 4, di, 0, 38]] }] }
+  r = st([timers([['interval', 500, 1, 40, 0, 100]], [at(1, 9)])], tr)
+  assert.deepEqual(r.pollers[0].condition && [r.pollers[0].condition.text, r.pollers[0].condition.n], ['window.API_1484_11 → undefined', 40], 'stall: the condition and its last value'); assert.match(r.pollers[0].say, /polls every 500 ms \(40 runs\); tests `window\.API_1484_11 → undefined`, 40 times/)
+  assert.equal(st([timers([['interval', 500, 1, 400, 0, 100]], [at(1, 9)])], tr).pollers[0].condition, null, 'stall: a test taken far less often than the timer fired is not its condition')
+  // messages
+  const post = (t, to, type, extra = {}) => ({ type: 'post', t, frame: to, to, shape: { kind: 'object', keys: ['type'], vals: { type } }, origin: '*', n: 1, stack: [at(7)], ...extra })
+  r = st([post(100, HOST, 'player-ready')])
+  assert.deepEqual(r.unanswered.map(u => [u.message, u.why]), [['“player-ready”', 'no-listener']], 'stall: a handshake nobody listens for'); assert.match(r.unanswered[0].say, /a\.html:7 sent “player-ready” to the LMS window \(origin \*\): nothing there was listening/)
+  const lis = { type: 'listener', t: 5, frame: HOST, sid: '', id: 0, stack: ['lab://run/__lab/host.html:1:1'] }
+  assert.equal(st([lis, post(100, HOST, 'player-ready')]).unanswered[0].why, 'not-handled', 'stall: a listener that didn’t run')
+  const ran = { type: 'msg-run', t: 100, frame: HOST, sid: '', id: 0, n: 1 }
+  assert.equal(st([lis, post(100, HOST, 'x'), ran]).unanswered[0].why, 'no-reply', 'stall: a listener that ran but never replied')
+  assert.equal(st([lis, post(100, HOST, 'x'), ran, post(900, F, 'launch')]).unanswered.filter(u => u.message === '“x”').length, 0, 'stall: a message back within 2 s is a reply')
+  assert.equal(st([lis, post(100, HOST, 'x'), ran, post(2500, F, 'launch')]).unanswered.filter(u => u.message === '“x”').length, 1, 'stall: after 2 s it is not')
+  assert.equal(st([lis, post(100, HOST, 'x'), { ...ran, t: 1500 }]).unanswered[0].why, 'not-handled', 'stall: a listener running after 1 s is not an answer')
+  assert.equal(st([post(100, '', 'x')]).unanswered.length, 0, 'stall: a target on another origin can’t be judged')
+  assert.deepEqual(st(Array.from({ length: 10 }, (_, i) => post(100 + i, HOST, 'x', { n: i + 1 }))).unanswered.map(u => u.count), [10], 'stall: n is the probe’s running count, so the largest is the total')
+  // listeners that never ran, requests, last code
+  r = st([{ ...lis, frame: F }, { ...lis, frame: F, id: 1 }, { type: 'msg-run', t: 50, frame: F, sid: '', id: 1 }, lis])
+  assert.equal(r.listeners.length, 1, 'stall: only content listeners that never ran'); assert.match(r.listeners[0].say, /^lab:\/\/run\/__lab\/host\.html:1 listens|a\.html|host\.html:1 listens for a message that never came/)
+  assert.deepEqual(st([], { requests: [{ t: 1500, url: 'lab://run/pkg/x.json', method: 'GET' }, { t: 1, url: 'lab://run/pkg/y.json', status: 200 }] }).pending.map(p => p.url), ['x.json'], 'stall: a request with no answer')
+  r = st([post(100, HOST, 'x')], { sites: ins.sites, exec: [{ frame: F, events: [[1, 3, di, 0, ['undefined']]] }] }); assert.deepEqual(r.last, { traced: true, items: ['a.html:1 if (window.API_1484_11) → false, window.API_1484_11 = undefined'] }, 'stall: the last events, traced')
+  r = st([post(100, HOST, 'x')], { scripts: [{ sid: '', id: '1', url: 'lab://run/pkg/a.js' }, { sid: '', id: '2', url: 'lab://run/pkg/b.js' }], coverage: [{ sid: '', id: '1', url: 'lab://run/pkg/a.js', fns: [['early', [0, 9, 1]]] }, { sid: '', id: '2', url: 'lab://run/pkg/b.js', fns: [['', [0, 9, 1]], ['wait', [0, 9, 2]], ['never', [0, 9, 0]]] }] })
+  assert.deepEqual(r.last, { traced: false, items: ['wait in b.js', 'early in a.js'] }, 'stall: without a trace, the last functions coverage shows ran, scripts in load order')
+  // the finding
+  const f = stallFinding(st([post(100, HOST, 'player-ready'), timers([['interval', 250, 1, 40, 0, 100]])]))
+  assert.equal(f.sev, 'warn'); assert.equal(f.title, 'The content was waiting for: a reply to “player-ready”; a timer at a.html:3 (every 250 ms)', 'stall: finding title')
+  assert.ok(f.evidence.some(e => /player-ready/.test(e)) && f.evidence.some(e => /polls every 250 ms/.test(e)), 'stall: evidence lists each item')
+  assert.equal(stallFinding(st([post(100, HOST, 'x')], {}, ms('launched', 'wrote'))), null, 'stall: a run that wrote data wasn’t stalled'); assert.equal(stallFinding(st([])), null, 'stall: nothing waiting, no finding')
+}
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -770,6 +893,18 @@ if (!process.argv.includes('--unit')) {
   assert.ok(titles(run(order)).some(t => /run before what they need/.test(t)), 'order run: static finding')
   const rl = titles(run(loader))
   assert.ok(rl.some(t => /stuck on a loading screen/.test(t) && /JSON/.test(t)), 'loader run: ' + rl)
+  // Why it stalled (P1.6): a handshake the LMS never answers is named by its message type.
+  const hs = run(handshake), hsf = hs.findings.find(f => /was waiting for/.test(f.title))
+  assert.ok(hsf && /player-ready/.test(hsf.title) && hsf.sev === 'warn' && hsf.evidence.some(e => /sent “player-ready” to the LMS window.*nothing there was listening/.test(e)), 'handshake: reported as unanswered: ' + titles(hs))
+  assert.ok(hs.waitingFor.unanswered[0].message === '“player-ready”' && hs.waitingFor.listeners.length === 1, 'handshake: --json waitingFor: ' + JSON.stringify(hs.waitingFor))
+  assert.match(node(['run', handshake, '--wait', '3']).stdout, /WARNING {2}The content was waiting for: a reply to “player-ready”/, 'handshake: the CLI prints the finding')
+  assert.ok(g.milestones.every(m => !m.reached || m.t === null || m.t >= 0 && m.t < 20000) && saved.trace.probe.filter(p => p.type === 'api').every(p => p.t < 20000), 'good: milestone and API times are relative to the start of the run')
+  if (slow) {
+    const pl = run(polling, '--wait', '4'), plf = pl.findings.find(f => /was waiting for/.test(f.title))
+    assert.ok(plf && plf.evidence.some(e => /polls every 250 ms/.test(e) && (process.env.SCORM_LAB_FORCE_TRACE === '1' || !/tests/.test(e))), 'polling: a poller without a trace: ' + titles(pl))
+    const plt = run(polling, '--wait', '4', '--trace'), pltf = plt.findings.find(f => /was waiting for/.test(f.title))
+    assert.ok(pltf && /`window\.API` to change \(checked every 250 ms\)/.test(pltf.title) && pltf.evidence.some(e => /boot\.js:1 polls every 250 ms \(\d+ runs\); tests `window\.API → undefined`, \d+ times/.test(e)), 'polling: the condition when traced: ' + titles(plt))
+  }
   console.log('runs: ok')
 
   // Tracing (P1.4): hosted, traced, records its failed configuration check and startCourse, keeps the original source,

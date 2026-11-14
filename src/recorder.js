@@ -7,11 +7,15 @@ import { shapePrefix } from './shape.js'
 const PROBE = readFileSync(new URL('./host/probe.js', import.meta.url), 'utf8'), SHAPE = readFileSync(new URL('./host/shape-probe.js', import.meta.url), 'utf8')
 const TRACE = readFileSync(new URL('./host/trace-probe.js', import.meta.url), 'utf8')
 const EXEC_CAP = 200000   // execution trace events kept (the newest); see trace-probe.js
-// Sends every frame's pending trace events now. silent: a cross-origin frame's refusal mustn't pause or be recorded.
-const FLUSH = '(function f(w){try{w.__labFlush&&w.__labFlush()}catch(e){}try{for(var i=0;i<w.frames.length;i++)f(w.frames[i])}catch(e){}})(globalThis)'
+// Sends every frame's pending trace events and timer summary now. silent: a cross-origin frame's refusal mustn't pause or be recorded.
+const FLUSH = '(function f(w){try{w.__labFlush&&w.__labFlush()}catch(e){}try{w.__labFlushT&&w.__labFlushT()}catch(e){}try{for(var i=0;i<w.frames.length;i++)f(w.frames[i])}catch(e){}})(globalThis)'
 const CAP = { scripts: 5000, requests: 10000, console: 5000, caught: 2000, log: 2000, probe: 5000 }
 const frames = st => (st?.callFrames ?? []).slice(0, 8).map(f => ({ fn: f.functionName, url: f.url, line: f.lineNumber + 1, col: f.columnNumber + 1 }))
 const argText = a => a.type === 'string' ? a.value : a.unserializableValue ?? (a.value !== undefined ? JSON.stringify(a.value) : a.description ?? a.type)
+
+// A popup recorder's list moved onto the run's clock: each item's t, and for the execution trace each event's time.
+export const shiftTimes = (list, items, off) => items.map(x => ({ ...x, ...(x.t === undefined ? {} : { t: x.t + off }),
+  ...(list === 'exec' ? { events: x.events.map(e => Array.isArray(e) ? [e[0] + off, ...e.slice(1)] : e) } : {}) }))
 
 export class Recorder {
   // pins and responses are the run's launch options (pins.js): pins go into the probe, responses are served through the Fetch domain.
@@ -100,7 +104,7 @@ export class Recorder {
         let d
         try { d = JSON.parse(p.payload) } catch { return /* bad payload */ }
         if (d?.type === 'exec' && Array.isArray(d.events)) return this.exec(t, sid, d)
-        this.push('probe', { t, sid, ...d })
+        this.push('probe', { ...d, t, sid })   // t last: a report's own t (the test LMS's API calls have Date.now()) must not replace the run-relative time
         this.onProbe?.(this.trace.probe.at(-1))
     }
   }
@@ -124,7 +128,7 @@ export class Recorder {
     if (this.stopped) return this.trace
     this.stopped = true
     if (!this.detached) {
-      if (this.traced) for (const sid of this.sessions) await this.send('Runtime.evaluate', { expression: FLUSH, silent: true }, sid).catch(() => {})
+      for (const sid of this.sessions) await this.send('Runtime.evaluate', { expression: FLUSH, silent: true }, sid).catch(() => {})
       const byId = new Map(this.trace.scripts.map(s => [s.sid + ':' + s.id, s]))
       for (const sid of this.sessions) {
         const cov = await this.send('Profiler.takePreciseCoverage', {}, sid).catch(() => null)

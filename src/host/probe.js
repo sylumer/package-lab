@@ -143,4 +143,127 @@
       })
     } catch (e) { report({ type: 'probe-failed', name, error: String(e) }) }
   }
+  // What the content waits for (P1.6): timers, 'message' listeners and postMessage calls, and animation frames (counted
+  // only). Each name is replaced by a Proxy of the original, so the return value, `this` and every argument pass through
+  // (string callbacks too); callbacks are wrapped only to count their runs, and a listener's wrapper is remembered so
+  // removeEventListener finds it. Timers go out as a summary (per call site) at most once a second at first, then every
+  // 5 s, and when the page hides or the recorder flushes; listeners and messages are reported as they happen, throttled.
+  {
+    const R = Reflect, own = Object.getOwnPropertyDescriptor, later = window.setTimeout, now = Date.now
+    // The first frames of the caller, after this probe's own (anonymous) ones.
+    const sites = n => { const f = (new Error().stack || '').split('\n').slice(1).map(x => x.trim().replace(/^at /, '')).filter(Boolean); while (f.length && /<anonymous>:\d+:\d+\)?$/.test(f[0])) f.shift(); return f.slice(0, n) }
+    // Each wrapper (a hooked native's Proxy, a callback's wrapper) maps to the function it stands for, so that
+    // Function.prototype.toString says what it said before and String(setTimeout) is unchanged.
+    const orig = new WeakMap(), cl = x => String(x).slice(0, 80)
+    const hook = (owner, name, apply) => {
+      for (let o = owner; o; o = Object.getPrototypeOf(o)) {
+        const d = own(o, name)
+        if (!d) continue
+        if (typeof d.value === 'function') try { const p = new Proxy(d.value, { apply }); orig.set(p, d.value); Object.defineProperty(o, name, { ...d, value: p }) } catch (e) { report({ type: 'probe-failed', name, error: cl(e) }) }
+        return
+      }
+    }
+    hook(Function.prototype, 'toString', (t, th, a) => R.apply(t, orig.has(th) ? orig.get(th) : th, a))
+    const safe = f => { try { return f() } catch (e) { return undefined } }
+    const href = w => safe(() => String(w.location.href)) || ''
+    const isWin = w => w == null || safe(() => w.window === w)
+    // Timers: one entry per kind and call site.
+    if (!ownHost) {
+      const T = new Map(), ids = new Map()
+      let dirty = false, sched = 0, snaps = 0, raf = 0
+      const tick = () => {
+        sched = 0
+        if (!dirty) return
+        dirty = false; snaps++
+        const list = [...T.values()].sort((a, b) => b.fired + b.created - a.fired - a.created).slice(0, 40)
+        report({ type: 'timers', raf, sites: list.map(e => e.site), list: list.map(e => [e.kind, e.delay, e.created, e.fired, e.cleared, e.last ? now() - e.last : null]) })
+      }
+      const mark = () => { dirty = true; if (!sched) sched = later.call(window, tick, snaps < 30 ? 1000 : 5000) }
+      // A stack costs: it is taken for the first 50 timers of each kind and every 20th after that; the others count
+      // against the last site seen for the kind (a loop that re-arms the same timeout is one site).
+      const seen = { timeout: 0, interval: 0 }, lastSite = { timeout: '', interval: '' }
+      const entry = (kind, delay) => {
+        const n = ++seen[kind]
+        if (n <= 50 || n % 20 === 0) lastSite[kind] = sites(1)[0] || ''
+        const key = kind + '|' + lastSite[kind]
+        let e = T.get(key)
+        if (!e) { if (T.size >= 200) return null; T.set(key, e = { kind, site: lastSite[kind], delay: 0, created: 0, fired: 0, cleared: 0, last: 0 }) }
+        e.created++; e.delay = Math.max(0, +delay || 0)
+        return e
+      }
+      for (const kind of ['timeout', 'interval']) hook(window, kind === 'timeout' ? 'setTimeout' : 'setInterval', (t, th, a) => {
+        let e, id
+        try {
+          if (typeof a[0] === 'function' && (e = entry(kind, a[1]))) {
+            const fn = a[0]
+            const w = function () { if (kind === 'timeout') ids.delete(id); e.fired++; e.last = now(); mark(); return R.apply(fn, this, arguments) }
+            orig.set(w, fn); a = [w, ...a.slice(1)]
+            mark()
+          }
+        } catch (err) { /* never break the content */ }
+        id = R.apply(t, th, a)
+        if (e && ids.size < 5000) ids.set(id, e)
+        return id
+      })
+      for (const name of ['clearTimeout', 'clearInterval']) hook(window, name, (t, th, a) => {
+        try { const e = ids.get(a[0]); if (e) { e.cleared++; ids.delete(a[0]); mark() } } catch (err) { /* never break the content */ }
+        return R.apply(t, th, a)
+      })
+      hook(window, 'requestAnimationFrame', (t, th, a) => { raf++; if (raf % 60 === 1) mark(); return R.apply(t, th, a) })
+      addEventListener('pagehide', () => { dirty = true; tick() })
+      Object.defineProperty(window, '__labFlushT', { configurable: true, value() { dirty = true; tick() } })   // the recorder calls it as the run stops
+    }
+    // 'message' listeners (functions only: an object's handleEvent is passed through and not counted).
+    const wrappers = new WeakMap()
+    let nextId = 0
+    hook(typeof EventTarget === 'function' ? EventTarget.prototype : null, 'addEventListener', (t, th, a) => {
+      try {
+        if (a[0] === 'message' && typeof a[1] === 'function' && isWin(th)) {
+          let w = wrappers.get(a[1])
+          if (!w) {
+            // Ids are unique; only the first 100 listeners are reported (a listener not reported isn't judged).
+            const meta = { id: nextId++, ran: 0 }, fn = a[1], reported = meta.id < 100
+            if (reported) report({ type: 'listener', id: meta.id, stack: sites(3) })
+            wrappers.set(fn, w = function () {
+              if (reported && (++meta.ran <= 5 || meta.ran % 100 === 0)) report({ type: 'msg-run', id: meta.id, n: meta.ran })
+              return R.apply(fn, this, arguments)
+            })
+            orig.set(w, fn)
+          }
+          a = [a[0], w, ...a.slice(2)]
+        }
+      } catch (err) { /* never break the content */ }
+      return R.apply(t, th, a)
+    })
+    hook(typeof EventTarget === 'function' ? EventTarget.prototype : null, 'removeEventListener', (t, th, a) => {
+      try { if (a[0] === 'message' && typeof a[1] === 'function' && wrappers.has(a[1])) a = [a[0], wrappers.get(a[1]), ...a.slice(2)] } catch (err) { /* never break the content */ }
+      return R.apply(t, th, a)
+    })
+    // postMessage: where it went (this frame's page, when the call is to this window), the message's shape and the
+    // origin it named. A message's values are kept only when short: a string, number or boolean of 80 characters or less.
+    // Strings are cut at 80 characters, and a value is kept only if it is a string, number or boolean of that size.
+    // Only a plain object (prototype some realm's Object.prototype, or null: the sender may be another frame) has its keys read, by descriptor (no getters). A Proxy
+    // can't be told from an object: its getPrototypeOf trap runs here (and ownKeys, if it passes as plain); an array
+    // is reported by kind only, so its length (a trap on a Proxy) isn't read.
+    const shape = d => {
+      const t = typeof d
+      if (d === null || t !== 'object') return { kind: d === null ? 'null' : cl(t), ...(t === 'string' ? d.length <= 80 ? { value: d } : {} : t === 'number' || t === 'boolean' ? { value: String(d) } : {}) }
+      if (Array.isArray(d)) return { kind: 'array' }
+      const proto = Object.getPrototypeOf(d)
+      if (proto !== null && Object.getPrototypeOf(proto) !== null) return { kind: 'object' }   // any realm's Object.prototype has no prototype of its own
+      const keys = Object.keys(d).slice(0, 5), vals = {}
+      for (const k of keys) { const v = own(d, k)?.value; if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string' && v.length <= 80) vals[cl(k)] = v }
+      return { kind: 'object', keys: keys.map(cl), vals }
+    }
+    const posted = new Map()
+    hook(window, 'postMessage', (t, th, a) => {
+      try {
+        const to = href(th == null ? window : th), sh = shape(a[0]), key = to + JSON.stringify(sh), n = (posted.get(key) || 0) + 1
+        if (n === 1 && posted.size >= 200) return R.apply(t, th, a)   // too many kinds of message: the rest aren't reported
+        posted.set(key, n)
+        if (n <= 10 || n % 100 === 0) report({ type: 'post', to, shape: sh, origin: cl(typeof a[1] === 'string' ? a[1] : safe(() => own(a[1], 'targetOrigin').value) || ''), n, stack: sites(3) })
+      } catch (err) { /* never break the content */ }
+      return R.apply(t, th, a)
+    })
+  }
 })()

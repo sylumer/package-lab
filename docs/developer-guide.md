@@ -64,6 +64,7 @@ src/
   drilldown.js          Why it stopped: key decisions, where each undefined came from, the chain and its finding
   overlay.js            Overrides: the file set a run is served from, and the findings about changed files
   textdiff.js           A small LCS line diff (diffLines, unified)
+  stall.js              Why it stalled: pollers, unanswered messages, listeners that never ran, and the finding (P1.6)
   milestones.js         Milestones (where a run got to on the SCORM path) and progress (comparing two runs)
   options.js            Launch options: normaliseOptions (the only place defaults live), cliCommand
   analyze.js            Manifest and script scan
@@ -231,9 +232,21 @@ auto-attached target too). It reports through the `__labReport` binding:
 | `{ type: 'pin-failed', path, error }` | The pin couldn't be defined: a frozen object, a name the browser won't redefine |
 | `{ type: 'shape', url, path, use, n, stack }` | From `shape-probe.js`, only in runs that answer with `@probe`: a read of `path` (dotted, from the top of the response) in the response from `url` (`use: 'read'`), or how a missing value was used: `in`, `keys`, `array` (iterated, `length`, an array method called), `string` (a string method called, or turned into a string), `number` (turned into a number), `text` (`+` or `==`). Throttled like lookups per path, use and call site; at most 3,000 per frame |
 | `{ type: 'exec', events, wrapped }` | From `trace-probe.js`, in traced runs only: a batch of execution trace events. The recorder puts these in `trace.exec`, not `trace.probe` |
+| `{ type: 'timers', raf, sites, list }` | From the timer hooks (not in SCORM Lab's host pages): a summary of `setTimeout` and `setInterval` per kind and call site. `list` is `[kind, delay, created, fired, cleared, msSinceLastRun]` and `sites[i]` is the caller's stack line for `list[i]`. `raf` counts `requestAnimationFrame` calls. At most once a second for the first 30, then every 5 s, and when the page hides or the recorder stops. The recorder's own `t` is when it arrived; the last one of a frame is the state at the end |
+| `{ type: 'listener', id, stack }`, `{ type: 'msg-run', id, n }` | A `message` listener (a function, on a window) registered, and each run of it (the first five of each, then every hundredth). `id` is per frame |
+| `{ type: 'post', to, shape, origin, n, stack }` | A `postMessage` call, reported by the realm of the window it was called on, so `to` is that window's URL (empty for another origin, where it can't be read). `shape` is `{ kind, value? }` for a primitive, `{ kind: 'array' }`, `{ kind: 'object' }` (a class instance or other non-plain object), or `{ kind: 'object', keys (first 5), vals }` for a plain object (read by descriptor, no getters), where `vals` has only numbers, booleans and strings of 80 characters or less; every stored string (keys, origin, kind) is cut at 80 characters. Residual: a `Proxy` can't be told from an object, so its `getPrototypeOf` trap (and `ownKeys`, if it looks plain) runs when it is inspected. Throttled per target and shape (the first 10, then every hundredth; at most 200 distinct kinds per frame, then none) |
 | `{ type: 'dom', readyState, text, sample, visible, media, frames, loader, hidden, elements, w, h }` | What the frame shows. Sent at DOMContentLoaded, load, page hide, and 1–60 s after start, only when it changes. Not sent from SCORM Lab's host pages |
 
-The recorder adds `t` (ms since start), `sid` and `frame` (the frame's URL).
+The recorder adds `t` (ms since start), `sid` and `frame` (the frame's URL). Its `t` and `sid` win over any the
+report carries (the test LMS's API calls carry `Date.now()`, which used to make milestone times absolute).
+
+The timer, listener and `postMessage` hooks (P1.6) replace `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`,
+`requestAnimationFrame` and `postMessage` on the window, and `EventTarget.prototype.addEventListener` and
+`removeEventListener`, with `Proxy` objects that call the original with the same `this` and arguments and give back its
+result. Timer and `message` callbacks are wrapped (only to count runs); a string callback is passed as it is, and a
+wrapped listener is remembered so `removeEventListener` finds it. `Function.prototype.toString` is hooked too, so a wrapper reports the text of what it stands for (`String(setTimeout)` is unchanged). A stack is taken for the first 50 timers of each kind and every 20th after that; the others count against the last site. Listener ids are unique per frame; only the first 100 are reported. The caller is the first stack line after the probe's
+own anonymous frames. `window.__labFlushT()` sends the timer summary now; the recorder calls it, with `__labFlush`, as a
+run stops.
 
 ## The recorder
 
@@ -559,6 +572,25 @@ ids, in order, are `launched`, `scripts`, `shown`, `looked`, `found`, `initialis
 
 `main.js` adds `milestones` to each package run (the run summary the interfaces get, and the saved run) and puts
 `milestoneFinding` first in its findings. Saved runs from before this have no `milestones`; the report computes them.
+
+## Why it stalled
+
+`src/stall.js` is pure. `stall(trace, milestones)` returns `{ stalled, pollers, unanswered, listeners, pending, last,
+waiting, missing }` and `stallFinding(result)` makes the finding (or `null`). `stalled` is true when `wrote` wasn't
+reached (or there are no milestones).
+- `pollers`: for each frame's last `timers` summary (content frames only), the intervals not cleared, and the chains of
+  timeouts (created at least twice), that ran at least three times and last ran within `max(2 s, 3 × delay)` of the end
+  of the run. With `trace.sites`, `condition` is the decision in the same package file taken about as often as the timer
+  ran (0.8 to 1.5 times, nearest the line that made the timer); it carries its last value from the last event.
+- `unanswered`: each `post` with a readable target, judged by: a `msg-run` in the target's frame within `HEARD` (1 s) =
+  heard; another `post` to a different target within `REPLY` (2 s) = a reply. Reasons: `no-listener` (no `listener`
+  report in the target frame), `not-handled`, `no-reply`. Equal messages (target, type, reason) are counted once.
+- `listeners`: `listener` reports in content frames with no `msg-run`. `pending`: requests with no status.
+- `last`: the last five events when traced, else the last functions with coverage count above zero, scripts in load order.
+
+`main.js` (`withProgress`) adds the finding to package runs: under the last blank-page or loading-screen finding, else
+sorted with the warnings. Saved runs get it when they are opened, from the probe's reports. The CLI's `run --json`
+gives `waitingFor` (the same result).
 
 ## Experiments
 

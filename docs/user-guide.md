@@ -378,6 +378,32 @@ What it can't follow:
 
 From the command line: [`scorm-lab drill`](cli.md#drill).
 
+## Why it stalled: what the content was waiting for
+
+When a run stops short of **Wrote data** and nothing failed outright, the content is usually waiting. SCORM Lab
+records, in every frame, the timers, `message` listeners and `postMessage` calls the content makes (and counts
+animation frames), and the finding **The content was waiting for: …** lists what was still open at the end:
+
+- **Messages with no answer.** A message the content sent to another window (the LMS window, a parent frame) that had
+  no listener there, whose listener didn't run within 1 s, or whose listener ran but sent nothing back within 2 s. The
+  message's type is named (`{ type: 'player-ready' }` is “player-ready”); only short values are recorded, never long ones.
+  A message to a window on another site can't be judged and is left out.
+- **Pollers.** A timer still firing at the end: an interval, or a chain of timeouts from one place in the code (at
+  least three runs). With **Trace the code** on, SCORM Lab also names the test the callback made and its last value:
+  “polls every 250 ms; tests `window.API` → undefined, 120 times”.
+- **Messages that never came.** A `message` listener in the content that never ran.
+- **Requests** still open at the end.
+- **The last code that ran:** the last events (traced), or the last functions that ran.
+
+The finding sits under the blank-page or loading-screen finding when there is one. Then ask what answers each item in a
+real LMS or player, and give the content the same (a [pin](#forcing-values-and-answering-requests) can set a value, a
+[file override](#changing-files-and-running-again) can change the page). From the command line the same data is in
+`waitingFor` in `run --json`.
+
+What it can't see: a listener set with `onmessage = …`, or an object with `handleEvent`, isn't counted; messages
+between workers, ports and other windows than frames aren't recorded; a timer started with a string of code runs as
+usual but its runs aren't counted.
+
 ## Testing resume and progress saving
 
 1. Launch with **Stop after: I stop it**. Go part-way through, then leave the course the normal way. The API tab

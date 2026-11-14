@@ -7,6 +7,8 @@ Progress on [plan.md](plan.md). The orchestrator updates this file with each wor
 
 In progress on branch `next`.
 
+**Phase 1 (replacing hand work), done.** Overlays (Files tab, `--override`), pins and answers (`--pin`, `--answer`), server-needs discovery (`discover`), an instrumented execution trace (`--trace`, Execution tab), an automatic drill-down (`drill`) and stall analysis. `npm test` takes about 2:20; `--slow` (with a forced-trace pass) about 7 minutes.
+
 **Phase 0 (foundations), done.** One options model across every interface, milestones and progress on every run, and an experiment runner (CLI `experiment`, Experiments tab) with the `api`, `frames` and `standard` presets. `npm test` takes about 1.5 minutes.
  Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
 
@@ -21,8 +23,8 @@ In progress on branch `next`.
 | P1.2 | Pin variables, answer requests | sonnet | done | ec3e7f1 | One review round. Pins are configurable (logged). Some e2e checks moved behind `--slow` |
 | P1.3 | What the content wanted from its server | opus | done | d2b0977 | Reviewed by the orchestrator, no changes. Saved discoveries can't be reopened in the UI yet; array elements not explored |
 | P1.4 | Code instrumentation: execution trace | opus | done | 5b39657 | Reviewed by the orchestrator. One commit (steps checked in order). `hosted`: window.scorm is true at startCourse, not false as the plan assumed (logged). Overhead fine on `good`, ~17x on compute-heavy code. Known: milestone `t` from API calls is absolute in saved runs |
-| P1.5 | Drill-down | opus | done | | Reviewed by the orchestrator. Resumed once after a usage limit. Adds watch pins; dotted pins share one accessor per object |
-| P1.6 | Why it stalled | sonnet | todo | | |
+| P1.5 | Drill-down | opus | done | dba267a | Reviewed by the orchestrator. Resumed once after a usage limit. Adds watch pins; dotted pins share one accessor per object |
+| P1.6 | Why it stalled | sonnet | done | | One review round. Also fixed milestone times being absolute. No new tab: the finding carries it |
 | P2.1 | LMS profiles and other-origin content | sonnet / opus | todo | | |
 | P2.2 | Blocked storage and cookies | sonnet | todo | | |
 | P2.3 | WebKit and device sizes | sonnet | todo | | |

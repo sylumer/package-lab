@@ -206,6 +206,8 @@ scorm-lab run course.zip --trace --out run.json
 node -e "import('./src/instrument.js').then(m => { const t = JSON.parse(require('fs').readFileSync('run.json')).trace; for (const e of m.lastEvents(t, 50)) console.log(e.file + ':' + e.line, e.say) })"
 ```
 
+`waitingFor` is what the content was still waiting for at the end (see [Why it stalled](user-guide.md#why-it-stalled-what-the-content-was-waiting-for)): `pollers`, `unanswered` messages, `listeners` that never ran, `pending` requests and the `last` code that ran. The same appears as a **The content was waiting for** finding in the text output.
+
 `milestones` lists the ten steps of the SCORM path, each reached or not (see [Milestones](user-guide.md#milestones));
 `furthest` is the id of the last one reached, or `null`. The text output adds a **Milestones** line with a tick or a
 cross for each step, and what the content was showing at the end (visible elements, any loading indicator, and the
@@ -458,6 +460,7 @@ Starts the [web interface](web.md) and prints its address with the access token.
   "counts": { "errors": 2, "warnings": 1, "info": 0, "apiCalls": 0, "requests": 37, "failedRequests": 1, "uncaught": 1, "seconds": 10 },
   "milestones": [{ "id": "launched", "label": "Launch page loaded", "reached": true, "t": 120, "evidence": "index.html responded 200" }, "…"],
   "furthest": "looked",
+  "waitingFor": { "stalled": true, "pollers": [{ "site": "boot.js:2", "kind": "interval", "every": 250, "fired": 38, "condition": { "text": "window.API → undefined", "n": 38 } }], "unanswered": [{ "message": "“player-ready”", "why": "no-listener", "to": "lab://run/__lab/host.html", "count": 1 }], "listeners": [], "pending": [], "last": { "traced": false, "items": ["…"] } },
   "findings": ["…"],
   "api": [{ "call": "Initialize", "el": "", "value": null, "result": "true", "err": 0 }],
   "screens": [{ "frame": "lab://run/pkg/index.html", "readyState": "complete", "text": 0, "visible": 3, "media": 0, "loader": "div#preloader", "hidden": false, "sample": "" }],

@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { unzip } from './zip.js'
 import { analyze } from './analyze.js'
-import { Recorder } from './recorder.js'
+import { Recorder, shiftTimes } from './recorder.js'
 import { compare } from './diff.js'
 import { staticFindings, runFindings, launchFindings, compareFindings, sortFindings } from './rules.js'
 import { bootGraph, bootRun } from './bootpath.js'
@@ -27,6 +27,7 @@ import { unified } from './textdiff.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
 import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
+import { stall, stallFinding } from './stall.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -132,7 +133,11 @@ function withProgress(kind, trace, boot, findings, launch, before) {
   if (kind !== 'package') return { findings: sortFindings(findings), milestones: null }
   const ms = milestones(trace, boot), over = overrideFinding(launch?.options?.files)
   const helped = over && before && overrideProgressFinding(before, { milestones: ms, counts: runCounts(trace) })
-  return { findings: [milestoneFinding(ms), ...(over ? [over] : []), ...(helped ? [helped] : []), ...sortFindings(findings)], milestones: ms }
+  // "Was waiting for" goes under the blank-page or loading-screen finding when there is one, else it sorts with the warnings.
+  const waiting = stallFinding(stall(trace, ms)), sorted = sortFindings(findings), at = sorted.findLastIndex(f => /blank page|loading screen/.test(f.title))
+  if (waiting && at >= 0) sorted.splice(at + 1, 0, waiting)
+  else if (waiting) { sorted.push(waiting); sortFindings(sorted) }
+  return { findings: [milestoneFinding(ms), ...(over ? [over] : []), ...(helped ? [helped] : []), ...sorted], milestones: ms }
 }
 // The latest earlier run of the same item of this package that used no overrides.
 function runBefore(launch) {
@@ -205,7 +210,9 @@ async function finishActive(a) {
   const trace = await a.rec.stop()
   for (const r of a.extra) {
     const t = await r.stop()
-    for (const k of ['targets', 'scripts', 'requests', 'navigations', 'console', 'exceptions', 'caught', 'log', 'probe', 'exec', 'coverage']) trace[k].push(...t[k].map(x => ({ ...x, sid: 'popup:' + (x.sid ?? '') })))
+    // A popup's recorder started later: its times are moved onto the run's clock.
+    const off = r.t0 - a.rec.t0
+    for (const k of ['targets', 'scripts', 'requests', 'navigations', 'console', 'exceptions', 'caught', 'log', 'probe', 'exec', 'coverage']) trace[k].push(...shiftTimes(k, t[k], off).map(x => ({ ...x, sid: 'popup:' + (x.sid ?? '') })))
     Object.assign(trace.sources, t.sources); Object.assign(trace.truncated, t.truncated)
   }
   // A traced run: the site table, the files left as they were, and everything pointed back at the original files.
