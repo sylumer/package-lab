@@ -1,7 +1,7 @@
 // Xyleme. Public information is thin (docs/packs/xyleme.md), so detection uses only the names the notes list, and the
 // rules rest on what SCORM Lab records anyway: requests to the platform's server root or another site, and content
 // that builds its own API object. Nothing here claims to know Xyleme's files.
-import { score, scriptHits, evidenceLines, serverNeeds, outsideHosts, ownApi, launchPath, short } from './util.js'
+import { score, scriptHits, evidenceLines, serverNeeds, outsideHosts, ownApi, launchPath, short, textOf, named, SCRIPTY, SERVER_PLAYER } from './util.js'
 
 const NEXT = 'Open the Server needs tab and run Discover on the request: it works out what the content reads from it. Save the stand-in as a pin or an answer to keep testing past it.'
 const MARK = /xyleme|bravais/i
@@ -13,6 +13,11 @@ export default {
   detectRun: trace => (trace.requests ?? []).some(r => /^https?:\/\/[^/]*(xyleme|bravais)/i.test(r.url)) ? 0.8 : 0,
   staticRules({ analysis: a, files }) {
     const out = [], scan = a.scan
+    // A static export marked for Xyleme's own content server: RequireJS waits for it with no timeout, so nothing shows and nothing errors.
+    const player = named(files, SCRIPTY).flatMap(f => { const t = textOf(files, f); return [...t.matchAll(SERVER_PLAYER)].map(m => `${f}:${t.slice(0, m.index).split('\n').length}  ${m[0].trim()}`) })
+    if (player.length) out.push({ sev: 'error', basis: 'package', title: 'built for Xyleme’s server-side player: it will hang in any other LMS',
+      detail: 'The page sets PLAYER_TYPE to \'Server-side\', so the player waits for Xyleme’s content server to supply its code (RequireJS is set to wait with no time limit). Outside Xyleme that never arrives: the page stays blank and no error shows. Taking out that one line lets the static export run in any LMS.',
+      evidence: player.slice(0, 6), fix: 'Use Export corrected package (or scorm-lab fix) to remove the line, or republish from Xyleme as a standalone SCORM package.', autofix: { id: 'xyleme-player-type', params: {} } })
     const server = evidenceLines(scan, 'serverPaths', 6)
     if (server.length) out.push({ sev: 'info', basis: 'pattern', title: 'the content expects its platform at the server root',
       detail: 'Paths such as /api/… only work on a host that serves them. Xyleme content may be built to call the platform it was published from.',

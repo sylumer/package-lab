@@ -41,6 +41,10 @@ export function staticFindings(a) {
   if (defines.length) out.push({ sev: 'warn', title: 'Scripts create their own SCORM API object',
     detail: 'Content that defines window.API or API_1484_11 itself (for preview, offline or standalone use) may talk to that instead of the LMS.',
     evidence: defines, fix: 'Run it: if the content sets its own API, find the condition that makes it do so.' })
+  const domain = evidenceFrom(a.scan, 'domainSet', 6)
+  if (domain.length) out.push({ sev: 'warn', title: 'Scripts set document.domain',
+    detail: 'Browsers now ignore setting document.domain (origin-keyed agent clusters: Chrome 115 and later, and other browsers), so content that relies on it to reach the LMS across frames breaks. If it works the value out with a regex on the address, that can also throw on a host it did not expect, and the rest of that script block is skipped.',
+    evidence: domain, fix: 'Take the assignment out, or make sure the content does not need it: it should find the LMS API through window.parent or window.opener, which work without it.' })
   const modes = evidenceFrom(a.scan, 'modeSwitches', 8)
   if (modes.length) out.push({ sev: 'info', title: 'Scripts have mode switches (preview, standalone, LMS…)', detail: 'Content that behaves differently on its authoring host and in an LMS usually decides here.', evidence: modes, fix: '' })
   out.push(...a.packFindings ?? [])
@@ -49,7 +53,7 @@ export function staticFindings(a) {
 }
 function evidenceFrom(scan, key, max) {
   const out = []
-  for (const [file, s] of Object.entries(scan ?? {})) for (const x of s[key]) { if (out.length >= max) return out; out.push(`${file}:${x.line}  ${x.text}`) }
+  for (const [file, s] of Object.entries(scan ?? {})) for (const x of s[key] ?? []) { if (out.length >= max) return out; out.push(`${file}:${x.line}  ${x.text}`) }
   return out
 }
 

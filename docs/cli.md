@@ -578,6 +578,7 @@ file is `course-fixed.zip` in the current folder. If there is nothing to change,
 | `manifest-version` | Sets `<schemaversion>` and the namespaces to match the SCORM API the scripts use (1.2 or 2004 4th Edition) |
 | `case` | Makes references match the capitals of the files: it changes the references, or renames the file when every reference spells it the same way |
 | `http-to-https` | Changes `http://` addresses of scripts, styles and frames to `https://` |
+| `xyleme-player-type` | Removes `PLAYER_TYPE = 'Server-side'` from a Xyleme static export, so it stops waiting for Xyleme's content server |
 
 | Option | Meaning |
 |---|---|

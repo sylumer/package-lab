@@ -105,3 +105,26 @@ const bad = PACKS.find(p => p.id === 'rise'), keep = bad.staticRules
 bad.staticRules = () => { throw new Error('boom') }
 assert.doesNotThrow(() => analyze(pkg(cases.rise[0])), 'packs: a throwing rule is skipped')
 bad.staticRules = keep
+
+// Xyleme static export built for the server-side player (P3.2 follow-up): finding, autofix, and the generic document.domain finding.
+{
+  const { correct } = await import('../src/fixes.js')
+  const idx = `<!doctype html><html><body><script>
+    document.domain = document.location.href.match(/https?:\\/\\/[^\\/]*\\.([^\\/:\\.]*\\.[^\\/:\\.]*).[^\\/:]*\\//)[1];
+
+    var PLAYER_TYPE = 'Server-side';
+</script><script>window.Xyleme = { environment: { LMS: 'SF', SCORM_TYPE: 'Static SCORM 1.2' } }; require.config({ waitSeconds: 0 })</script></body></html>`
+  const one = html => pkg({ 'imsmanifest.xml': man('1.2', 'index.html'), 'index.html': html })
+  const files = one(idx)
+  const f = staticFindings(analyze(files)).find(x => /server-side player/.test(x.title))
+  assert.ok(f && f.sev === 'error' && f.autofix?.id === 'xyleme-player-type' && f.evidence.some(e => /^index\.html:4 /.test(e)), 'xyleme: server-side player finding: ' + JSON.stringify(f))
+  const r = correct(files, { only: 'xyleme-player-type' }), out = r.files.get('index.html').toString()
+  assert.ok(!/PLAYER_TYPE/.test(out) && /document\.domain =/.test(out) && out.split('\n').length === idx.split('\n').length, 'xyleme fix: only the assignment goes, lines stay')
+  assert.ok(r.proof.gone.some(t => /server-side player/.test(t)) && !r.proof.added.length, 'xyleme fix: prove() clears it: ' + JSON.stringify(r.proof))
+  for (const s of [`PLAYER_TYPE="server-side"`, `window.PLAYER_TYPE = \`Server-Side\`;`]) assert.ok(correct(one(page(`x(); ${s}`)), { only: 'xyleme-player-type' }).applied.length, 'xyleme fix: tolerates ' + s)
+  assert.ok(!correct(one(page(`var PLAYER_TYPE = 'Client-side'`)), { only: 'xyleme-player-type' }).applied.length, 'xyleme fix: other values are left')
+  // document.domain: an assignment is flagged (with file:line), a read or a comparison is not.
+  const dd = staticFindings(analyze(files)).find(x => x.title === 'Scripts set document.domain')
+  assert.ok(dd && dd.sev === 'warn' && !dd.autofix && /^index\.html:2 /.test(dd.evidence[0]), 'document.domain: assignment flagged: ' + JSON.stringify(dd))
+  for (const s of ['var d = document.domain', 'if (document.domain == "x") {}', 'if (document.domain === "x") {}']) assert.ok(!staticFindings(analyze(one(page(s)))).some(x => x.title === 'Scripts set document.domain'), 'document.domain: not flagged: ' + s)
+}

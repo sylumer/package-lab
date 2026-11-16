@@ -61,6 +61,8 @@ export function outsideHosts(trace) {
   }
   return [...by.values()]
 }
+// `var PLAYER_TYPE = 'Server-side';` as Xyleme's static export writes it: any quote, spacing, case, with or without var/let/const/window.
+export const SERVER_PLAYER = /\b(?:(?:var|let|const)\s+|window\.)?PLAYER_TYPE\s*=\s*(["'`])server-side\1[ \t]*;?/gi
 export const launchPath = a => a.manifest?.items.find(i => i.type === 'sco')?.res?.path ?? a.manifest?.items.find(i => i.res?.path)?.res?.path ?? ''
 export const evidenceLines = (scan, key, max = 5, only = () => true) => {
   const out = []

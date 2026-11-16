@@ -57,7 +57,7 @@ const absolute = hosts => new RegExp(`["'\`](https?:)?\\/\\/(?!${hosts})[a-z0-9.
 const ABSOLUTE = absolute(HOSTS), ABSOLUTE_XAPI = absolute(HOSTS + '|adlnet\\.gov|w3id\\.org|id\\.tincanapi\\.com|activitystrea\\.ms')
 // xapi: the package is cmi5 or Tin Can, whose vocabulary hosts (adlnet.gov, w3id.org…) are identifiers, not sites to reach.
 export function scanText(name, text, xapi = false) {
-  const out = { api12: [], api04: [], search: [], requests: [], absolute: [], serverPaths: [], hostChecks: [], modeSwitches: [], apiDefine: [] }
+  const out = { api12: [], api04: [], search: [], requests: [], absolute: [], serverPaths: [], hostChecks: [], modeSwitches: [], apiDefine: [], domainSet: [] }
   const add = (list, re, max = 20) => {
     for (const m of text.matchAll(re)) {
       if (list.length >= max) break
@@ -72,6 +72,7 @@ export function scanText(name, text, xapi = false) {
   add(out.absolute, xapi ? ABSOLUTE_XAPI : ABSOLUTE)
   add(out.serverPaths, /["'`]\/(?!\/)(api|content|services?|rest|data|assets|static|player|lms|xyleme|ws|v\d)\b[^"'`\s]*["'`]/gi)
   add(out.hostChecks, /location\.(hostname|host|origin|protocol)\b|document\.domain\b|window\.top\s*(!==|===|!=|==)\s*window/g)
+  add(out.domainSet, /\bdocument\.domain\s*=(?!=)/g)
   add(out.apiDefine, /\b(window|self|top|parent)\.(API|API_1484_11)\s*=(?!=)/g)
   add(out.modeSwitches, /\b(isPreview|previewMode|standalone|isStandalone|lmsMode|scormMode|offlineMode|isHosted|useLMS|playerMode|runtimeMode|launchMode)\b/g)
   return out

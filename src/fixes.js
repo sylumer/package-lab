@@ -6,6 +6,7 @@ import { analyze, pkgPath } from './analyze.js'
 import { bootGraph, resolveRef } from './bootpath.js'
 import { staticFindings, sortFindings } from './rules.js'
 import { overlayFiles } from './overlay.js'
+import { named, textOf, SCRIPTY, SERVER_PLAYER } from './packs/util.js'
 import { zip } from './zip.js'
 
 const dirOf = p => p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : ''
@@ -188,6 +189,20 @@ function httpToHttps(files) {
   return { files: cur, changes, notes: [...notes] }
 }
 
+// ---- xyleme-player-type ----
+// Only the assignment goes, so line numbers stay put. document.domain is left alone: it is a separate finding.
+function xylemePlayerType(files) {
+  const out = new Map(files), changes = [], notes = new Set()
+  for (const f of named(files, SCRIPTY)) {
+    if (!SERVER_PLAYER.test(textOf(files, f))) { SERVER_PLAYER.lastIndex = 0; continue }
+    SERVER_PLAYER.lastIndex = 0
+    const text = getText(out, f, notes)
+    if (text == null) continue
+    setText(out, f, text.replace(SERVER_PLAYER, () => { changes.push(`Removed the PLAYER_TYPE = 'Server-side' line from ${f}, so the player no longer waits for Xyleme’s server.`); return '' }))
+  }
+  return { files: changes.length ? out : files, changes, notes: [...notes] }
+}
+
 // The fixes in the order they run: the layout of the ZIP first, then the manifest, then the references.
 export const FIXES = {
   'manifest-case': { label: 'Rename the manifest to imsmanifest.xml', apply: manifestCase },
@@ -196,6 +211,7 @@ export const FIXES = {
   'manifest-version': { label: 'Make the manifest’s SCORM version match the API the scripts use', apply: manifestVersion },
   case: { label: 'Make references match the capitals of the files', apply: fixCase },
   'http-to-https': { label: 'Load scripts, styles and frames over https', apply: httpToHttps },
+  'xyleme-player-type': { label: 'Remove Xyleme’s server-side player setting', apply: xylemePlayerType },
 }
 export const FIX_IDS = Object.keys(FIXES)
 

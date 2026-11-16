@@ -38,6 +38,12 @@ at the root of the server, a content-built SCORM API, a small launch page that p
 they are information only; a run can raise one to a warning when a request names a Xyleme host and fails. The
 findings that matter most are the general ones about the launch and paths at the root of the server.
 
+One Xyleme finding is firm: "built for Xyleme's server-side player: it will hang in any other LMS". A static export
+(for example "Static SCORM 1.2" for SuccessFactors) that sets `PLAYER_TYPE = 'Server-side'` waits forever for Xyleme's
+content server, so the page stays blank and shows no error. It carries the Autofix `xyleme-player-type`: `scorm-lab fix
+course.zip --out fixed.zip`, or Export corrected package, removes that line. A "Scripts set document.domain" warning
+often sits beside it; browsers now ignore that line, and the fix leaves it alone.
+
 **2. Run it and find the step it stopped at.**
 
 ```bash

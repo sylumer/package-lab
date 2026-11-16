@@ -9,7 +9,7 @@ Titles below are as SCORM Lab shows them, with *italic* parts filled in.
 
 Some findings name an **Autofix**: a mechanical correction SCORM Lab can make for you when it exports a
 [corrected package](user-guide.md#exporting-a-corrected-package). They are `manifest-case`, `manifest-not-root`,
-`file-missing`, `manifest-version`, `case` and `http-to-https`. Everything else needs a person to decide.
+`file-missing`, `manifest-version`, `case`, `http-to-https` and `xyleme-player-type`. Everything else needs a person to decide.
 
 The verdict at the top of a report, in the CLI and in the Concierge widget is the first error, or the first warning
 if there are no errors.

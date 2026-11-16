@@ -1173,7 +1173,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   const edit = (m, name, a, b) => { const o = new Map(m); o.set(name, Buffer.from(o.get(name).toString().replace(a, b))); return o }
   const probs = m => analyze(m).problems.map(p => p.code)
   const run1 = (id, m, params) => FIXES[id].apply(m, params)
-  assert.deepEqual(FIX_IDS, ['manifest-case', 'manifest-not-root', 'file-missing', 'manifest-version', 'case', 'http-to-https'], 'fixes: the six, in order')
+  assert.deepEqual(FIX_IDS, ['manifest-case', 'manifest-not-root', 'file-missing', 'manifest-version', 'case', 'http-to-https', 'xyleme-player-type'], 'fixes: the seven, in order')
   for (const id of FIX_IDS) assert.deepEqual(run1(id, sample()).changes, [], `fixes: ${id} does nothing to a good package`)
   // manifest-case
   let r = run1('manifest-case', rename(sample(), k => k === 'imsmanifest.xml' ? 'IMSManifest.XML' : k))
