@@ -1,5 +1,5 @@
 // The local LRS (P4.5): the learning record store a cmi5 or Tin Can package talks to, served at <lms origin>/__lrs/ (lab://run/__lrs/ in
-// Electron, https://lab.invalid/__lrs/ in WebKit). Pure: createLrs(config) → { handle(request), snapshot() }. The same core serves
+// Electron, https://lms.lab.invalid/__lrs/ in WebKit). Pure: createLrs(config) → { handle(request), snapshot() }. The same core serves
 // both browsers; main.js and webkit-runner.js only carry requests to it. One LRS per run, in memory; snapshot() is trace.lrs.
 //
 // handle({ method, path, search, headers (names in lower case), body (string) }) → { status, headers, body (string) }.
@@ -17,7 +17,7 @@ export const VERSION = '1.0.3'
 export const MAX_BODY = 10 * 1024 ** 2   // a request: main.js and the WebKit runner refuse bigger ones before reading them
 const MAX_STATEMENTS = 2000, MAX_CALLS = 5000, MAX_DOC = 200 * 1024, MAX_BATCH = 100, MAX_DOCS = 200, MAX_DOC_BYTES = 5 * 1024 ** 2
 // Only the test LMS's own origins may read the LRS from a page (not any site).
-const ORIGINS = ['lab://run', 'lab://content', 'https://lab.invalid', 'https://content.invalid']
+const ORIGINS = ['lab://run', 'lab://content', 'https://lms.lab.invalid', 'https://cdn.content.invalid', 'https://lab.invalid', 'https://content.invalid']
 const JSON_TYPE = 'application/json'
 const VOIDED = 'http://adlnet.gov/expapi/verbs/voided'
 const sortKeys = v => Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sortKeys(v[k])])) : v
@@ -34,7 +34,7 @@ export function createLrs(config) {
   const statements = [], byId = new Map(), calls = [], docs = new Map(), fetches = []
   let tokenIssued = false
   const iso = () => new Date(wall()).toISOString()
-  const authority = { objectType: 'Agent', account: { homePage: endpoint.replace(/\/__lrs\/$/, '') || 'https://lab.invalid', name: 'scorm-lab' } }
+  const authority = { objectType: 'Agent', account: { homePage: endpoint.replace(/\/__lrs\/$/, '') || 'https://lms.lab.invalid', name: 'scorm-lab' } }
   const out = (status, body = '', headers = {}) => ({ status, headers: { 'Content-Type': JSON_TYPE, ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) })
   const fail = (status, text, extra) => ({ ...out(status, text, { 'Content-Type': 'text/plain; charset=utf-8' }), ...extra })
 

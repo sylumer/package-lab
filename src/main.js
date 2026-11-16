@@ -76,7 +76,7 @@ function emit(channel, data) {
 }
 
 // ---- The package server ----
-// href: the lab:// address the request is served as (an https://lab.invalid/ request is handled under its lab:// name).
+// href: the lab:// address the request is served as (an https://lms.lab.invalid/ request is handled under its lab:// name).
 async function serve(req, href = req.url) {
   const u = new URL(href)
   let path
@@ -773,7 +773,7 @@ function createWindow() {
 app.whenReady().then(async () => {
   const lab = session.fromPartition('lab')
   lab.protocol.handle('lab', serve)
-  // The content sees https://lab.invalid/ and https://content.invalid/ (WEBKIT_ORIGINS); they are served as lab://run and lab://content. Any other
+  // The content sees https://lms.lab.invalid/ and https://cdn.content.invalid/ (WEBKIT_ORIGINS); they are served as lab://run and lab://content. Any other
   // https address goes to the network. Both are answered here when a response of the run matches (the Fetch domain never sees these requests).
   lab.protocol.handle('https', req => {
     const u = new URL(req.url), to = u.origin === WEBKIT_ORIGINS.lms ? 'lab://run' : u.origin === WEBKIT_ORIGINS.content ? 'lab://content' : null

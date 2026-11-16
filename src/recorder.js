@@ -90,7 +90,7 @@ export class Recorder {
 
   async onEvent(method, p, sid) {
     const t = this.t()
-    // The content is served from https://lab.invalid/ (so it sees a real https address) but the trace keeps lab:// (launch.js), as in a WebKit run.
+    // The content is served from https://lms.lab.invalid/ (so it sees a real https address) but the trace keeps lab:// (launch.js), as in a WebKit run.
     if (JSON.stringify(p).includes('.invalid')) p = JSON.parse(toLab(JSON.stringify(p)))
     switch (method) {
       case 'Target.attachedToTarget':

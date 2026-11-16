@@ -231,8 +231,8 @@ the run without script sources and raw coverage, with `boot.nodes` already match
 
 ## Serving the package: lab://
 
-**What the content sees is https.** In every browser the content loads `https://lab.invalid/…` (the LMS) and
-`https://content.invalid/…` (another origin), so `location.href`, `location.protocol` and `isSecureContext` are those of
+**What the content sees is https.** In every browser the content loads `https://lms.lab.invalid/…` (the LMS) and
+`https://cdn.content.invalid/…` (another origin), so `location.href`, `location.protocol` and `isSecureContext` are those of
 a real https LMS. In Electron the `lab` partition handles `https` (`main.js`): those two hosts are served as `lab://run` and
 `lab://content` by the code below, any other https address goes to the network (`net.fetch` with
 `bypassCustomProtocolHandlers`). The trace, the findings and the UI keep the `lab://` form (`toLab` in `launch.js`, applied by
@@ -491,7 +491,7 @@ read from its `trace.cmi`. Checks run in this order: nothing saved (error; stops
 (what the test LMS and the package serve for a path: config, host files, package files with ranges and the profile's
 headers), `launchPlan` (the item, options and resume data → the test LMS's configuration, the content's address, the
 headers, the label and the `launch` object), `withProgress` and `runAnalysis` (a finished run's findings and milestones),
-and `savedRun`. `launchPlan` takes `origins`: `WEBKIT_ORIGINS` (`https://lab.invalid`, `https://content.invalid`) for Electron and WebKit alike;
+and `savedRun`. `launchPlan` takes `origins`: `WEBKIT_ORIGINS` (`https://lms.lab.invalid`, `https://cdn.content.invalid`) for Electron and WebKit alike;
 `LAB_ORIGINS` (`lab://run`, `lab://content`) is the default and only the form the trace keeps. Only `config.launch`, the address the browser loads, differs:
 `launch.url` stays `lab://…` so a saved run reads the same in every browser. `recorder.js`'s `probeSource` builds the
 script put into every frame (storage mode, pins, shape and trace probes, then `probe.js`), for both browsers.
@@ -503,11 +503,11 @@ install webkit". Playwright is an optional devDependency; nothing else imports i
 
 - Launches WebKit with one context: the viewport (`options.viewport`, else 1100 × 800, the Electron window), device scale
   factor, `isMobile`, `hasTouch`, and a user agent (a pinned `navigator.userAgent`, else the device's).
-- `ctx.route('**/*')` serves `https://lab.invalid/` and `https://content.invalid/` from memory with `serveRequest`
+- `ctx.route('**/*')` serves `https://lms.lab.invalid/` and `https://cdn.content.invalid/` from memory with `serveRequest`
   (`/pkg/` is the package with its overrides, `/__lab/` the test LMS), answers a request a response matches
   (`answerFor`, `buildAnswer`, marking the request `answered`), and lets anything else go to the network.
 - `ctx.exposeBinding('__labReport')` and `ctx.addInitScript(probeSource(…))` give the probe the same channel as in
-  Electron. The probe's own pages are recognised by `https://lab.invalid/__lab/` as well as `lab://run/__lab/`; its
+  Electron. The probe's own pages are recognised by `https://lms.lab.invalid/__lab/` as well as `lab://run/__lab/`; its
   `stack()` skips one frame fewer in WebKit, whose stack has no message line. The first blank page of a window is left out of
   the probe's reports (Electron's recorder attaches after it).
 - Requests come from the context's `request`, `response` and `requestfailed` events; console, uncaught page errors,
@@ -645,7 +645,7 @@ about SCORM check `analysis.format`. `formatName(analysis)` is the words for it.
 
 **Launching.** `launchPlan` sets `expose: 'none'` (no SCORM API), `launch.format`, and adds the LRS parameters to the URL (`cmi5Query`,
 `tincanQuery`). It returns `plan.lrs`, the LRS's configuration: `{ format, endpoint, token, fetchId, registration, sessionId, activityId, au,
-launchUrl, actor }`. The endpoint is `<lms origin>/__lrs/`: `https://lab.invalid/__lrs/` in Electron and WebKit (the saved
+launchUrl, actor }`. The endpoint is `<lms origin>/__lrs/`: `https://lms.lab.invalid/__lrs/` in Electron and WebKit (the saved
 `launch.url` stays in `lab://` form). The learner is `learner-1`; the actor is an Agent with an `account` whose `homePage` is the LMS origin. A cmi5
 AU whose `launchMethod` is OwnWindow is opened in a window, as the window-opener profile does.
 

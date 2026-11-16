@@ -241,8 +241,8 @@ function launchPlanFor(buf, item = 0) {
   assert.equal(u.searchParams.get('endpoint'), 'lab://run/__lrs/'); assert.equal(u.searchParams.get('fetch'), `lab://run/__lrs/auth/fetch/${p.lrs.fetchId}`); assert.equal(u.searchParams.get('registration'), p.lrs.registration)
   assert.equal(JSON.parse(u.searchParams.get('actor')).account.name, 'learner-1'); assert.equal(u.searchParams.get('activityId'), 'http://example.com/courses/lab-cmi5/au1')
   assert.equal(p.config.expose, 'none'); assert.match(p.label, /cmi5/); assert.ok(!JSON.stringify(p.config).includes(p.lrs.token), 'launch: the token is not in the page config')
-  const w = launchPlan({ pkg, item: 0, options: {}, origins: { lms: 'https://lab.invalid', content: 'https://content.invalid' } })
-  assert.match(w.config.launch, /^https:\/\/lab\.invalid\/pkg\/au\/index\.html\?.*endpoint=https%3A%2F%2Flab\.invalid%2F__lrs%2F/, 'launch: WebKit address'); assert.match(w.launch.url, /^lab:\/\/run\/pkg\//, 'launch: the saved url stays lab://')
+  const w = launchPlan({ pkg, item: 0, options: {}, origins: { lms: 'https://lms.lab.invalid', content: 'https://cdn.content.invalid' } })
+  assert.match(w.config.launch, /^https:\/\/lms\.lab\.invalid\/pkg\/au\/index\.html\?.*endpoint=https%3A%2F%2Flms\.lab\.invalid%2F__lrs%2F/, 'launch: WebKit address'); assert.match(w.launch.url, /^lab:\/\/run\/pkg\//, 'launch: the saved url stays lab://')
   // serving: through serveRequest, as main.js and the WebKit runner do
   const lrs = createLrs(p.lrs), r = serveRequest({ path: '/__lrs/auth/fetch/' + p.lrs.fetchId, lms: true, config: p.config, files: p.files, lrs, req: { method: 'POST', search: '', headers: {}, body: '' } })
   assert.equal(r.status, 200); assert.equal(JSON.parse(r.body)['auth-token'], p.lrs.token)
@@ -361,7 +361,7 @@ console.log('xapi: tincan ok')
   assert.deepEqual(sids('2026-11-14T09:00:00Z'), ['LMS.LaunchData'], 'lrs: a seeded document has a time'); assert.deepEqual(sids('2026-11-14T11:00:00Z'), [])
   // CORS: only the test LMS's own origins
   const cors = o => l.handle({ method: 'OPTIONS', path: '/__lrs/statements', headers: o ? { origin: o } : {} }).headers['Access-Control-Allow-Origin']
-  assert.deepEqual(['lab://run', 'lab://content', 'https://lab.invalid', 'https://content.invalid'].map(cors), ['lab://run', 'lab://content', 'https://lab.invalid', 'https://content.invalid'], 'lrs: CORS echoes the test origins')
+  assert.deepEqual(['lab://run', 'lab://content', 'https://lms.lab.invalid', 'https://cdn.content.invalid'].map(cors), ['lab://run', 'lab://content', 'https://lms.lab.invalid', 'https://cdn.content.invalid'], 'lrs: CORS echoes the test origins')
   assert.deepEqual([cors('https://evil.example'), cors(undefined)], [undefined, undefined], 'lrs: and no other origin, and never *')
 }
 {

@@ -45,8 +45,8 @@ A comparison with a working run is an extra, for when one exists.
    mismatches against the ZIP), and a scan of every script for SCORM API discovery (which API names, how the API
    is searched for), network calls (`fetch`, XHR, absolute and server-relative URLs, which signal a package that
    still depends on the host it was authored on), and authoring tool fingerprints.
-2. **Run harness** (`src/main.js`, `src/host/`): the package is served from memory at `https://lab.invalid/pkg/…` (kept as `lab://run/pkg/…` in the trace); a host
-   page at `https://lab.invalid/__lab/host.html` plays the LMS (the SCORM run-time copied from toolbox's Package Player) and
+2. **Run harness** (`src/main.js`, `src/host/`): the package is served from memory at `https://lms.lab.invalid/pkg/…` (kept as `lab://run/pkg/…` in the trace); a host
+   page at `https://lms.lab.invalid/__lab/host.html` plays the LMS (the SCORM run-time copied from toolbox's Package Player) and
    frames the content. Host profiles change what the content sees: which API objects exist, how deep the frame is.
    Every lookup of `window.API` or `window.API_1484_11` is logged with the stack that made it, so "no API calls"
    becomes "the content looked for X from Y and got undefined", or "the content never looked at all".
