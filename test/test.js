@@ -1836,6 +1836,19 @@ if (!process.argv.includes('--unit')) {
     const lx = JSON.parse(node(['experiment', good, '--preset', 'lms', '--wait', '2', '--json']).stdout)
     assert.deepEqual(lx.variants.map(v => v.name), ['default', ...PROFILE_NAMES.slice(1).map(n => 'lms ' + n)], 'experiment: the lms preset')
   }
+  // What the content sees of its own address: https, a secure context (SCORM Lab serves https://lab.invalid/ and https://content.invalid/),
+  // while the trace keeps the lab:// form. A course that reads location.href with a regex must not get lab:// (that once hid a hang).
+  const seen = fixture('seen', d => sub(d, 'lesson.html', '<script src="scorm.js"></script>', `<script>
+var m = location.href.match(/https?:\\/\\/[^\\/]*\\.([^\\/:\\.]*\\.[^\\/:\\.]*).[^\\/:]*\\//)
+console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: location.hostname, secure: isSecureContext, https: location.href.startsWith('https://'), regex: m && m[1] }))
+</script><script src="scorm.js"></script>`))
+  for (const [name, args, host, origin] of [['same', [], 'lab.invalid', 'lab://run'], ['other', ['--profile-file', profFile('seen-other', { contentOrigin: 'other' })], 'content.invalid', 'lab://content']]) {
+    const out = join(work, `seen-${name}.json`), r = run(seen, ...args, '--out', out), sv = JSON.parse(readFileSync(out, 'utf8'))
+    const line = sv.trace.console.map(c => c.text).find(t => /^SEEN /.test(t)); assert.ok(line, `origin ${name}: the content logged: ` + JSON.stringify(sv.trace.console))
+    assert.deepEqual(JSON.parse(line.slice(5)), { protocol: 'https:', host, secure: true, https: true, regex: null }, `origin ${name}: the content sees https (a one-dot host gives the regex no match)`)
+    assert.ok(sv.trace.requests.some(q => q.url.startsWith(origin + '/pkg/lesson.html') && q.status === 200) && !JSON.stringify(sv.trace).includes('.invalid/'), `origin ${name}: the trace keeps lab:// addresses`)
+    if (name === 'same') assert.ok(calls(r).includes('LMSInitialize '), 'origin: SCORM still works')   // on another origin the API is out of reach
+  }
   console.log('profiles: ok')
 
   // A window launch (--window): the recorder has to be attached before the window loads, or its requests and probe are missed.

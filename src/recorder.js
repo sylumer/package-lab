@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { pinPrefix, userAgentPin, answerFor, buildAnswer } from './pins.js'
 import { shapePrefix } from './shape.js'
+import { toLab } from './launch.js'
 
 const PROBE = readFileSync(new URL('./host/probe.js', import.meta.url), 'utf8'), SHAPE = readFileSync(new URL('./host/shape-probe.js', import.meta.url), 'utf8')
 const TRACE = readFileSync(new URL('./host/trace-probe.js', import.meta.url), 'utf8')
@@ -33,6 +34,15 @@ export const storagePrefix = mode => mode === 'blocked' ? "globalThis.__labStora
 // The same in every browser (the CDP recorder below, and src/webkit-runner.js).
 export const probeSource = ({ pins = [], responses = [], trace = false, storage = 'normal', recordInput = false } = {}) =>
   (recordInput ? 'globalThis.__labText = true;\n' : '') + storagePrefix(storage) + pinPrefix(pins) + (shapePrefix(responses) && shapePrefix(responses) + SHAPE + ';\n') + (trace ? TRACE + ';\n' : '') + PROBE
+
+// Answers are given by main.js's https handler (Fetch.requestPaused doesn't fire for a request that handler serves), which keeps a
+// log of { method, url, index } or { …, failed } in the order it answered; here each entry marks the first still-unmarked request like it.
+export function markAnswers(trace, log) {
+  for (const a of log) {
+    const r = trace.requests.find(r => r.method === a.method && r.url === a.url && !r.answered && !r.answerFailed)
+    if (r) Object.assign(r, a.failed ? { answered: false, answerFailed: a.failed, answerMatch: a.match } : { answered: true, answeredBy: a.index })
+  }
+}
 
 export class Recorder {
   // pins and responses are the run's launch options (pins.js): pins go into the probe, responses are served through the Fetch domain.
@@ -80,6 +90,8 @@ export class Recorder {
 
   async onEvent(method, p, sid) {
     const t = this.t()
+    // The content is served from https://lab.invalid/ (so it sees a real https address) but the trace keeps lab:// (launch.js), as in a WebKit run.
+    if (JSON.stringify(p).includes('.invalid')) p = JSON.parse(toLab(JSON.stringify(p)))
     switch (method) {
       case 'Target.attachedToTarget':
         this.sessions.add(p.sessionId)
@@ -100,7 +112,7 @@ export class Recorder {
         if (p.reason === 'exception' && isBlocked(text) && at && url(at)) {
           const src = await this.send('Debugger.getScriptSource', { scriptId: at.location.scriptId }, sid).then(r => r.scriptSource).catch(() => '')
           const frame = await this.send('Debugger.evaluateOnCallFrame', { callFrameId: at.callFrameId, expression: 'location.href', silent: true, returnByValue: true }, sid).then(r => r.result.value).catch(() => '')
-          this.push('probe', { type: 'lookup-blocked', name: nameAt(src, at.location.lineNumber, at.location.columnNumber), frame: String(frame ?? ''),
+          this.push('probe', { type: 'lookup-blocked', name: nameAt(src, at.location.lineNumber, at.location.columnNumber), frame: toLab(frame),
             stack: p.callFrames.slice(0, 6).map(f => `${f.functionName || '<anonymous>'} (${url(f)}:${f.location.lineNumber + 1}:${f.location.columnNumber + 1})`), uncaught: !!p.data?.uncaught, t, sid })
           this.onProbe?.(this.trace.probe.at(-1))
         }
@@ -179,6 +191,7 @@ export class Recorder {
         for (const sc of cov?.result ?? []) {
           const meta = byId.get(sid + ':' + sc.scriptId)
           if (!sc.url || !meta) continue
+          sc.url = toLab(sc.url)
           this.trace.coverage.push({ sid, id: sc.scriptId, url: sc.url, hash: meta.hash,
             fns: sc.functions.map(f => [f.functionName, f.ranges.flatMap(r => [r.startOffset, r.endOffset, r.count])]) })
           if (!(sc.url in this.trace.sources)) {

@@ -10,7 +10,7 @@ import { unzip } from './zip.js'
 import { analyze } from './analyze.js'
 import { answerFor, buildAnswer, userAgentPin } from './pins.js'
 import { probeSource, FLUSH, CAP } from './recorder.js'
-import { serveRequest, launchPlan, WEBKIT_ORIGINS } from './launch.js'
+import { serveRequest, launchPlan, toLab, WEBKIT_ORIGINS } from './launch.js'
 import { createLrs, maskTokens, MAX_BODY } from './lrs.js'
 
 const HOW = 'npm i -D playwright && npx playwright install webkit'
@@ -28,8 +28,6 @@ export async function loadPlaywright() {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
-// The addresses the browser sees, as the trace keeps them (lab://run/…), so every finding reads the same in every browser.
-const toLab = s => String(s ?? '').replaceAll(WEBKIT_ORIGINS.lms, 'lab://run').replaceAll(WEBKIT_ORIGINS.content, 'lab://content')   // origins too (the probe's origin field)
 const withTimeout = (p, ms = 3000) => Promise.race([p, sleep(ms).then(() => { throw new Error('timed out') })])
 const labHost = u => { try { return /^(lab|content)\.invalid$/.test(new URL(u).hostname) } catch { return false } }
 const TYPES = { document: 'Document', script: 'Script', xhr: 'XHR', fetch: 'Fetch', stylesheet: 'Stylesheet', image: 'Image', media: 'Media', font: 'Font', websocket: 'WebSocket', manifest: 'Manifest', other: 'Other' }

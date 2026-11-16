@@ -52,11 +52,13 @@ export function serveRequest({ path, lms, range = '', config, files, headers: pk
 }
 
 // ---- The launch plan ----
-// The same in every browser except where the content's address points: origins is { lms, content } (lab://run and
-// lab://content in Electron; https://lab.invalid and https://content.invalid in WebKit). launch.url stays in lab:// form
+// The same in every browser except where the content's address points: origins is { lms, content } (https://lab.invalid and
+// https://content.invalid in every run, so the content sees a real https address; LAB_ORIGINS is only the form the trace keeps). launch.url stays in lab:// form
 // in every browser, so findings and saved runs read the same.
 export const LAB_ORIGINS = { lms: 'lab://run', content: 'lab://content' }
 export const WEBKIT_ORIGINS = { lms: 'https://lab.invalid', content: 'https://content.invalid' }
+// The addresses the browser sees, as the trace keeps them (lab://run/…), so every finding reads the same in every browser and an old saved run still loads.
+export const toLab = s => String(s ?? '').replaceAll(WEBKIT_ORIGINS.lms, 'lab://run').replaceAll(WEBKIT_ORIGINS.content, 'lab://content')   // origins too (the probe's origin field)
 const LEARNER = { id: 'learner-1', name: 'Learner, Test' }
 
 // pkg: { name, files, analysis }. cmi is data to resume from. Throws on bad options or an item with nothing to launch.
