@@ -1,4 +1,4 @@
-// SCORM Lab's window: toolbar, runs list and the tabs that show a run.
+// Package Lab's window: toolbar, runs list and the tabs that show a run.
 const $ = id => document.getElementById(id)
 function h(tag, props = {}, ...kids) {
   const e = document.createElement(tag)
@@ -546,9 +546,9 @@ VIEWS['Package diff'] = () => {
   const d = st.pdiff
   if (!d) return h('p', { class: 'muted' }, st.pkg ? 'Choose Compare packages… to compare the open package (A) with another one (B).' : 'Open a package, then choose Compare packages….')
   const f = d.files, none = h('span', { class: 'muted' }, 'none'), cell = v => v === null ? none.cloneNode(true) : v
-  const diffPre = text => { const all = text.split('\n'), lines = all.slice(0, 3000); return [h('pre', { class: 'diff' }, lines.map(l => h('div', { class: l[0] === '+' ? 'add' : l[0] === '-' ? 'del' : l[0] === '@' ? 'hunk' : null }, l || ' '))), all.length > 3000 && h('p', { class: 'muted small' }, `First 3000 of ${all.length} lines. scorm-lab diff --out has all of them.`)] }
+  const diffPre = text => { const all = text.split('\n'), lines = all.slice(0, 3000); return [h('pre', { class: 'diff' }, lines.map(l => h('div', { class: l[0] === '+' ? 'add' : l[0] === '-' ? 'del' : l[0] === '@' ? 'hunk' : null }, l || ' '))), all.length > 3000 && h('p', { class: 'muted small' }, `First 3000 of ${all.length} lines. package-lab diff --out has all of them.`)] }
   return [h('p', {}, h('b', {}, d.a.name), ' (A) against ', h('b', {}, d.b.name), ` (B): ${d.summary}`),
-    h('p', { class: 'muted small' }, 'From the files alone. To compare how they run, use scorm-lab diff --run.'),
+    h('p', { class: 'muted small' }, 'From the files alone. To compare how they run, use package-lab diff --run.'),
     h('h3', { class: 'section' }, 'Files'),
     ...table(['File', 'Size', 'Change'], [...f.added.map(x => [x.path, kb(x.size), 'added in B']), ...f.removed.map(x => [x.path, kb(x.size), 'only in A']), ...f.changed.map(x => [x.path, `${kb(x.before)} → ${kb(x.after)}`, 'changed'])]),
     f.changed.map(c => h('details', {}, h('summary', {}, h('span', { class: 'mono' }, c.path), h('span', { class: 'muted' }, ` ${kb(c.before)} → ${kb(c.after)}${c.diff === null ? c.tooBig ? ', too large to show line by line' : ', not a text file' : ''}`)), c.diff === null ? null : diffPre(c.diff))),
@@ -651,7 +651,7 @@ $('export').onclick = () => {
 const exportFixed = only => act(async () => {
   const r = await (lab.web ? lab.download(only) : lab.invoke('export-fixed', { only }))
   say(r.cancelled ? 'Export cancelled.' : !r.file ? 'Nothing to change: none of the fixes found anything to correct, and no files are changed.'
-    : `${lab.web ? 'Downloaded' : 'Saved'} ${r.file}: ${r.changes} change${r.changes === 1 ? '' : 's'}, ${r.gone} finding${r.gone === 1 ? '' : 's'} cleared, ${r.remaining} still there. SCORM-LAB-CHANGES.txt inside lists every change.`)
+    : `${lab.web ? 'Downloaded' : 'Saved'} ${r.file}: ${r.changes} change${r.changes === 1 ? '' : 's'}, ${r.gone} finding${r.gone === 1 ? '' : 's'} cleared, ${r.remaining} still there. PACKAGE-LAB-CHANGES.txt inside lists every change.`)
 }, 'Building the corrected package…')
 $('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeText($('cli-line').textContent); say('Copied.') })
 $('launch').onclick = () => act(async () => {
@@ -717,5 +717,5 @@ if (lab.web) lab.invoke('state').then(s => {
   if (s.pkg) showPackage(s.pkg)
   addRuns(s.runs)
   if (s.running) { st.running = s.running; $('stop').disabled = false; $('launch').disabled = true; st.tab = 'Live'; render() }
-  document.title = 'SCORM Lab (web)'
+  document.title = 'Package Lab (web)'
 }).catch(e => say(e.message))

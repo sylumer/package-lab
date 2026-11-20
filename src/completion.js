@@ -1,4 +1,4 @@
-// The command table (names, summaries, flags) and the zsh completion script (scorm-lab completion zsh). Pure. The
+// The command table (names, summaries, flags) and the zsh completion script (package-lab completion zsh). Pure. The
 // CLI's HELP text is the long form; the test checks that every command and flag here appears in it.
 import { PRESETS } from './experiments.js'
 import { PROFILE_NAMES } from './profiles.js'
@@ -63,7 +63,7 @@ const RUN = ['api', 'depth', 'window', 'resume-from', 'wait', 'options', 'option
 // name, what it does, its positional argument (see POS), its flags, and the kind of --out when it isn't a file.
 export const COMMANDS = [
   { name: 'analyze', summary: 'Check the package without running it', pos: 'zip', flags: ['item', 'tool', 'json', 'strict'] },
-  { name: 'doctor', summary: 'Check this Mac can run SCORM Lab', flags: ['port', 'json'] },
+  { name: 'doctor', summary: 'Check this Mac can run Package Lab', flags: ['port', 'json'] },
   { name: 'fix', summary: 'Write a corrected copy of the package', pos: 'zip', flags: ['only', 'override', 'out', 'json'] },
   { name: 'items', summary: 'List the items that can be launched', pos: 'zip', flags: ['item', 'tool', 'json'] },
   { name: 'run', summary: 'Launch an item in a hidden browser and report what went wrong', pos: 'zip', flags: ['item', 'strict', 'json', ...RUN] },
@@ -102,23 +102,23 @@ function optionSpec(name, kind) {
   return `'--${name}[${clean(f.help)}]:${name}:${action}'`
 }
 
-// The zsh completion script. Source it, or save it as _scorm-lab in a folder on your fpath (~/.zfunc is a common one).
+// The zsh completion script. Source it, or save it as _package-lab in a folder on your fpath (~/.zfunc is a common one).
 export function zshCompletion() {
   const list = COMMANDS.map(c => `    '${c.name}:${clean(c.summary)}'`).join('\n')
   const cases = COMMANDS.map(c => {
     const args = [...(c.pos ? POS[c.pos].map(p => `'${p}'`) : []), ...c.flags.map(n => optionSpec(n, c.kinds?.[n]))]
     return `    ${c.name})\n      shift words; (( CURRENT-- ))\n      _arguments \\\n${args.map(a => `        ${a}`).join(' \\\n')}\n      ;;`
   }).join('\n')
-  return `#compdef scorm-lab
-# zsh completion for scorm-lab, from scorm-lab completion zsh. Save it as _scorm-lab in a folder on your fpath, or source it.
+  return `#compdef package-lab
+# zsh completion for package-lab, from package-lab completion zsh. Save it as _package-lab in a folder on your fpath, or source it.
 
-_scorm_lab() {
+_package_lab() {
   local -a commands
   commands=(
 ${list}
   )
   if (( CURRENT == 2 )); then
-    _describe -t commands 'scorm-lab command' commands
+    _describe -t commands 'package-lab command' commands
     return
   fi
   case $words[2] in
@@ -129,10 +129,10 @@ ${cases}
   esac
 }
 
-if [[ $funcstack[1] == _scorm_lab ]]; then
-  _scorm_lab "$@"
+if [[ $funcstack[1] == _package_lab ]]; then
+  _package_lab "$@"
 else
-  compdef _scorm_lab scorm-lab
+  compdef _package_lab package-lab
 fi
 `
 }

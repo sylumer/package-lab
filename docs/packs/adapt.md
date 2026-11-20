@@ -34,7 +34,7 @@ Confidence: HIGH for config keys and defaults (README read). MEDIUM for SCORM 20
 - `imsmanifest.xml` (SCORM manifest; `adapt_manifest` identifier)
 - `scorm_test_harness.html`
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Reads `config.json` for the `_spoor` key and applies the README's keys: `_isEnabled` false (warning), `_scormVersion` (default 1.2) against the manifest (warning), `_showDebugWindow` (warning), and the 2004 limitation (info). These are confirmed in the package's files.
 

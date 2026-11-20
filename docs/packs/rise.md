@@ -34,7 +34,7 @@ Confidence: LOW. Only forum snippets were available; the Articulate threads retu
 - `tincan.xml` present means xAPI, not SCORM
 - Candidate strings, unconfirmed: `scormcontent`, `indexAPI.html`
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Detects `scormcontent/`. Static: a `tincan.xml` with no manifest reads as an xAPI export (info).
 

@@ -1,6 +1,6 @@
-# SCORM Lab
+# Package Lab
 
-SCORM Lab works out why a SCORM package doesn't work. A package might:
+Package Lab works out why an e-learning package (SCORM 1.2 or 2004, cmi5 or xAPI) doesn't work. A package might:
 
 - fail to launch;
 - show a blank page or a loading screen that never ends;
@@ -8,7 +8,7 @@ SCORM Lab works out why a SCORM package doesn't work. A package might:
 - not save progress;
 - work in one LMS, or in Chrome, but not in another LMS, Safari or on an iPad.
 
-SCORM Lab reads the package's files to work out how it should load. It then runs the package under the browser's
+Package Lab reads the package's files to work out how it should load. It then runs the package under the browser's
 debugger, with its own test LMS, and records what the code actually does. It turns that evidence into findings: what
 went wrong, the evidence for it, the likely cause, and what to try.
 
@@ -19,12 +19,12 @@ Everything runs on your Mac. No package content is sent anywhere.
 | Interface | Best for | Guide |
 |---|---|---|
 | **Desktop app** | Hands-on debugging: launch, use the course, dig through every tab | [User guide](docs/user-guide.md) |
-| **Command line** (`scorm-lab`) | Quick checks, scripted runs, reports, automation | [CLI](docs/cli.md) |
+| **Command line** (`package-lab`) | Quick checks, scripted runs, reports, automation | [CLI](docs/cli.md) |
 | **Web interface** | The full app from another computer, iPad or phone, with a live view of the course | [Web interface](docs/web.md) |
 | **Alfred** | Opening, checking or running a package straight from Alfred or Finder | [Alfred](docs/alfred.md) |
 | **Concierge module** | Upload, check and run packages from the Concierge dashboard on any device | [Concierge](docs/concierge.md) |
 
-Every finding SCORM Lab can report, with what it means and what to do, is listed in [Findings](docs/findings.md).
+Every finding Package Lab can report, with what it means and what to do, is listed in [Findings](docs/findings.md).
 For step-by-step diagnoses of common problems, see [Recipes](docs/recipes.md).
 
 ## Install
@@ -32,7 +32,7 @@ For step-by-step diagnoses of common problems, see [Recipes](docs/recipes.md).
 You need macOS and [Node.js](https://nodejs.org) 20 or later.
 
 ```bash
-cd ~/github/scorm-lab
+cd ~/github/package-lab
 npm install
 ```
 
@@ -41,12 +41,12 @@ Then, as you need them:
 ```bash
 npm link
 ```
-This makes the `scorm-lab` command available everywhere.
+This makes the `package-lab` command available everywhere.
 
 ```bash
 npm run install-app
 ```
-This builds `SCORM Lab.app` and puts it in Applications, so it appears in Finder's **Open With**, Launchpad and Alfred.
+This builds `Package Lab.app` and puts it in Applications, so it appears in Finder's **Open With**, Launchpad and Alfred.
 
 ```bash
 npm run alfred
@@ -67,27 +67,27 @@ npm start
 This opens the desktop app. Choose **Open package…**, read the findings, then **Launch**.
 
 ```bash
-scorm-lab analyze course.zip
+package-lab analyze course.zip
 ```
 This checks the package from its files only.
 
 ```bash
-scorm-lab run course.zip
+package-lab run course.zip
 ```
 This runs it for 10 seconds and reports what went wrong.
 
 ```bash
-scorm-lab report course.zip --run --open
+package-lab report course.zip --run --open
 ```
 This runs it and opens an HTML report.
 
 ```bash
-scorm-lab doctor
+package-lab doctor
 ```
 This checks that this Mac can do everything above (Node, Electron, WebKit, the data folder) and says what is missing.
 
 ```bash
-scorm-lab serve
+package-lab serve
 ```
 This starts the web interface. See [Web interface](docs/web.md) for reaching it from another device.
 
@@ -112,7 +112,7 @@ This starts the web interface. See [Web interface](docs/web.md) for reaching it 
 
 **Runs the package and records what happens**
 
-- **Test LMS:** launches the item in SCORM Lab's own LMS, and records every API call, every lookup of the API, requests,
+- **Test LMS:** launches the item in Package Lab's own LMS, and records every API call, every lookup of the API, requests,
   scripts, errors, console output, frames, what each frame showed at the end, the stored data and code coverage.
 - **Milestones:** where the run got on the SCORM path, in ten steps (the cmi5 and Tin Can paths have their own).
 - **Why it stalled:** what the content was still waiting for when it stopped: messages with no reply, timers that poll,
@@ -129,7 +129,7 @@ This starts the web interface. See [Web interface](docs/web.md) for reaching it 
 
 **Tests a theory by changing one thing**
 
-- **Overlays:** edit any text file of the package in SCORM Lab and run the edited copy. The original is kept, and a
+- **Overlays:** edit any text file of the package in Package Lab and run the edited copy. The original is kept, and a
   run tells you whether the change got it further.
 - **Pins and answers:** force a value the content reads before its own code runs (`--pin`), and answer a request with
   your own response (`--answer`).
@@ -148,7 +148,7 @@ This starts the web interface. See [Web interface](docs/web.md) for reaching it 
 - **cmi5 and xAPI:** a local learning record store (LRS) checks every statement against xAPI 1.0.3, and the cmi5 rules,
   as the LRS receives them.
 - **Interfaces:** the desktop app, the web interface (with a live view you can click and type into), the command line,
-  Alfred and the Concierge module. Shell completion for zsh is built in (`scorm-lab completion zsh`).
+  Alfred and the Concierge module. Shell completion for zsh is built in (`package-lab completion zsh`).
 
 ## Documentation
 

@@ -254,14 +254,14 @@ export function correct(files, { only, overrides = {} } = {}) {
 }
 
 export const changesText = (c, version, name = 'the package') => [
-  `SCORM Lab ${version}: changes made to ${name}`, '',
+  `Package Lab ${version}: changes made to ${name}`, '',
   ...(c.applied.length || c.overridden.length ? [] : ['No changes.', '']),
   ...(c.overridden.length ? ['Changed files (from the Files tab or --override):', ...c.overridden.map(p => `  - ${p}`), ''] : []),
   ...c.applied.flatMap(f => [`${f.label} [${f.id}]`, ...f.changes.map(x => `  - ${x}`), '']),
   ...(c.notes.length ? ['Not done:', ...c.notes.flatMap(f => f.notes.map(x => `  - ${x}`)), ''] : []),
   'Findings the changes cleared:', ...(c.proof.gone.length ? c.proof.gone.map(t => `  - ${t}`) : ['  (none)']),
   ...(c.proof.added.length ? ['', 'Findings that are new or have changed wording:', ...c.proof.added.map(t => `  - ${t}`)] : []),
-  '', `Findings still there: ${c.proof.remaining.length}. Run SCORM Lab on this package to see them.`, '',
+  '', `Findings still there: ${c.proof.remaining.length}. Run Package Lab on this package to see them.`, '',
   'The original package was not changed. Check the corrected package in your LMS before relying on it.', ''].join('\n')
 
 // The finished export: { zip: Buffer | null (nothing changed), ...correct() }.
@@ -269,7 +269,7 @@ export function exportFixed(files, { version = '', name, ...opts } = {}) {
   const c = correct(files, opts)
   if (!c.applied.length && !c.overridden.length) return { ...c, zip: null }
   const out = new Map(c.files)
-  out.set('SCORM-LAB-CHANGES.txt', Buffer.from(changesText(c, version, name), 'utf8'))
+  out.set('PACKAGE-LAB-CHANGES.txt', Buffer.from(changesText(c, version, name), 'utf8'))
   return { ...c, zip: zip(out) }
 }
 export const fixedName = name => `${String(name || 'package').replace(/\.zip$/i, '')}-fixed.zip`

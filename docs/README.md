@@ -1,4 +1,4 @@
-# SCORM Lab documentation
+# Package Lab documentation
 
 For people using it:
 
@@ -6,8 +6,8 @@ For people using it:
 - [Recipes](recipes.md): step-by-step diagnoses for the usual problems: works in the authoring tool but not in an LMS, a blank page, no API calls, doesn't resume, works in Chrome but not in Safari or on an iPad, and works in one LMS but not another.
 - [Findings](findings.md): every finding, what it means and what to try.
 - [Authoring tool notes](packs/README.md): what the rule packs know about Xyleme, Storyline, Adapt and the rest, and where it comes from.
-- [Command line](cli.md): `scorm-lab analyze`, `run`, `cycle`, `report`, `open`, `serve`; JSON output; live runs.
-- [Web interface](web.md): using SCORM Lab from another device, with the live view; security.
+- [Command line](cli.md): `package-lab analyze`, `run`, `cycle`, `report`, `open`, `serve`; JSON output; live runs.
+- [Web interface](web.md): using Package Lab from another device, with the live view; security.
 - [Alfred](alfred.md): the workflow's keywords and File Actions.
 - [Concierge](concierge.md): the Concierge dashboard module.
 

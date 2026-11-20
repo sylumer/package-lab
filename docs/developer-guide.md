@@ -1,6 +1,6 @@
-# SCORM Lab developer guide
+# Package Lab developer guide
 
-How SCORM Lab is built, the formats it reads and writes, and how to change it.
+How Package Lab is built, the formats it reads and writes, and how to change it.
 
 - [Principles](#principles)
 - [Layout](#layout)
@@ -31,7 +31,7 @@ How SCORM Lab is built, the formats it reads and writes, and how to change it.
 
 ## Principles
 
-- **Nothing leaves the machine.** No telemetry, no network calls of SCORM Lab's own, and no AI services. Packages are
+- **Nothing leaves the machine.** No telemetry, no network calls of Package Lab's own, and no AI services. Packages are
   read in memory.
 - **Evidence, then findings.** The recorder and the static analysis collect facts. Findings are pure functions over
   those facts, so they can be recomputed from a saved run and tested without Electron.
@@ -45,7 +45,7 @@ How SCORM Lab is built, the formats it reads and writes, and how to change it.
 ## Layout
 
 ```
-bin/scorm-lab.js        CLI
+bin/package-lab.js        CLI
 src/
   main.js               Electron main process: windows, lab:// server, runs, IPC and web handlers, headless runs
   preload.cjs           window.lab for the desktop window (IPC)
@@ -103,7 +103,7 @@ src/
     codeview.js         The shared code view (classic script, window.CodeView; P4.1)
     bridge.js           window.lab over HTTP when there is no preload (web)
 scripts/
-  package.js            Builds SCORM Lab.app (and --install)
+  package.js            Builds Package Lab.app (and --install)
   icon.cjs              Renders build/icon.svg to build/icon.png
   alfred.js             Builds the Alfred workflow
   alfred-scripts.js     The shell the workflow's script actions run; exported so the tests run it (P5.2)
@@ -116,7 +116,7 @@ test/codeview.js        Code view tests (imported by test.js): VLQ, source maps,
 docs/                   User and developer documentation
 ```
 
-The Concierge module is in the Concierge repo at `modules/scorm-lab/run`.
+The Concierge module is in the Concierge repo at `modules/package-lab/run`.
 
 ## Architecture
 
@@ -145,8 +145,8 @@ The Concierge module is in the Concierge repo at `modules/scorm-lab/run`.
 | `--serve[=port] [--host=…] [--no-window] [--show-runs]` | Web interface, with or without the window. Run windows are hidden without a window unless `--show-runs` |
 | `--run=<job.json>` | Headless (job: `{ zip, item, options, resumeFrom, out, live }`): load, launch, wait, write the run, quit. Uses a throwaway profile in the temp folder |
 
-`SCORM_LAB_DATA` replaces the data folder (`app.getPath('userData')`, by default
-`~/Library/Application Support/SCORM Lab`) for the first two modes.
+`PACKAGE_LAB_DATA` replaces the data folder (`app.getPath('userData')`, by default
+`~/Library/Application Support/Package Lab`) for the first two modes.
 
 The rest of the file, in order:
 
@@ -196,7 +196,7 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `state` | — | `{ pkg, runs, running, web }`: everything a new client needs |
 | `boot` | `{ item }` | The boot graph for a manifest item index |
 | `launch` | `{ item, cmi?, …launch options }` (flat; unknown options throw) | `true` |
-| `options` | `{ item?, …launch options }` | `{ options, command }`: the normalised options and the equivalent `scorm-lab run` line |
+| `options` | `{ item?, …launch options }` | `{ options, command }`: the normalised options and the equivalent `package-lab run` line |
 | `reference` | `{ url, caught, auto }` | `true` |
 | `files` | — | Every file of the package (and added override paths): `[{ path, size, text, overridden }]` |
 | `file` | `{ path }` | `{ path, size, text, tooBig, overridden, content, original }`. `content` is the text (the override if there is one), `null` for binary or over 1 MB; `original` the unchanged text when overridden |
@@ -268,7 +268,7 @@ Content runs sandboxed with context isolation, without Node.
 ```
 
 On `host.html` it makes the API objects with `scormRuntime` (`scorm-runtime.js`, copied from toolbox: full data models,
-error codes and validation for 1.2 and 2004; SCORM Lab added the profile's `limits`, `commit` and `slowMs`). It puts
+error codes and validation for 1.2 and 2004; Package Lab added the profile's `limits`, `commit` and `slowMs`). It puts
 them, after `apiDelay` ms, on the window `apiAt` names, as `API` and `API_1484_11`: 0 is `host.html` itself, n is the
 LMS frame `wrap.html#n`, n frames above the content (`wrap.html#1` is its parent). The objects stay `host.html`'s, so
 its log reports every call wherever they are; `wrap.html#n` asks for them with `__labPlace(window)` on `host.html` (its
@@ -284,7 +284,7 @@ the stored values; `finish()` reads it.
 
 ## LMS profiles
 
-`src/profiles.js` (P2.1) is pure. A profile has these fields (the values are the `generic` preset, SCORM Lab's own test
+`src/profiles.js` (P2.1) is pure. A profile has these fields (the values are the `generic` preset, Package Lab's own test
 LMS):
 
 ```js
@@ -335,7 +335,7 @@ the mode a run uses: `normal` means "as the profile says", so a profile whose `c
 `blocked`; an explicit `partitioned` or `blocked` wins. `launchItem` saves it as `launch.storage` (new; `launch.options.storage`
 is the option as given), passes it to `begin`, and the run's label says it when it isn't normal.
 - **blocked:** the recorder puts `globalThis.__labStorage = 'blocked'` ahead of the probe (`storagePrefix`). The probe
-  reads and deletes it, and, in content frames only (not SCORM Lab's `lab://run/__lab/` pages), defines accessors that
+  reads and deletes it, and, in content frames only (not Package Lab's `lab://run/__lab/` pages), defines accessors that
   throw `DOMException('The operation is insecure.', 'SecurityError')` for `window.localStorage` and `sessionStorage`
   (Safari's refusal), on `Document.prototype.cookie` (reads `''`, writes ignored) and replaces `IDBFactory.prototype.open`
   with a function returning a stand-in request whose `error` is that `SecurityError`, fired to `onerror` and error
@@ -358,12 +358,12 @@ A preset is one entry in `PROFILES` (`src/profiles.js`). To add one:
 2. Nothing else lists the names in code. `PROFILE_NAMES` is read from `PROFILES` by the `--profile` completion, by
    `doctor --json` (its `profiles`), by the `lms` experiment preset, and by the **Profile** list in the apps (which adds
    "(approximation)" to a preset that has the flag).
-3. Update the text that lists the names by hand: the `--profile` line of the help in `bin/scorm-lab.js`, the profile
+3. Update the text that lists the names by hand: the `--profile` line of the help in `bin/package-lab.js`, the profile
    paragraph in `docs/user-guide.md`, and the `--profile` line in `docs/cli.md`.
 4. Add a unit check if the preset has a combination `launchProfile` must refuse (for example a frameset with a sandbox),
    and run `node test/test.js --unit`.
 
-The `lms` experiment then includes it, so `scorm-lab experiment course.zip --preset lms` shows how it compares.
+The `lms` experiment then includes it, so `package-lab experiment course.zip --preset lms` shows how it compares.
 
 ## Vendored libraries
 
@@ -400,14 +400,14 @@ auto-attached target too). It reports through the `__labReport` binding:
 | `{ type: 'pin-failed', path, error }` | The pin couldn't be defined: a frozen object, a name the browser won't redefine |
 | `{ type: 'shape', url, path, use, n, stack }` | From `shape-probe.js`, only in runs that answer with `@probe`: a read of `path` (dotted, from the top of the response) in the response from `url` (`use: 'read'`), or how a missing value was used: `in`, `keys`, `array` (iterated, `length`, an array method called), `string` (a string method called, or turned into a string), `number` (turned into a number), `text` (`+` or `==`). Throttled like lookups per path, use and call site; at most 3,000 per frame |
 | `{ type: 'exec', events, wrapped }` | From `trace-probe.js`, in traced runs only: a batch of execution trace events. The recorder puts these in `trace.exec`, not `trace.probe` |
-| `{ type: 'timers', raf, sites, list }` | From the timer hooks (not in SCORM Lab's host pages): a summary of `setTimeout` and `setInterval` per kind and call site. `list` is `[kind, delay, created, fired, cleared, msSinceLastRun]` and `sites[i]` is the caller's stack line for `list[i]`. `raf` counts `requestAnimationFrame` calls. At most once a second for the first 30, then every 5 s, and when the page hides or the recorder stops. The recorder's own `t` is when it arrived; the last one of a frame is the state at the end |
+| `{ type: 'timers', raf, sites, list }` | From the timer hooks (not in Package Lab's host pages): a summary of `setTimeout` and `setInterval` per kind and call site. `list` is `[kind, delay, created, fired, cleared, msSinceLastRun]` and `sites[i]` is the caller's stack line for `list[i]`. `raf` counts `requestAnimationFrame` calls. At most once a second for the first 30, then every 5 s, and when the page hides or the recorder stops. The recorder's own `t` is when it arrived; the last one of a frame is the state at the end |
 | `{ type: 'listener', id, stack }`, `{ type: 'msg-run', id, n }` | A `message` listener (a function, on a window) registered, and each run of it (the first five of each, then every hundredth). `id` is per frame |
 | `{ type: 'post', to, shape, origin, n, stack }` | A `postMessage` call, reported by the realm of the window it was called on, so `to` is that window's URL (empty for another origin, where it can't be read). `shape` is `{ kind, value? }` for a primitive, `{ kind: 'array' }`, `{ kind: 'object' }` (a class instance or other non-plain object), or `{ kind: 'object', keys (first 5), vals }` for a plain object (read by descriptor, no getters), where `vals` has only numbers, booleans and strings of 80 characters or less; every stored string (keys, origin, kind) is cut at 80 characters. Residual: a `Proxy` can't be told from an object, so its `getPrototypeOf` trap (and `ownKeys`, if it looks plain) runs when it is inspected. Throttled per target and shape (the first 10, then every hundredth; at most 200 distinct kinds per frame, then none) |
 | `{ type: 'input', kind, x, y, key, text }` | P2.4, content frames only: a trusted `pointerdown` (left button; `kind: 'click'`, `x` and `y` 0–1 across the top frame, the frames' offsets added up where they can be reached), a `keydown` of a named key (`kind: 'key'`, `key` in the names `live-input` takes) or an `input` event with text (`kind: 'text'`). A click whose frames can't all be reached (another origin) has `approx: true`. Text is reported only when the run has `recordInput` (the probe prefix `window.__labText`), and for a target (`composedPath()[0]`) that is a password field or has `autocomplete` `current-password`, `new-password`, `cc-…` or `one-time-code` it is `{ kind: 'text', length, redacted: true }`, and its `keydown`s aren't reported at all. At most 2,000 per frame. `macroFromTrace` (`src/cycle.js`) turns them into macro events |
 | `{ type: 'unload', event, listeners, props }` | P2.4, content frames only: once, when the first of `beforeunload`, `pagehide` and `unload` reaches the window (a capture listener, added first). `listeners` counts the listeners the content added on its window for each of the three (by the `addEventListener` hook); `props` lists the `on…` handlers it has (also those of `<body onunload>`). Later ones aren't reported: a page that is going away may not get a report out |
 | `{ type: 'cmi-now', values }` | From the test LMS's page (`host.js`), only when the page's config has `snapshots` (a run that will leave like a learner: `launchItem` sets it from `leave`), after each call that can change the data model (`SetValue`, `Commit`, `Finish`, `Terminate`): at most every 250 ms, and at once once the page is hiding. The recorder keeps only the last as `lastCmi` and does not put it in `trace.probe`; WebKit never gets them |
 | `{ type: 'leave' }`, `{ type: 'dialog', kind, message, leaving }`, `{ type: 'macro-skipped', count, message }` | Made by the main process through the recorder, not by the probe. `leave`: where the learner-style leave starts (`cycle.js` reads the unload reports and API calls after the last one). `dialog`: a JavaScript dialog opened (a `beforeunload` prompt is accepted only while `leaving`; otherwise it is left as before). `macro-skipped`: approximate clicks a macro didn't replay |
-| `{ type: 'dom', readyState, text, sample, visible, media, frames, loader, hidden, elements, w, h }` | What the frame shows. Sent at DOMContentLoaded, load, page hide, and 1–60 s after start, only when it changes. Not sent from SCORM Lab's host pages |
+| `{ type: 'dom', readyState, text, sample, visible, media, frames, loader, hidden, elements, w, h }` | What the frame shows. Sent at DOMContentLoaded, load, page hide, and 1–60 s after start, only when it changes. Not sent from Package Lab's host pages |
 
 The recorder adds `t` (ms since start), `sid` and `frame` (the frame's URL). Its `t` and `sid` win over any the
 report carries (the test LMS's API calls carry `Date.now()`, which used to make milestone times absolute).
@@ -497,7 +497,7 @@ and `savedRun`. `launchPlan` takes `origins`: `WEBKIT_ORIGINS` (`https://lms.lab
 script put into every frame (storage mode, pins, shape and trace probes, then `probe.js`), for both browsers.
 
 **WebKit runner.** `src/webkit-runner.js` (`runWebkit`, `runJob`, and a script mode: `node webkit-runner.js job.json`)
-runs in Node, never Electron. `loadPlaywright()` does `import('playwright')`; if it is missing (or `SCORM_LAB_NO_PLAYWRIGHT=1`),
+runs in Node, never Electron. `loadPlaywright()` does `import('playwright')`; if it is missing (or `PACKAGE_LAB_NO_PLAYWRIGHT=1`),
 it throws "WebKit runs need Playwright, which isn't installed here. Install it with: npm i -D playwright && npx playwright
 install webkit". Playwright is an optional devDependency; nothing else imports it. What a run does:
 
@@ -662,7 +662,7 @@ code that differs between browsers. `now` is the run's clock (the recorder's `t(
 - Limits: a body over 10 MB (`MAX_BODY`; main.js and the WebKit runner refuse it before reading), more than 100 statements in a request, 2000 statements, 200 documents and 5 MB of documents are 413. CORS is answered only for the test LMS's origins. `maskTokens(trace)` replaces a Tin Can run's `auth=` values with `‹token›` in the trace's text; the saved `launch.url` is built with it already.
 - Statements: PUT (needs `statementId`, a body id is optional, 204; the same statement again 204, a different one with that id 409), POST (one or a list; the ids), GET (`statementId`,
   `voidedStatementId`, or `since`, `until`, `verb`, `activity`, `registration`, `agent`, `related_*`, `limit`, `ascending`, `format=ids`; `more` is always empty).
-  The LRS adds `stored`, `authority` (an account `scorm-lab`), `version` and a default `timestamp`. A "voided" statement hides its target. The alternate request
+  The LRS adds `stored`, `authority` (an account `package-lab`), `version` and a default `timestamp`. A "voided" statement hides its target. The alternate request
   syntax (a POST with `method=`) is supported. One invalid statement refuses the whole request (400) and none is stored.
 - Documents: state (activityId, agent, registration, stateId), activity profile, agent profile. PUT and POST (POST merges JSON objects), GET (one document, or the ids
   with `since`), DELETE (a state's DELETE with no `stateId` clears it). Profiles need If-Match / If-None-Match to change a document that exists (409 / 412);
@@ -751,7 +751,7 @@ every reader of a traced run (findings, discovery's source hints, comparisons) s
 The run summary the interfaces get has no `exec` or `sites`; it has `execEvents` (the count) and `execTail` (the last
 500 from `lastEvents`, worked out once per run). The `source` handler takes `{ run, path }` too, for the Execution tab.
 
-`SCORM_LAB_FORCE_TRACE=1` makes `launchItem` trace every run: the tests use it.
+`PACKAGE_LAB_FORCE_TRACE=1` makes `launchItem` trace every run: the tests use it.
 
 ## The drill-down
 
@@ -798,7 +798,7 @@ in `main.js` (in the experiment slot; traces the run again first if it wasn't tr
 
 ## Pins and answers
 
-`src/pins.js` is pure. A **pin** is `{ path, value, frames, mode }` in `options.pins` (checked in `options.js`; `mode` is `'force'` or `'watch'`, `PIN_MODES` in `pins.js`). A **watch** pin (`{ path, frames, mode: 'watch' }`, no value; the drill-down adds them) records reads and writes without forcing anything: its leaf is an accessor that passes the value through (or the original accessor's getter and setter), non-enumerable if the name didn't exist until it is written. Intermediate names of dotted paths share one accessor per object and name (`hooks` in `probe.js`), so `config.a` and `config.b` both follow a new `config`, and a watch on `config` itself reports through that shared accessor; pins are installed longest path first for that. `pinFindings` ignores watch pins. The recorder puts `globalThis.__labPins = [...]` ahead of `probe.js` (`pinPrefix`, applied through `Page.addScriptToEvaluateOnNewDocument` in every page and iframe); the probe reads and deletes it, drops the pins whose `frames` doesn't cover this frame (`'content'` excludes SCORM Lab's own `lab://run/__lab/` pages) and installs each one. A top-level name becomes an accessor on `window`: the getter returns the value and reports `pin-read`, the setter ignores the assignment and reports `pin-write`, so `var x = …` at the top of a classic script assigns through it. A dotted path is an accessor on the root that, when given an object, installs the next segment on that object, and so on; a frozen object makes `defineProperty` throw, which is reported as `pin-failed`. The accessors are `configurable: true` (the plan said `false`) so that a top-level `let` or `const` in the content creates its own binding instead of a SyntaxError that would stop the whole script; `pinFindings` then recognises that case (the pin was never read or written, and `lexicalDeclaration` finds a column-0 `let`/`const` of the root name in `trace.sources`) and says so. Inline scripts count only if the browser recorded them under their page's URL; a `let` inside a function or an indented block isn't a global and isn't matched. `navigator.userAgent` is the exception: `userAgentPin` gives the value, and the recorder sends `Emulation.setUserAgentOverride` to every session. `location` and the other `navigator` names are refused; `launchParams` goes on the launch URL instead.
+`src/pins.js` is pure. A **pin** is `{ path, value, frames, mode }` in `options.pins` (checked in `options.js`; `mode` is `'force'` or `'watch'`, `PIN_MODES` in `pins.js`). A **watch** pin (`{ path, frames, mode: 'watch' }`, no value; the drill-down adds them) records reads and writes without forcing anything: its leaf is an accessor that passes the value through (or the original accessor's getter and setter), non-enumerable if the name didn't exist until it is written. Intermediate names of dotted paths share one accessor per object and name (`hooks` in `probe.js`), so `config.a` and `config.b` both follow a new `config`, and a watch on `config` itself reports through that shared accessor; pins are installed longest path first for that. `pinFindings` ignores watch pins. The recorder puts `globalThis.__labPins = [...]` ahead of `probe.js` (`pinPrefix`, applied through `Page.addScriptToEvaluateOnNewDocument` in every page and iframe); the probe reads and deletes it, drops the pins whose `frames` doesn't cover this frame (`'content'` excludes Package Lab's own `lab://run/__lab/` pages) and installs each one. A top-level name becomes an accessor on `window`: the getter returns the value and reports `pin-read`, the setter ignores the assignment and reports `pin-write`, so `var x = …` at the top of a classic script assigns through it. A dotted path is an accessor on the root that, when given an object, installs the next segment on that object, and so on; a frozen object makes `defineProperty` throw, which is reported as `pin-failed`. The accessors are `configurable: true` (the plan said `false`) so that a top-level `let` or `const` in the content creates its own binding instead of a SyntaxError that would stop the whole script; `pinFindings` then recognises that case (the pin was never read or written, and `lexicalDeclaration` finds a column-0 `let`/`const` of the root name in `trace.sources`) and says so. Inline scripts count only if the browser recorded them under their page's URL; a `let` inside a function or an indented block isn't a global and isn't matched. `navigator.userAgent` is the exception: `userAgentPin` gives the value, and the recorder sends `Emulation.setUserAgentOverride` to every session. `location` and the other `navigator` names are refused; `launchParams` goes on the launch URL instead.
 
 An **answer** is `{ match, method?, status, headers, body }` in `options.responses`. With responses set, `Recorder.setup` calls `Fetch.enable` (all URLs, request stage) on every session. In Electron the content's https requests are served by `main.js`'s `https` handler, and the Fetch domain never pauses them, so the handler runs `answerFor` itself (on the `lab://` form of the URL), fulfils with `buildAnswer`, and logs `{ method, url, index }`; `markAnswers` (`recorder.js`) marks the matching `trace.requests` entries when the run ends. `Fetch.requestPaused` still answers other schemes: it runs `answerFor(responses, url, method)`: the first response that matches (glob or `/regex/flags`, tried on the whole URL, the path with query, and the path) and isn't for `lab://run/__lab/` is sent with `Fetch.fulfillRequest` (`buildAnswer`: base64 body, a content type guessed from the body if none, CORS opened if not set; a body starting `@probe` is a [probing answer](#discovery-what-the-content-wants-from-its-server)); everything else gets `Fetch.continueRequest`. The matching request in `trace.requests` gets `answered: true` and `answeredBy` (the response's index in the list). `networkId` links the paused request to the Network event, which can arrive on either side of it. Responses apply to package runs only, in every frame and popup. `bodyFile` isn't an option: only the CLI reads files (`--answer pattern=@file`, or a response's `bodyFile` in an `--options` file, relative to that file) and it puts the text in `body`; `normaliseOptions` refuses `bodyFile`, so the web handlers can't be made to read a path.
 
@@ -843,7 +843,7 @@ otherwise boolean. It returns `{ skeleton, fields: [{ path, type, how, at }] }`,
 **The loop.** `discover({ base, request?, rounds = 5, run, onRound })`: `run(name, options)` must run one launch to its
 end and resolve to the saved run (the CLI calls `runPackage`; `main.js` calls `runToEnd`, which experiments use too).
 It runs `no answer` with the base options; takes `request`, or `serverRequests(trace)` (fetch and XHR outside the package
-and SCORM Lab's pages, one per `requestPattern`: the path for the host's root, origin and path for another site); then
+and Package Lab's pages, one per `requestPattern`: the path for the host's root, origin and path for another site); then
 `round n` with a probing response per pattern ahead of the base responses: `@probe` in round 1, `@probe <skeleton so
 far>` after. It stops when a round adds no new path (`complete: true`) or after `rounds`. Each run becomes an experiment
 row (`runResult`, `summarise`; the first row's progress is `the baseline`), and `onRound(row, index)` is called after
@@ -856,13 +856,13 @@ both stop it), emits `discover` events (`{ state: 'start', request }`, `{ state:
 keeps it in `st.disc`; **Save as response** puts `result.requests[i].response` into `st.responses`, replacing one with
 the same pattern.
 
-### Saved discovery (`scorm-lab-discovery`, version 1)
+### Saved discovery (`package-lab-discovery`, version 1)
 
 `<userData>/discoveries/<time>-<package>.json` in the apps; `discovery.json` in the CLI's `--out` folder has the CLI's
 JSON instead.
 
 ```js
-{ format: 'scorm-lab-discovery', version: 1, package, item (manifest index), base (options), request: pattern | null,
+{ format: 'package-lab-discovery', version: 1, package, item (manifest index), base (options), request: pattern | null,
   requests: [{ match, url, method, from, fields: [{ path, type, how, at: ['file:line'] }], skeleton, response }],
   rows: [experiment row], rounds, complete, noAnswer: { furthest, label }, standIn: { name, furthest, label, better }, findings,
   file }
@@ -893,7 +893,7 @@ All paths are checked by `packagePath` in `options.js` (relative, `/` only, no `
 
 Edits to text are quoted-string swaps (`swapQuoted`): unquoted attributes and strings built at run time are left (and still show as findings afterwards, which the proof reports).
 
-`correct(files, { only, overrides })` puts the overrides on top (`overlayFiles`), runs the selected fixes in order, and returns `{ files, applied: [{ id, label, changes }], overridden, proof }`. `proof` is `prove(before, after)`: the titles of `staticAll()` (the static and first-SCO boot findings) before and after, as `gone`, `remaining` and `added` (a changed count in a title shows as one gone and one added). `exportFixed(files, { version, name, only, overrides })` adds `SCORM-LAB-CHANGES.txt` at the top of the ZIP and returns the zip (`null` when nothing changed). The interfaces: `fix` in `bin/scorm-lab.js`; `handlers['export-fixed']` in `main.js` (a save dialog; desktop only, listed in `DESKTOP_ONLY` in `web.js`); and `GET /api/export` (the `download` option of `startWeb`; the summary is in the `X-Scorm-Lab-Summary` header) for web clients, used by `lab.download()` in `ui/bridge.js`.
+`correct(files, { only, overrides })` puts the overrides on top (`overlayFiles`), runs the selected fixes in order, and returns `{ files, applied: [{ id, label, changes }], overridden, proof }`. `proof` is `prove(before, after)`: the titles of `staticAll()` (the static and first-SCO boot findings) before and after, as `gone`, `remaining` and `added` (a changed count in a title shows as one gone and one added). `exportFixed(files, { version, name, only, overrides })` adds `PACKAGE-LAB-CHANGES.txt` at the top of the ZIP and returns the zip (`null` when nothing changed). The interfaces: `fix` in `bin/package-lab.js`; `handlers['export-fixed']` in `main.js` (a save dialog; desktop only, listed in `DESKTOP_ONLY` in `web.js`); and `GET /api/export` (the `download` option of `startWeb`; the summary is in the `X-Package-Lab-Summary` header) for web clients, used by `lab.download()` in `ui/bridge.js`.
 
 **Adding an autofix:**
 1. Add an entry to `FIXES` in `src/fixes.js`, in the position it should run. `apply` returns `{ files, changes }`, with one plain sentence per change, and no changes when there is nothing to do. Never write outside the Map.
@@ -912,7 +912,7 @@ Edits to text are quoted-string swaps (`swapQuoted`): unquoted attributes and st
 - `staticRows(files, { jobs, fragment })` runs `checkPackage` in up to `jobs` worker threads (`src/batchworker.js`, the same
   pattern as `codeworker.js`). Each lane takes the next file when free; a worker that dies makes its file a failed row, and
   the lane gets a new thread. Results are in file order.
-- `runRow(row, json)` and `failedRun(row, why)` merge a run into a row. The run's JSON is what `scorm-lab run --json`
+- `runRow(row, json)` and `failedRun(row, why)` merge a run into a row. The run's JSON is what `package-lab run --json`
   prints: its `verdict`, `counts` and `milestones` give the verdict, the counts and the furthest label.
 - `batchFiles(inputs, { recursive })` turns a folder into its `.zip` names (sorted; hidden entries skipped). Any other input
   is kept as a path, so a missing one is a failed row.
@@ -921,8 +921,8 @@ Edits to text are quoted-string swaps (`swapQuoted`): unquoted attributes and st
   characters are dropped first, as the CLI does for everything from a package. `batchHtml` escapes its text with `esc`, puts
   each package's section (a `<details id="pkg-N">`) below the summary, and links to it from the first column.
 
-The CLI's `batch` command (`bin/scorm-lab.js`) runs the static pass with `staticRows`, then, with `--run`, `runBatch`: each
-package runs as a child process, `scorm-lab run --json --out <file>`, so Electron is never started twice in one process (its
+The CLI's `batch` command (`bin/package-lab.js`) runs the static pass with `staticRows`, then, with `--run`, `runBatch`: each
+package runs as a child process, `package-lab run --json --out <file>`, so Electron is never started twice in one process (its
 run is `spawnSync`) and the run's own code path is the one `run` uses. The run file is read back for its report section.
 Limits: one run at a time, or two with `--jobs` over 1. A run that exits with an error is a row marked failed, with the
 last line of its stderr.
@@ -1025,7 +1025,7 @@ ids, in order, are `launched`, `scripts`, `shown`, `looked`, `found`, `initialis
 - `launched` and `scripts` use `bootRun(boot, trace)`: the launch page returned 2xx or 3xx, and every script tag in the
   boot path that lives in the package was requested without failing. Script tags on other sites are not counted. With
   no boot graph (`null`), they are judged from the package requests instead.
-- `shown` uses any content frame's DOM report (not SCORM Lab's own page), at any time in the run.
+- `shown` uses any content frame's DOM report (not Package Lab's own page), at any time in the run.
 - `found` is also true if the API was called, since a call implies the API was there.
 - `initialised`, `committed` and `finished` need the call to have returned `'true'`; `read` and `wrote` match the
   element names (1.2 and 2004) in `READ` and `WRITE` and don't look at the result.
@@ -1163,7 +1163,7 @@ fills it, and `link(text)` turns the file:lines of a piece of evidence into butt
 
 **Report.** `renderReport({ …, files })` (a Map of package path → Buffer; the saved run's `trace.sources` are used first)
 makes every `file:line` of a finding's evidence an `<a href="#sl-x-N">` and puts a `<details class="sl-excerpt">` with the
-escaped lines under the finding. The text is the run's changed file (`launch.options.files`) first, then its recorded source, then `files`. `excerpts: false` leaves out excerpts and links (for the redacted report). Without any of them it is as before. `scorm-lab report` passes the package's
+escaped lines under the finding. The text is the run's changed file (`launch.options.files`) first, then its recorded source, then `files`. `excerpts: false` leaves out excerpts and links (for the redacted report). Without any of them it is as before. `package-lab report` passes the package's
 files. The desktop and web reports aren't built from the interface.
 
 ## Reports
@@ -1246,7 +1246,7 @@ The page's CSP allows only its own scripts and styles, and `data:` images (for l
 | `GET /api/events` | Server-sent events: `package`, `run`, `state`, `probe`, `experiment`, `discover` |
 | `GET /api/live` | Server-sent events: `frame` with `{ w, h, t, jpeg (base64) }`. Open connections count as watchers |
 
-Every request except the token exchange needs the `scormlab` cookie, compared in constant time. Responses carry
+Every request except the token exchange needs the `packagelab` cookie, compared in constant time. Responses carry
 `no-store`, `nosniff`, `DENY` framing and `no-referrer`. The token is 24 random bytes, kept in `<userData>/web-token`
 with mode 600.
 
@@ -1256,7 +1256,7 @@ dialog, Live tab, joining a session in progress).
 
 ### CLI
 
-`bin/scorm-lab.js` does static work in Node, importing the same modules. For runs, it writes a job file to a temp
+`bin/package-lab.js` does static work in Node, importing the same modules. For runs, it writes a job file to a temp
 folder:
 
 ```json
@@ -1267,7 +1267,7 @@ folder:
 The job also carries `options`, the normalised launch options (P0.1); the headless run normalises them again. It then
 runs Electron with `--run=<job>` (stdout ignored, stderr to a log), waits for `out`, and reads the run back. With `--browser webkit` it runs `src/webkit-runner.js` in Node instead (see Other browsers and device sizes).
 `item` here is the manifest item index; the CLI's `--item` numbers are positions among launchable items. Electron is
-chosen from `SCORM_LAB_ELECTRON`, then this repo's `electron` package, then `/Applications/SCORM Lab.app`.
+chosen from `PACKAGE_LAB_ELECTRON`, then this repo's `electron` package, then `/Applications/Package Lab.app`.
 
 ## Data formats
 
@@ -1276,13 +1276,13 @@ Every file or object the tools read and write, and where each is described:
 | Format | Where it's written | Described in |
 |---|---|---|
 | Launch options (`options`, normalised) | A run's `launch.options`; a `--options` file; the apps' More options | [Launch options](#launch-options) |
-| Saved run (`scorm-lab-run`, version 1) | `runs/` in the data folder; `run --out`; each experiment, drill and cycle run | [Saved run](#saved-run-scorm-lab-run-version-1) |
+| Saved run (`package-lab-run`, version 1) | `runs/` in the data folder; `run --out`; each experiment, drill and cycle run | [Saved run](#saved-run-package-lab-run-version-1) |
 | Execution trace (`trace.exec`, `trace.sites`) | A traced run's saved run | [The execution trace](#the-execution-trace) |
 | Milestones | Each package run (`milestones`, `furthest`) | [Milestones](#milestones) and [below](#milestones-in-a-saved-run) |
-| Discovery (`scorm-lab-discovery`, version 1) | `discoveries/` in the data folder; `discover --out` | [Saved discovery](#saved-discovery-scorm-lab-discovery-version-1) |
+| Discovery (`package-lab-discovery`, version 1) | `discoveries/` in the data folder; `discover --out` | [Saved discovery](#saved-discovery-package-lab-discovery-version-1) |
 | Experiment result (`experiment.json`) | `experiment --out`; the Experiments tab | [below](#experiment-result-experimentjson) |
 | Cycle result | `cycle --json`; `cycle --out` keeps the two runs | [below](#cycle-result) |
-| Macro (`scorm-lab-macro`, version 1) | A macro file; the `macro` option | [below](#macro-scorm-lab-macro-version-1) |
+| Macro (`package-lab-macro`, version 1) | A macro file; the `macro` option | [below](#macro-package-lab-macro-version-1) |
 | Profile | The `profile` option (a name or an object); `--profile-file` | [LMS profiles](#lms-profiles) |
 | Rule pack | `src/packs/<tool>.js` | [Rule packs](#rule-packs-p32) |
 | Boot graph | `analysis.boot`; a run's `boot` | [The boot graph](#the-boot-graph) |
@@ -1290,11 +1290,11 @@ Every file or object the tools read and write, and where each is described:
 | Corrected package and its changes file | `fix`; Export corrected package | [Corrected package export](#corrected-package-export-p31) |
 | Drill-down result (`drill.json`) | `drill --out` | [drill](cli.md#drill) |
 
-### Saved run (`scorm-lab-run`, version 1)
+### Saved run (`package-lab-run`, version 1)
 
 ```js
 {
-  format: 'scorm-lab-run', version: 1,
+  format: 'package-lab-run', version: 1,
   kind: 'package' | 'reference', label, package,          // package file name
   launch: { version, format, expose, depth, opener, item, itemIndex, itemType, url, resume, options, profile },  // reference: { url }; options (added in P0.1) is the normalised launch options; profile (P2.1) the resolved LMS profile, every field
   findings: [finding],                                     // as computed when saved; readers recompute
@@ -1365,13 +1365,13 @@ A frame is `{ fn, url, line, col }`. Older runs without `format` (from before ve
 its own list, `CMI5_STEPS` or `TINCAN_STEPS` in `src/milestones.js` (`stepsFor(format)` picks it), so read `id`s
 against that list, not against `STEPS`.
 
-### Macro (`scorm-lab-macro`, version 1)
+### Macro (`package-lab-macro`, version 1)
 
 A macro file is a list of events, or this object (`macroFile(events)` in `src/cycle.js` writes it; `readMacro` reads
 either form):
 
 ```js
-{ format: 'scorm-lab-macro', version: 1,
+{ format: 'package-lab-macro', version: 1,
   events: [{ t, type: 'click' | 'move' | 'wheel' | 'key' | 'text', x, y, dy, key, text, approx? }] }
 ```
 
@@ -1412,7 +1412,7 @@ and no macro in its `launch.options` (`resumeOptions` makes it), and its `trace.
 npm test
 ```
 
-`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `SCORM_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers; P2.1: profiles with a delayed popup, a frameset, a late API and a CSP, and the `lms` experiment; P3.1: the corrected `blank` and `mismatch` run (no longer blank, API calls appear), and the corrected package as a web download). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
+`npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `PACKAGE_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers; P2.1: profiles with a delayed popup, a frameset, a late API and a CSP, and the `lms` experiment; P3.1: the corrected `blank` and `mismatch` run (no longer blank, API calls appear), and the corrected package as a web download). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
 `test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
 
 The code views (P4.1) have no end-to-end run: `test/codeview.js` is pure and runs in `--unit`. It tests the handler's own function (`codeView`), so the main process is only a thin wrapper, and measures a 2 MB file (opening, then formatting). The DOM part of `src/ui/codeview.js` (drawing, virtual scrolling, search) isn't in the suite; it was checked by hand in a browser against `codeView` output. The 300 ms goal is for opening (the original text with coverage, markers and any map); formatting 2 MB takes about 0.5 s and is a second step.
@@ -1459,7 +1459,7 @@ The end-to-end part covers:
   with status 2. The unit checks validate every preset (and their sources, once `PRESET_SOURCES_PENDING` is false), the
   checks and combinations, `apiAt`, placeholders, `nameAt`, and the findings over hand-made probes.
 - **Corrected package (P3.1):** unit checks cover the writer (empty, binary, large, non-ASCII names with the UTF-8 flag, the CRC table against zlib, `unzip -t`) and each fix on small packages built in memory, the `autofix` data on findings, and the export (overrides first, change list, proof, `only`, nothing to change). The CLI checks in the default suite run `fix` on `blank` and `mismatch`, check the output with `unzip -t` and the reader, and `analyze` it (no capitals finding; no version finding; a missing script is still reported). The Electron runs on the corrected packages and the web download are `--slow`.
-- **Storage (P2.2):** `stored` (boot.js reads and writes `localStorage` and only starts the lesson if that worked) works as it is and with `--storage partitioned`; with `--storage blocked` (and, with `--slow`, `--profile scorm-cloud`), it never starts, so it never looks for the API, and gets "The content needs storage the browser can block", whose evidence names the line in `boot.js`, with the one uncaught `SecurityError` it caused; with `--slow`, `good` (which uses no storage) gets no such finding, and the `storage` experiment says "With storage blocked, the content gets less far". The unit checks run the probe under `vm` (localStorage and sessionStorage throw `SecurityError`, cookies read empty, `indexedDB.open` fails to both `onerror` and listeners, SCORM Lab's own pages and the other modes are untouched), and cover `storageMode`, `storageFindings` and the experiment finding. A `--window` run of `good` is matched in the trace (the popup bug above).
+- **Storage (P2.2):** `stored` (boot.js reads and writes `localStorage` and only starts the lesson if that worked) works as it is and with `--storage partitioned`; with `--storage blocked` (and, with `--slow`, `--profile scorm-cloud`), it never starts, so it never looks for the API, and gets "The content needs storage the browser can block", whose evidence names the line in `boot.js`, with the one uncaught `SecurityError` it caused; with `--slow`, `good` (which uses no storage) gets no such finding, and the `storage` experiment says "With storage blocked, the content gets less far". The unit checks run the probe under `vm` (localStorage and sessionStorage throw `SecurityError`, cookies read empty, `indexedDB.open` fails to both `onerror` and listeners, Package Lab's own pages and the other modes are untouched), and cover `storageMode`, `storageFindings` and the experiment finding. A `--window` run of `good` is matched in the trace (the popup bug above).
 - **Drill-down:** `drill hosted --json` names the failed `/api/player/config` request, with one run (the operand is a local).
   The unit checks cover operand paths, the branch not taken, the dead end, static assignments, the probe's watch pins
   under `vm`, and the whole chain for `levels` and `hosted` over hand-made traces.
@@ -1472,20 +1472,20 @@ The end-to-end part covers:
   leading `/`, `=`), pins, responses, Fix (the ticked fixes and a replacement file in a valid zip), diff, the redacted
   report, and the run page's sections in order. With `--slow`: the form's settings reaching a run, Drill-down,
   Discover, Test saving and Try variants end to end.
-- **doctor (P5.1):** the check ids in order, capabilities following the checks, the name lists, `SCORM_LAB_NO_PLAYWRIGHT`
+- **doctor (P5.1):** the check ids in order, capabilities following the checks, the name lists, `PACKAGE_LAB_NO_PLAYWRIGHT`
   turning WebKit off, and a busy port reported. `experiment --out` also keeps `experiment.json`.
 - **CLI and Alfred (P5.2):** unit checks cover the command table (every command has `--json`), the zsh script (its header,
   every command's case, every flag, the preset choices), and `experimentHtml` (escaped, above the findings). The CLI checks
   (no Electron) cover every command and flag in `help`, `help`/`version`/`completion` JSON, `zsh -n` on the script when zsh
   is installed, `report --json` (and its redacted form), `serve --url --json` and `open --json` (pointed at `/usr/bin/true`
-  with `SCORM_LAB_ELECTRON`, so nothing opens), the doctor's top-level `app` (a fake home with an `Info.plist`; it is not one of `checks`), and
+  with `PACKAGE_LAB_ELECTRON`, so nothing opens), the doctor's top-level `app` (a fake home with an `Info.plist`; it is not one of `checks`), and
   the Alfred build: `plutil -lint`, the ⇧↩ and Fix and folder actions in the plist, `bash -n` on each script, and the Fix
   script run on a file with a space in its name (`-fixed`, `-fixed-2`, `-fixed-3`, and no file when nothing needs fixing).
   The default suite runs no new Electron: `experiment --out`'s `report.html` is covered by the unit check of its HTML.
 
 - **Browsers and device sizes (P2.3):** unit checks cover the options (presets, `WxH`, the saved `{ width, height }`, bad values), `cliCommand`,
   the `browsers` preset, `launchPlan` and `serveRequest`, and every reader of a trace with no coverage, caught errors, sources, scripts or log.
-  In the default suite, the CLI refuses WebKit with a how-to-install message when `SCORM_LAB_NO_PLAYWRIGHT=1` makes Playwright fail to load, and `good` at `--viewport iphone` sees a 390 × 844 content frame (the probe's `dom` report).
+  In the default suite, the CLI refuses WebKit with a how-to-install message when `PACKAGE_LAB_NO_PLAYWRIGHT=1` makes Playwright fail to load, and `good` at `--viewport iphone` sees a 390 × 844 content frame (the probe's `dom` report).
   With `--slow` (and Playwright with its WebKit installed; otherwise they are skipped and say so): `good` in WebKit reaches `wrote` with a trace in the same format and `lab://` addresses;
   `chromeonly` (reads `navigator.userAgentData.brands` unguarded) works in Chromium and fails in WebKit with the error recorded; the iPad preset's size in WebKit; the moodle (framed) and cornerstone (popup) profiles, blocked storage and answers in WebKit; `--trace` is refused; the `browsers` experiment; the live frame's size at `--viewport ipad`; and, over the web handlers, a WebKit run and Stop.
 
@@ -1500,22 +1500,22 @@ npm run package
 `scripts/package.js` does the following:
 1. If `build/icon.icns` is missing, renders `build/icon.svg` with Electron (`scripts/icon.cjs`), resizes it with
    `sips` and builds the `.icns` with `iconutil`.
-2. Packages with `@electron/packager` for this Mac's architecture into `dist/SCORM Lab-darwin-<arch>/`. Tests, docs,
+2. Packages with `@electron/packager` for this Mac's architecture into `dist/Package Lab-darwin-<arch>/`. Tests, docs,
    scripts and build files are left out; devDependencies are pruned.
 3. Signs ad hoc (`codesign --sign -`), so it runs on this Mac.
 
-The bundle id is `com.sylumer.scorm-lab`. `Info.plist` declares `.zip` files with rank Alternate, so SCORM Lab is in
+The bundle id is `com.sylumer.package-lab`. `Info.plist` declares `.zip` files with rank Alternate, so Package Lab is in
 Open With without becoming the default.
 
-`npm run install-app` also quits a running copy, replaces `/Applications/SCORM Lab.app` and registers it with
+`npm run install-app` also quits a running copy, replaces `/Applications/Package Lab.app` and registers it with
 LaunchServices. It isn't notarised: for other Macs, sign it with a Developer ID and notarise it (as Concierge's
 `make release` does).
 
 ## The Alfred workflow
 
 `scripts/alfred.js` writes the workflow's `info.plist` from JavaScript objects (as JSON, then `plutil -convert xml1`),
-adds the icon, zips it to `dist/SCORM Lab.alfredworkflow` and opens it. Its objects are:
-- keywords `scormlab` and `scormweb`;
+adds the icon, zips it to `dist/Package Lab.alfredworkflow` and opens it. Its objects are:
+- keywords `packagelab` and `packageweb`;
 - a file filter `scorm` (zip archives), with ↩, ⌘, ⇧ and ⌥ connections;
 - four File Actions on a .zip (open, check, run and report, fix) and one on a folder (the batch check);
 - bash Run Script actions (argv input) and notifications.
@@ -1527,9 +1527,9 @@ build time. To change what it does, edit the scripts in `alfred-scripts.js` (or 
 
 ## The Concierge module
 
-`modules/scorm-lab/run` in the Concierge repo is a Python 3.9 CGI script; see [Concierge](concierge.md#how-it-works)
+`modules/package-lab/run` in the Concierge repo is a Python 3.9 CGI script; see [Concierge](concierge.md#how-it-works)
 for what it calls. Points to keep when changing it:
-- It never imports SCORM Lab code. It calls the CLI, so the CLI's JSON and the `--live` folder are its contract. Keep
+- It never imports Package Lab code. It calls the CLI, so the CLI's JSON and the `--live` folder are its contract. Keep
   them backward compatible, or change both together.
 - Ids in URLs are digits only (`num()`), and file names are made by the module.
 - Uploaded names are reduced to a safe base name.
@@ -1537,7 +1537,7 @@ for what it calls. Points to keep when changing it:
 - The worker is fully detached (`start_new_session`, no inherited pipes), as Concierge requires. There are three:
   a run (`--worker`), an experiment (`--exp-worker`), and Drill-down or Discover for a run (`--task-worker`).
 - The lists in the run form (profiles, tools, device sizes, presets, fixes, whether WebKit works) come from
-  `scorm-lab doctor --json`, kept in `doctor.json` for five minutes. A new profile or tool shows up with no change to the
+  `package-lab doctor --json`, kept in `doctor.json` for five minutes. A new profile or tool shows up with no change to the
   module. If `doctor` fails, the form falls back to the plain settings.
 - Replacement files are stored under a number (`overrides/<k>`) and the package path is only ever an argument
   (`--override path=file`), never a path the module opens. Paths with `..`, a leading `/`, a backslash or `=` are refused;
@@ -1551,12 +1551,12 @@ for what it calls. Points to keep when changing it:
 
 ## Debugging
 
-- **Watch a headless run:** `scorm-lab run course.zip --show`.
+- **Watch a headless run:** `package-lab run course.zip --show`.
 - **DevTools on a run window:** in the desktop app, focus the course window and press ⌥⌘I. The recorder is already
   attached, but Chrome allows DevTools alongside it.
-- **Raw evidence:** `scorm-lab run course.zip --out run.json`, then read `run.json` (see the format above), or open
+- **Raw evidence:** `package-lab run course.zip --out run.json`, then read `run.json` (see the format above), or open
   it in the desktop app.
-- **Isolate data:** `SCORM_LAB_DATA=/tmp/lab npm start` keeps saved runs and the web token out of your real ones.
+- **Isolate data:** `PACKAGE_LAB_DATA=/tmp/lab npm start` keeps saved runs and the web token out of your real ones.
 - **Electron's output in a CLI run** goes to `electron.log` in the job's temp folder, which is deleted afterwards. To
   keep it, run Electron directly: `npx electron . --run=/path/job.json`.
 - **Recompute findings** after changing rules: re-open a saved run (findings are recomputed on load), or call

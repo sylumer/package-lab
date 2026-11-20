@@ -1,6 +1,6 @@
 // Tests: unit checks of the pure parts, then (skipped with --unit) end-to-end checks in Electron: the CLI's analyze,
 // run and report on six fixture packages, live input, the web interface, and the Concierge module if it's next to
-// this repo (../concierge/modules/scorm-lab). Fixtures are built from test/fixtures/base, the sample SCORM 1.2
+// this repo (../concierge/modules/package-lab). Fixtures are built from test/fixtures/base, the sample SCORM 1.2
 // package from toolbox. See docs/developer-guide.md.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
@@ -44,7 +44,7 @@ import './codeview.js'
 import './batch.js'
 import vm from 'node:vm'
 
-const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'scorm-lab-'))
+const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'package-lab-'))
 function fixture(name, edit = () => {}) {
   const dir = join(work, name)
   cpSync(base, dir, { recursive: true })
@@ -277,7 +277,7 @@ const shownT = trace({ requests: allReqs, probe: [{ type: 'dom', t: 50, frame: p
 assert.equal(reached(shownT), 'launched,scripts,shown', 'milestones: shown by text')
 assert.ok(reached(trace({ probe: [{ type: 'dom', t: 5, frame: pf, text: 3, media: 1 }] })).includes('shown'), 'milestones: shown by media')
 assert.ok(!reached(trace({ probe: [{ type: 'dom', t: 5, frame: pf, text: 19, media: 0 }] })).includes('shown'), 'milestones: 19 characters is not shown')
-assert.ok(!reached(trace({ probe: [{ type: 'dom', t: 5, frame: 'lab://run/__lab/host.html', text: 99, media: 0 }] })).includes('shown'), 'milestones: SCORM Lab’s own page is not content')
+assert.ok(!reached(trace({ probe: [{ type: 'dom', t: 5, frame: 'lab://run/__lab/host.html', text: 99, media: 0 }] })).includes('shown'), 'milestones: Package Lab’s own page is not content')
 assert.equal(reached(trace({ requests: allReqs, probe: [{ type: 'lookup', t: 60, name: 'API', found: false, frame: pf }] })), 'launched,scripts,looked', 'milestones: looked')
 assert.equal(reached(trace({ requests: allReqs, probe: [{ type: 'lookup', t: 60, name: 'API', found: true, frame: pf }] })), 'launched,scripts,looked,found', 'milestones: found')
 const step = (id, probe) => milestones(trace({ probe }), bg).find(s => s.id === id)
@@ -344,8 +344,8 @@ for (const p of ['', '/a.js', '../a.js', 'a/../b.js', 'a\\b.js']) assert.throws(
 assert.deepEqual(normaliseOptions({ files: { 'js/a.js': 'x', 'b.png': { base64: 'AAEC' }, 'c.js': { content: '' } } }).files, { 'js/a.js': { content: 'x' }, 'b.png': { base64: 'AAEC' }, 'c.js': { content: '' } }, 'options: files shapes')
 for (const f of [{ 'a.js': {} }, { 'a.js': { content: 'x', base64: 'AA==' } }, { 'a.js': { base64: '!!' } }, { 'a.js': { base64: 'AAE' } }, { 'a.js': { content: 1 } }, { 'a//b.js': 'x' }, { 'a/': 'x' }])
   assert.throws(() => normaliseOptions({ files: f }), /files/, 'options: files value ' + JSON.stringify(f))
-assert.equal(cliCommand(dflt, { zip: 'a b.zip', item: 2 }), "scorm-lab run 'a b.zip' --item 2")
-assert.equal(cliCommand({ expose: 'both', depth: 2, opener: true, caught: false, auto: 20, trace: true }), 'scorm-lab run package.zip --api both --depth 2 --window --no-caught --wait 20 --trace')
+assert.equal(cliCommand(dflt, { zip: 'a b.zip', item: 2 }), "package-lab run 'a b.zip' --item 2")
+assert.equal(cliCommand({ expose: 'both', depth: 2, opener: true, caught: false, auto: 20, trace: true }), 'package-lab run package.zip --api both --depth 2 --window --no-caught --wait 20 --trace')
 // Browser and device size (P2.3).
 assert.equal(normaliseOptions({ browser: 'webkit' }).browser, 'webkit', 'browser: webkit')
 for (const [name, v] of Object.entries(VIEWPORTS)) { assert.deepEqual(normaliseOptions({ viewport: name }).viewport, v, 'viewport: preset ' + name); assert.equal(viewportName(v), name) }
@@ -355,14 +355,14 @@ assert.deepEqual(normaliseOptions({ viewport: '390x844' }).viewport, { width: 39
 assert.deepEqual(normaliseOptions({ viewport: ' 1024X768 ' }).viewport, normaliseOptions({ viewport: { width: 1024, height: 768 } }).viewport, 'viewport: WxH is a plain size')
 assert.deepEqual(normaliseOptions({ viewport: normaliseOptions({ viewport: 'iphone' }).viewport }).viewport, VIEWPORTS.iphone, 'viewport: normalising twice changes nothing')
 assert.equal(viewportName(normaliseOptions({ viewport: '390x844' }).viewport), '390x844', 'viewportName: a plain size')
-assert.equal(cliCommand({ browser: 'webkit' }), 'scorm-lab run package.zip --browser webkit', 'cliCommand: --browser')
-assert.equal(cliCommand({ viewport: 'iphone', browser: 'webkit' }), 'scorm-lab run package.zip --browser webkit --viewport iphone', 'cliCommand: --viewport preset')
-assert.equal(cliCommand({ viewport: { width: 390, height: 844 } }), 'scorm-lab run package.zip --viewport 390x844', 'cliCommand: --viewport WxH')
-assert.equal(cliCommand({ viewport: { width: 390, height: 844, mobile: true } }), 'scorm-lab run package.zip --options options.json', 'cliCommand: a size with settings no name carries goes to the options file')
+assert.equal(cliCommand({ browser: 'webkit' }), 'package-lab run package.zip --browser webkit', 'cliCommand: --browser')
+assert.equal(cliCommand({ viewport: 'iphone', browser: 'webkit' }), 'package-lab run package.zip --browser webkit --viewport iphone', 'cliCommand: --viewport preset')
+assert.equal(cliCommand({ viewport: { width: 390, height: 844 } }), 'package-lab run package.zip --viewport 390x844', 'cliCommand: --viewport WxH')
+assert.equal(cliCommand({ viewport: { width: 390, height: 844, mobile: true } }), 'package-lab run package.zip --options options.json', 'cliCommand: a size with settings no name carries goes to the options file')
 // Storage (P2.2): the three modes, the flag, and the profile's cookies field.
 for (const s of ['normal', 'blocked', 'partitioned']) assert.equal(normaliseOptions({ storage: s }).storage, s, 'storage: ' + s)
 assert.throws(() => normaliseOptions({ storage: 'nope' }), /storage.*one of normal, blocked, partitioned/, 'storage: other words are refused')
-assert.equal(cliCommand({ storage: 'blocked' }), 'scorm-lab run package.zip --storage blocked', 'cliCommand: --storage')
+assert.equal(cliCommand({ storage: 'blocked' }), 'package-lab run package.zip --storage blocked', 'cliCommand: --storage')
 assert.deepEqual(['normal', 'blocked', 'partitioned'].map(storage => storageMode(normaliseOptions({ storage }))), ['normal', 'blocked', 'partitioned'], 'storageMode: the option')
 assert.deepEqual([{}, { profile: 'scorm-cloud' }, { profile: 'scorm-cloud', storage: 'partitioned' }, { profile: { cookies: 'third-party-blocked' } }, { profile: 'moodle' }].map(o => storageMode(normaliseOptions(o))),
   ['normal', 'blocked', 'partitioned', 'blocked', 'normal'], 'storageMode: normal means the profile’s cookies field says')
@@ -464,7 +464,7 @@ assert.deepEqual([launchProfile({ depth: 2 }).frames.depth, launchProfile({ open
 assert.deepEqual([{}, { apiWhere: 'parent' }, { apiWhere: 'parent', frames: { depth: 3 } }, { launch: 'popup', apiWhere: 'opener', frames: { depth: 2 } }, { launch: 'popup', frames: { depth: 2 } }, { launch: 'popup', apiWhere: 'parent', frames: { depth: 2 } }].map(p => apiAt(resolveProfile(p))),
   [0, 0, 1, 0, 2, 1], 'profiles: where the API goes')
 assert.equal(fillParams('id={scoid}&a={attempt}&l={learner}&x={other}', { scoid: 'sco 1', attempt: 1, learner: 'l-1' }), 'id=sco%201&a=1&l=l-1&x={other}', 'profiles: placeholders')
-assert.equal(cliCommand({ profile: 'moodle' }), 'scorm-lab run package.zip --profile moodle'); assert.equal(cliCommand({ profile: { contentOrigin: 'other' } }), 'scorm-lab run package.zip --profile-file profile.json')
+assert.equal(cliCommand({ profile: 'moodle' }), 'package-lab run package.zip --profile moodle'); assert.equal(cliCommand({ profile: { contentOrigin: 'other' } }), 'package-lab run package.zip --profile-file profile.json')
 assert.deepEqual(PRESETS.lms.map(v => v.patch.profile), PROFILE_NAMES, 'experiments: lms has one variant per profile')
 assert.equal(planVariants({ base: {}, variants: PRESETS.lms }).length, PROFILE_NAMES.length, 'experiments: lms keeps every profile but generic (the default)')
 // Content on another origin: blocked lookups (named from the code) and an opaque origin.
@@ -488,7 +488,7 @@ assert.equal(Object.getPrototypeOf(protoFiles), Object.prototype); assert.deepEq
 assert.deepEqual([...overlayFiles(new Map(), protoFiles).keys()], ['__proto__', 'constructor'])
 assert.throws(() => normaliseOptions({ files: { 'a.js': { content: 'x'.repeat(50 * 1024 ** 2 + 1) } } }), /over 50 MB/, 'options: per-file cap')
 assert.throws(() => normaliseOptions({ files: Object.fromEntries([1, 2, 3, 4, 5].map(i => ['f' + i, { content: 'x'.repeat(45 * 1024 ** 2) }])) }), /more than 200 MB/, 'options: total cap')
-assert.equal(cliCommand({ files: { 'js/a.js': { content: 'x' }, 'b c.js': { content: 'y' } } }), "scorm-lab run package.zip --override js/a.js=js/a.js --override 'b c.js=b c.js'", 'cliCommand: one --override per changed file')
+assert.equal(cliCommand({ files: { 'js/a.js': { content: 'x' }, 'b c.js': { content: 'y' } } }), "package-lab run package.zip --override js/a.js=js/a.js --override 'b c.js=b c.js'", 'cliCommand: one --override per changed file')
 assert.deepEqual(diffLines('', 'a\nb').map(r => r.op), ['+', '+']); assert.deepEqual(diffLines('a', '').map(r => r.op), ['-'], 'textdiff: an empty side')
 const dl = (a, b) => diffLines(a, b).map(r => r.op + r.text).join('|')
 assert.equal(dl('a\nb\nc', 'a\nb\nc'), ' a| b| c'); assert.equal(dl('', 'x'), '+x'); assert.equal(dl('x', ''), '-x'); assert.equal(dl('', ''), '')
@@ -589,7 +589,7 @@ assert.ok(matcher('https://h.test/a.b')('https://h.test/a.b') && !matcher('https
 assert.throws(() => matcher('/(/'))
 const rs = normaliseOptions({ responses: [{ match: '/api/*', method: 'POST', body: 'post' }, { match: '/api/*', body: 'any' }, { match: '*', body: 'all' }] }).responses
 assert.equal(answerFor(rs, 'lab://run/api/x', 'POST').index, 0); assert.equal(answerFor(rs, 'lab://run/api/x', 'GET').index, 1, 'answer: method and order'); assert.equal(answerFor(rs, 'lab://run/other', 'get').index, 2)
-assert.equal(answerFor(rs, 'lab://run/__lab/host.js', 'GET'), null, 'answer: SCORM Lab’s own pages are never answered'); assert.equal(answerFor([], 'x://y'), null)
+assert.equal(answerFor(rs, 'lab://run/__lab/host.js', 'GET'), null, 'answer: Package Lab’s own pages are never answered'); assert.equal(answerFor([], 'x://y'), null)
 const ba = buildAnswer({ status: 201, headers: { 'X-A': 'b' }, body: '{"a":1}' })
 assert.equal(ba.status, 201); assert.equal(Buffer.from(ba.body, 'base64').toString(), '{"a":1}')
 assert.deepEqual(ba.headers, [{ name: 'X-A', value: 'b' }, { name: 'Content-Type', value: 'application/json' }, { name: 'Access-Control-Allow-Origin', value: '*' }], 'answer: type from the body, CORS opened')
@@ -623,7 +623,7 @@ assert.deepEqual(watchPins({ pins: [{ path: 'a', value: 1, frames: 'content', mo
   assert.ok(reports.some(r => r.type === 'watch-read' && r.path === 'config.cdn'), 'watch: reads reported')
 }
 {
-  // Blocked storage (P2.2) under vm: the probe's refusals, and that SCORM Lab's own pages and other modes are left alone.
+  // Blocked storage (P2.2) under vm: the probe's refusals, and that Package Lab's own pages and other modes are left alone.
   const probeSrc = readFileSync(new URL('../src/host/probe.js', import.meta.url), 'utf8')
   const sandbox = (href, mode) => {
     const reports = [], ctx = vm.createContext({ location: { href }, document: { referrer: '', addEventListener() {} }, addEventListener() {}, setTimeout() {}, DOMException, Event, EventTarget, queueMicrotask,
@@ -668,8 +668,8 @@ assert.deepEqual(parseAnswerFlag('/api/config=@c.json'), { match: '/api/config',
 assert.deepEqual(parseAnswerFlag('/a?x=1=404:no: way'), { match: '/a?x=1', status: 404, body: 'no: way' }, 'answer flag: = in the pattern, : in the body'); assert.deepEqual(parseAnswerFlag('/a=200:'), { match: '/a', status: 200, body: '' })
 for (const bad of ['/a', '/a=x', '/a=20:{}', '=200:x', true]) assert.throws(() => parseAnswerFlag(bad), /--answer/, 'answer: bad flag ' + bad)
 assert.equal(cliCommand(normaliseOptions({ pins: [{ path: 'previewMode', value: false }, { path: 'navigator.userAgent', value: 'a b' }], responses: [{ match: '/api/*', status: 404, body: '{"a":1}' }], launchParams: 'a=1&b=2' })),
-  `scorm-lab run package.zip --pin previewMode=false --pin 'navigator.userAgent="a b"' --answer '/api/*=404:{"a":1}' --launch-params 'a=1&b=2'`, 'cliCommand: pins, answers, launch parameters')
-assert.equal(cliCommand(normaliseOptions({ pins: [{ path: 'x', value: 1, frames: 'all' }], responses: [{ match: 'a', headers: { A: 'b' } }] })), 'scorm-lab run package.zip --options options.json', 'cliCommand: what a flag can’t say goes to the options file')
+  `package-lab run package.zip --pin previewMode=false --pin 'navigator.userAgent="a b"' --answer '/api/*=404:{"a":1}' --launch-params 'a=1&b=2'`, 'cliCommand: pins, answers, launch parameters')
+assert.equal(cliCommand(normaliseOptions({ pins: [{ path: 'x', value: 1, frames: 'all' }], responses: [{ match: 'a', headers: { A: 'b' } }] })), 'package-lab run package.zip --options options.json', 'cliCommand: what a flag can’t say goes to the options file')
 assert.throws(() => normaliseOptions({ responses: [1, 2, 3].map(i => ({ match: 'a' + i, body: 'x'.repeat(8 * 1024 ** 2) })) }), /more than 20 MB/, 'options: total response size cap')
 assert.match(pinFindings(trace({ requests: [{ url: 'lab://run/api/x', method: 'GET', answerFailed: 'bad header' }] }), normaliseOptions({ responses: [{ match: 'a' }] })).find(f => /Couldn’t answer 1 request/.test(f.title)).evidence[0], /bad header/)
 
@@ -1036,7 +1036,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.equal(st([timers([['interval', 250, 1, 40, 0, 6000]])]).pollers.length, 0, 'stall: not firing at the end')
   assert.equal(st([timers([['interval', 250, 1, 2, 0, 100]])]).pollers.length, 0, 'stall: two runs is not polling')
   assert.equal(st([timers([['timeout', 500, 1, 30, 1, 100]])]).pollers.length, 0, 'stall: one timeout is not a chain'); assert.equal(st([timers([['timeout', 500, 30, 30, 0, 100]])]).pollers.length, 1, 'stall: a chain of timeouts is')
-  assert.equal(st([{ ...timers([['interval', 250, 1, 40, 0, 100]]), frame: HOST }]).pollers.length, 0, 'stall: SCORM Lab’s own frames are not content')
+  assert.equal(st([{ ...timers([['interval', 250, 1, 40, 0, 100]]), frame: HOST }]).pollers.length, 0, 'stall: Package Lab’s own frames are not content')
   // the condition, with a trace: the poll's test, and its last value
   const POLL = "var t = setInterval(function () { if (window.API_1484_11) { clearInterval(t) } }, 500)\n", ins = instrument(POLL, { file: 'a.html' })
   const di = ins.sites.findIndex(s => s.kind === 'if'), tr = { sites: ins.sites, exec: [{ frame: F, events: [[100, 3, di, 0, ['undefined']], [300, 3, di, 0, ['undefined']], [9000, 4, di, 0, 38]] }] }
@@ -1146,7 +1146,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   const unzipT = path => spawnSync('unzip', ['-t', path], { encoding: 'utf8' })
   const method = buf => buf.readUInt16LE(8)   // of the first local header
   // The writer: an empty file, binary data that doesn't compress (stored), large compressible data (deflated), non-ASCII names (UTF-8 flag).
-  const noise = randomBytes(50000), big = Buffer.from('<p>SCORM Lab</p>\n'.repeat(120000))
+  const noise = randomBytes(50000), big = Buffer.from('<p>Package Lab</p>\n'.repeat(120000))
   const z = zip(new Map([['empty.txt', Buffer.alloc(0)], ['noise.bin', noise], ['big.html', big], ['dir/café ü.txt', Buffer.from('é')], ['日本語/ファイル.js', Buffer.from('var a = 1')]]))
   const back = unzip(z)
   assert.deepEqual([...back.keys()], ['empty.txt', 'noise.bin', 'big.html', 'dir/café ü.txt', '日本語/ファイル.js'], 'zip: names and order survive, non-ASCII included')
@@ -1237,8 +1237,8 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.ok(FIX_IDS.every(id => typeof FIXES[id].apply === 'function' && FIXES[id].label), 'fixes: each has a label and a function')
   // Export: overrides first, then the fixes; the change list and the proof; nothing changed means no zip; --only; unknown ids.
   const ex = exportFixed(blankFiles, { version: '9.9.9', name: 'blank.zip', overrides: { 'extra.txt': { content: 'hi' } } })
-  const exOut = unzip(ex.zip), notes = exOut.get('SCORM-LAB-CHANGES.txt').toString()
-  assert.ok(exOut.get('extra.txt').toString() === 'hi' && exOut.has('js/app.js') && /^SCORM Lab 9\.9\.9: changes made to blank\.zip/.test(notes) && /extra\.txt/.test(notes) && /Renamed js\/App\.js/.test(notes) && /Findings the changes cleared:\n {2}- Paths differ from the files only in capitals/.test(notes), 'export: the zip and its change list: ' + notes)
+  const exOut = unzip(ex.zip), notes = exOut.get('PACKAGE-LAB-CHANGES.txt').toString()
+  assert.ok(exOut.get('extra.txt').toString() === 'hi' && exOut.has('js/app.js') && /^Package Lab 9\.9\.9: changes made to blank\.zip/.test(notes) && /extra\.txt/.test(notes) && /Renamed js\/App\.js/.test(notes) && /Findings the changes cleared:\n {2}- Paths differ from the files only in capitals/.test(notes), 'export: the zip and its change list: ' + notes)
   assert.ok(ex.proof.gone.some(t => /capitals/.test(t)) && !staticAll(exOut).some(f => /capitals/.test(f.title)), 'export: proof by analysing the result')
   assert.deepEqual(prove(blankFiles, ex.files).gone, ex.proof.gone)
   assert.equal(exportFixed(sample(), {}).zip, null, 'export: a package with nothing to fix gives no zip'); assert.ok(exportFixed(sample(), { overrides: { 'a.txt': { content: 'x' } } }).zip, 'export: overrides alone are a change')
@@ -1265,7 +1265,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.deepEqual(m.lanes.api.map(a => a.kind), ['init', 'set'], 'timeline: API calls coloured by kind')
   assert.deepEqual(m.lanes.requests.map(r => [r.t, r.t2, r.failed]), [[100, 400, false], [500, 500, true]], 'timeline: request bars, failed flag')
   assert.deepEqual(m.lanes.errors.map(e => e.kind), ['uncaught', 'caught'], 'timeline: errors')
-  assert.deepEqual(m.lanes.dom.map(d => d.label), ['Hello'], 'timeline: SCORM Lab’s own page is not a DOM snapshot')
+  assert.deepEqual(m.lanes.dom.map(d => d.label), ['Hello'], 'timeline: Package Lab’s own page is not a DOM snapshot')
   assert.deepEqual(m.lanes.milestones.map(x => x.id), ['launched'], 'timeline: reached milestones only')
   assert.deepEqual(m.missing, ['Scripts loaded'], 'timeline: missing milestones named')
   assert.equal(m.lanes.density.reduce((a, b) => a + b, 0), 5, 'timeline: density counts events and repeats')
@@ -1298,7 +1298,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   const mkTrace = o => ({ label: 'x', duration: 4000, sources: {}, console: [], log: [], exceptions: [], caught: [], requests: [], navigations: [], probe: [], cmi: {}, exec: [], sites: [], scripts: [], coverage: [], targets: [], untraced: [], ...o })
   const prof = { name: 'Custom LMS', frames: { depth: 0, sandbox: null }, headers: { 'X-Token': 'hdr-secret-value' }, csp: "default-src 'self' https://secret-cdn.example", launchParams: 'user=jsmith&sid=77;flag', limits: {} }
   const hand = {
-    format: 'scorm-lab-run', version: 1, kind: 'package', label: 'pkg.zip · Lesson title · Part two · SCORM 1.2', package: 'pkg.zip', file: '/Users/someone/runs/a.json',
+    format: 'package-lab-run', version: 1, kind: 'package', label: 'pkg.zip · Lesson title · Part two · SCORM 1.2', package: 'pkg.zip', file: '/Users/someone/runs/a.json',
     launch: { version: '1.2', expose: '1.2', depth: 0, opener: false, item: 'Lesson title · Part two', itemIndex: 0, itemType: 'sco', url: L + 'lesson.html?learner=jsmith&token=abc123', resume: false, storage: 'normal', profile: prof,
       options: { files: { 'js/lesson.js': { content: 'var secret = "Wrong answer text"' } }, pins: [{ path: 'cmi.core.student_name', value: 'Sam Learner' }], launchParams: 'user=jsmith&sid=77;flag', profile: prof,
         responses: [{ match: 'https://example.com/api/*?key=apikey99', status: 200, body: '{"name":"Sam Learner"}', headers: { 'Set-Cookie': 'session=cookie-secret' } }], macro: [{ t: 5, type: 'text', text: 'my typed password' }, { t: 9, type: 'key', key: 'Enter' }] } },
@@ -1445,12 +1445,12 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.equal(sr.analysis.manifest.items[0].id, 'item 1', 'redact static: item ids are numbers')
 
   // The report: a banner that says what was taken out, no content, no excerpts; the title is the redacted label.
-  const page = renderReport({ title: 'SCORM Lab: pkg.zip', subtitle: hand.label, run: hand, redact: true })
+  const page = renderReport({ title: 'Package Lab: pkg.zip', subtitle: hand.label, run: hand, redact: true })
   assert.ok(page.includes('Redacted report.') && page.includes('Taken out:') && page.includes('query values') && !page.includes('class="sl-excerpt"') && !page.includes('nothing in this run needed it'), 'redact report: banner, no excerpts')
-  assert.ok(page.includes('<title>SCORM Lab: pkg.zip</title>') && page.includes('up to its first colon') && page.includes('keep their host and path'), 'redact report: the title, and what is kept')
+  assert.ok(page.includes('<title>Package Lab: pkg.zip</title>') && page.includes('up to its first colon') && page.includes('keep their host and path'), 'redact report: the title, and what is kept')
   for (const f of forbidden) assert.ok(!page.includes(f), 'redact report: nothing of the content in the page: ' + f)
   assert.ok(!renderReport({ title: 'x', run: hand }).includes('Redacted report.'), 'redact report: a plain report has no banner')
-  const stat = renderReport({ title: 'SCORM Lab: pkg.zip', subtitle: 'Lesson title (lesson.html), from the files only', findings: [], fragment: true, analysis, boot: hand.boot, redact: { package: 'pkg.zip' } })
+  const stat = renderReport({ title: 'Package Lab: pkg.zip', subtitle: 'Lesson title (lesson.html), from the files only', findings: [], fragment: true, analysis, boot: hand.boot, redact: { package: 'pkg.zip' } })
   assert.ok(!stat.includes('Lesson title') && !stat.includes('passPhrase') && stat.includes('Redacted report.'), 'redact report: a package report’s titles and code go')
 }
 console.log('redact: unit ok')
@@ -1460,14 +1460,14 @@ console.log('redact: unit ok')
   const names = COMMANDS.map(c => c.name), z = zshCompletion()
   assert.equal(new Set(names).size, names.length, 'completion: command names are unique')
   assert.deepEqual(COMMANDS.filter(c => !c.flags.includes('json')).map(c => c.name), [], 'json: every command has --json (serve: with --url)')
-  assert.ok(z.startsWith('#compdef scorm-lab\n') && z.includes('_files -g "*.zip"') && z.includes('compdef _scorm_lab scorm-lab'), 'completion: header, package files, compdef')
+  assert.ok(z.startsWith('#compdef package-lab\n') && z.includes('_files -g "*.zip"') && z.includes('compdef _package_lab package-lab'), 'completion: header, package files, compdef')
   for (const c of COMMANDS) {
     assert.ok(z.includes(`    '${c.name}:`) && z.includes(`\n    ${c.name})\n`), `completion: ${c.name} is listed and has a case`)
     for (const f of c.flags) assert.ok(z.includes(`'--${f}[`), `completion: --${f} of ${c.name}`)
   }
   assert.ok(z.includes("'1:package or saved run:_files'") && z.includes("'1:package:_files -g \"*.zip\"'"), 'completion: positional arguments are quoted')
   assert.match(z, /'--preset\[The built-in variants\]:preset:\(api frames standard lms storage browsers\)'/, 'completion: preset choices come from PRESETS')
-  const rep = renderReport({ title: 'SCORM Lab: x.zip', subtitle: 'sub', findings: [], extra: experimentHtml([{ name: '<img src=x onerror=1>', furthestLabel: 'Wrote data', apiCalls: 3, errors: 0, verdict: { sev: 'ok', title: 'ok' }, progress: 'the default' }]) })
+  const rep = renderReport({ title: 'Package Lab: x.zip', subtitle: 'sub', findings: [], extra: experimentHtml([{ name: '<img src=x onerror=1>', furthestLabel: 'Wrote data', apiCalls: 3, errors: 0, verdict: { sev: 'ok', title: 'ok' }, progress: 'the default' }]) })
   assert.ok(rep.includes('<h2>Variants</h2>') && rep.includes('&lt;img src=x onerror=1&gt;') && !rep.includes('<img src=x'), 'experiment report: the variants table, escaped')
   assert.ok(rep.indexOf('<h2>Variants</h2>') < rep.indexOf('<h2>Findings</h2>') && rep.includes('<td>Wrote data</td>'), 'experiment report: the variants come above the findings')
   assert.ok(!renderReport({ title: 'x', findings: [] }).includes('Variants'), 'experiment report: a plain report has no variants table')
@@ -1479,7 +1479,7 @@ console.log('unit: ok')
 // ---- End to end ----
 const slow = process.argv.includes('--slow')   // the slower end-to-end checks: run at phase ends (see docs/developer-guide.md)
 if (!process.argv.includes('--unit')) {
-  const root = new URL('..', import.meta.url).pathname, cli = join(root, 'bin', 'scorm-lab.js'), electron = join(root, 'node_modules', '.bin', 'electron')
+  const root = new URL('..', import.meta.url).pathname, cli = join(root, 'bin', 'package-lab.js'), electron = join(root, 'node_modules', '.bin', 'electron')
   const node = (args, opts = {}) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', timeout: 120000, ...opts })
   const run = (zip, ...args) => { const r = node(['run', zip, '--wait', '3', '--json', ...args]); assert.ok(r.stdout, 'run printed nothing: ' + r.stderr); return JSON.parse(r.stdout) }
   const calls = r => r.api.map(a => a.call + ' ' + a.el)
@@ -1504,7 +1504,7 @@ if (!process.argv.includes('--unit')) {
     assert.ok(dr.capabilities.analyze && dr.capabilities.run === dr.checks[1].ok, 'doctor: capabilities follow the checks')
     assert.ok(dr.profiles.includes('moodle') && dr.tools.includes('rise') && dr.viewports.includes('iphone') && dr.presets.includes('storage'), 'doctor: names')
     assert.deepEqual(dr.fixes.map(f => f.id), FIX_IDS, 'doctor: every fix, with a label')
-    const nopw = JSON.parse(node(['doctor', '--json'], { env: { ...process.env, SCORM_LAB_NO_PLAYWRIGHT: '1' } }).stdout)
+    const nopw = JSON.parse(node(['doctor', '--json'], { env: { ...process.env, PACKAGE_LAB_NO_PLAYWRIGHT: '1' } }).stdout)
     assert.ok(!nopw.checks[2].ok && !nopw.capabilities.webkit && /Install it with/.test(nopw.checks[2].detail), 'doctor: no Playwright means no WebKit')
     const busy = await new Promise(res => { const srv = createServer(); srv.listen(0, '127.0.0.1', () => res(srv)) })
     const bj = JSON.parse(node(['doctor', '--json', '--port', String(busy.address().port)]).stdout)
@@ -1522,7 +1522,7 @@ if (!process.argv.includes('--unit')) {
   assert.match(node(['report', good, '--fragment']).stdout, /class="sl"[\s\S]*Loading path/, 'cli report (static)')
   console.log('cli: ok')
 
-  // scorm-lab diff (P3.3), without Electron: good against blank.
+  // package-lab diff (P3.3), without Electron: good against blank.
   const dfRep = join(work, 'diff.html'), df = node(['diff', good, blank, '--json', '--out', dfRep]); assert.equal(df.status, 0, 'cli diff: ' + df.stderr)
   const dj = JSON.parse(df.stdout)
   assert.deepEqual(dj.files.added.map(f => f.path), ['js/App.js'], 'cli diff: the added file'); assert.deepEqual(dj.files.changed.map(f => f.path), ['lesson.html'], 'cli diff: the changed file')
@@ -1541,12 +1541,12 @@ if (!process.argv.includes('--unit')) {
   }
   assert.equal(node(['diff', good]).status, 2, 'cli diff: needs two packages'); assert.equal(node(['diff', good, join(work, 'nope.zip')]).status, 2); assert.equal(node(['diff', good, blank, '--item', '9']).status, 2, 'cli diff: unknown item')
 
-  // scorm-lab fix (P3.1), without Electron: the corrected zip is valid (unzip -t), reads back, and analyze no longer finds what was fixed.
+  // package-lab fix (P3.1), without Electron: the corrected zip is valid (unzip -t), reads back, and analyze no longer finds what was fixed.
   const fixOut = join(work, 'blank-fixed.zip'), fx = node(['fix', blank, '--out', fixOut, '--json'])
   assert.equal(fx.status, 0, 'cli fix: ' + fx.stderr); const fj = JSON.parse(fx.stdout)
   assert.ok(fj.applied.some(f => f.id === 'case') && fj.proof.gone.some(t => /capitals/.test(t)) && fj.out === fixOut, 'cli fix: --json lists the change and the proof')
   const uz = spawnSync('unzip', ['-t', fixOut], { encoding: 'utf8' }); assert.equal(uz.status, 0, 'cli fix: unzip -t: ' + uz.stdout + uz.stderr)
-  const fixedFiles = unzip(readFileSync(fixOut)); assert.ok(fixedFiles.has('js/app.js') && /^SCORM Lab \S+: changes made to blank\.zip/.test(fixedFiles.get('SCORM-LAB-CHANGES.txt').toString()), 'cli fix: round-trip through the reader')
+  const fixedFiles = unzip(readFileSync(fixOut)); assert.ok(fixedFiles.has('js/app.js') && /^Package Lab \S+: changes made to blank\.zip/.test(fixedFiles.get('PACKAGE-LAB-CHANGES.txt').toString()), 'cli fix: round-trip through the reader')
   const fan = JSON.parse(node(['analyze', fixOut, '--json']).stdout)
   assert.ok(!fan.findings.some(f => /capitals/.test(f.title)), 'cli fix: no capitals finding in the result: ' + fan.findings.map(f => f.title)); assert.ok(fan.findings.some(f => /vendor\/missing\.js/.test(f.evidence?.join(' '))), 'cli fix: what isn’t mechanically fixable (a missing file) is still reported')
   assert.match(node(['fix', mismatch, '--out', join(work, 'mismatch-fixed.zip')]).stdout, /manifest-version[\s\S]*Findings cleared: 1 of 1[\s\S]*Wrote /, 'cli fix: text output')
@@ -1568,11 +1568,11 @@ if (!process.argv.includes('--unit')) {
     const cz = node(['completion', 'zsh']); assert.equal(cz.status, 0, cz.stderr); assert.equal(cz.stdout, zshCompletion(), 'completion: the script on standard output')
     assert.equal(JSON.parse(node(['completion', 'zsh', '--json']).stdout).shell, 'zsh', 'json: completion')
     assert.equal(node(['completion', 'bash']).status, 2, 'completion: only zsh'); assert.match(node(['completion']).stderr, /Name the shell/)
-    const zfile = join(work, '_scorm-lab'); writeFileSync(zfile, cz.stdout)
+    const zfile = join(work, '_package-lab'); writeFileSync(zfile, cz.stdout)
     if (spawnSync('zsh', ['-c', 'true']).status === 0) { const zn = spawnSync('zsh', ['-n', zfile], { encoding: 'utf8' }); assert.equal(zn.status, 0, 'completion: zsh -n accepts it: ' + zn.stderr) }
     else console.log('completion: zsh not installed, syntax check skipped')
-    // open: where it went, as JSON. SCORM_LAB_ELECTRON names /usr/bin/true, so nothing opens.
-    assert.deepEqual(JSON.parse(node(['open', '--json'], { env: { ...process.env, SCORM_LAB_ELECTRON: '/usr/bin/true' } }).stdout), { app: 'repo', path: '/usr/bin/true', package: null }, 'json: open')
+    // open: where it went, as JSON. PACKAGE_LAB_ELECTRON names /usr/bin/true, so nothing opens.
+    assert.deepEqual(JSON.parse(node(['open', '--json'], { env: { ...process.env, PACKAGE_LAB_ELECTRON: '/usr/bin/true' } }).stdout), { app: 'repo', path: '/usr/bin/true', package: null }, 'json: open')
     // report: JSON with the HTML in a file; a redacted report's JSON has no findings or verdict title.
     const rj = JSON.parse(node(['report', good, '--json', '--out', join(work, 'static.html')]).stdout)
     assert.ok(rj.out && rj.verdict && Array.isArray(rj.findings) && rj.counts && existsSync(join(work, 'static.html')), 'json: report')
@@ -1583,7 +1583,7 @@ if (!process.argv.includes('--unit')) {
     assert.equal(node(['report', good, '--json']).status, 2, 'json: report needs --out or --open'); assert.match(node(['report', good, '--json']).stderr, /needs --out or --open/)
     const sj = node(['serve', '--json']); assert.equal(sj.status, 2, 'json: serve --json without --url is refused'); assert.match(sj.stderr, /serve --json needs --url/)
     // serve --url: the address with its token, as text or JSON. The token file is in a fake home.
-    const fakeHome = mkdtempSync(join(work, 'home-')), env = { ...process.env, HOME: fakeHome }, tokenDir = join(fakeHome, 'Library', 'Application Support', 'SCORM Lab')
+    const fakeHome = mkdtempSync(join(work, 'home-')), env = { ...process.env, HOME: fakeHome }, tokenDir = join(fakeHome, 'Library', 'Application Support', 'Package Lab')
     mkdirSync(tokenDir, { recursive: true }); writeFileSync(join(tokenDir, 'web-token'), 'tok123\n')
     assert.equal(node(['serve', '--url', '--port', '4999'], { env }).stdout.trim(), 'http://127.0.0.1:4999/?token=tok123', 'serve --url')
     assert.deepEqual(JSON.parse(node(['serve', '--url', '--port', '4999', '--json'], { env }).stdout), { url: 'http://127.0.0.1:4999/?token=tok123' }, 'json: serve --url')
@@ -1592,15 +1592,15 @@ if (!process.argv.includes('--unit')) {
     const dj = JSON.parse(node(['doctor', '--json'], { env }).stdout)
     assert.ok(!dj.checks.some(c => c.id === 'app') && 'app' in dj, 'doctor: the app is reported at the top level, not in checks')
     assert.equal(dj.ok, dj.checks.every(c => c.ok), 'doctor: ok is the checks')
-    const appDir = join(fakeHome, 'Applications', 'SCORM Lab.app', 'Contents')
+    const appDir = join(fakeHome, 'Applications', 'Package Lab.app', 'Contents')
     mkdirSync(appDir, { recursive: true })
     writeFileSync(join(appDir, 'Info.plist'), '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>9.8.7</string></dict></plist>\n')
     const withApp = JSON.parse(node(['doctor', '--json'], { env }).stdout)
-    if (!existsSync('/Applications/SCORM Lab.app')) assert.deepEqual(withApp.app, { path: join(fakeHome, 'Applications', 'SCORM Lab.app'), version: '9.8.7' }, 'doctor: ~/Applications is found, with its version')
-    assert.match(node(['doctor'], { env }).stdout, /SCORM Lab\.app, the installed desktop app/)
+    if (!existsSync('/Applications/Package Lab.app')) assert.deepEqual(withApp.app, { path: join(fakeHome, 'Applications', 'Package Lab.app'), version: '9.8.7' }, 'doctor: ~/Applications is found, with its version')
+    assert.match(node(['doctor'], { env }).stdout, /Package Lab\.app, the installed desktop app/)
     const noApp = JSON.parse(node(['doctor', '--json'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout)
-    if (!existsSync('/Applications/SCORM Lab.app')) assert.ok(noApp.app === null, 'doctor: no app is reported as null')
-    assert.match(node(['doctor'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout, /no +SCORM Lab\.app/, 'doctor: text shows the app as not installed')
+    if (!existsSync('/Applications/Package Lab.app')) assert.ok(noApp.app === null, 'doctor: no app is reported as null')
+    assert.match(node(['doctor'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout, /no +Package Lab\.app/, 'doctor: text shows the app as not installed')
     assert.match(node(['doctor']).stdout, /Ready:|To do:/, 'doctor: text summary with advice')
 
     // Alfred (P5.2): the build lints, the ⇧↩ action runs the standard experiment, the scripts are valid shell, and Fix never overwrites.
@@ -1611,7 +1611,7 @@ if (!process.argv.includes('--unit')) {
     const filterUid = wf.objects.find(o => o.type === 'alfred.workflow.input.filefilter' && o.config.keyword === 'scorm').uid
     const shift = wf.connections[filterUid].find(c => c.modifiers === 131072), target = wf.objects.find(o => o.uid === shift?.destinationuid)
     assert.ok(target && /experiment "\$1" --preset standard/.test(target.config.script), 'alfred: shift-return on scorm runs the standard experiment')
-    assert.ok(wf.objects.some(o => o.type === 'alfred.workflow.trigger.action' && o.config.name === 'Fix with SCORM Lab'), 'alfred: the fix action')
+    assert.ok(wf.objects.some(o => o.type === 'alfred.workflow.trigger.action' && o.config.name === 'Fix with Package Lab'), 'alfred: the fix action')
     assert.ok(wf.objects.some(o => o.type === 'alfred.workflow.trigger.action' && o.config.filetypes?.includes('public.folder')), 'alfred: the folder batch action')
     for (const [n, body] of Object.entries({ OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB })) { const sh = spawnSync('/bin/bash', ['-n', '-c', body], { encoding: 'utf8' }); assert.equal(sh.status, 0, `alfred ${n} is valid shell: ${sh.stderr}`) }
     const fixDir = mkdtempSync(join(work, 'alfred-fix-')), pkgCopy = join(fixDir, 'my course.zip')
@@ -1627,7 +1627,7 @@ if (!process.argv.includes('--unit')) {
     assert.ok(existsSync(join(fixDir, 'my course-fixed-3.zip')) && readFileSync(join(fixDir, 'my course-fixed.zip')).equals(readFileSync(join(fixDir, 'my course-fixed-2.zip'))), 'alfred fix: the copies are written next to the original')
     const quiet = join(fixDir, 'good.zip'); cpSync(good, quiet)
     assert.equal(fixRun(quiet).stdout.trim(), 'Nothing to fix in good.zip', 'alfred fix: nothing to change writes no file'); assert.ok(!existsSync(join(fixDir, 'good-fixed.zip')))
-    assert.deepEqual(readdirSync(fixDir).filter(f => f.startsWith('.scorm-lab-fix')), [], 'alfred fix: no temporary file is left behind')
+    assert.deepEqual(readdirSync(fixDir).filter(f => f.startsWith('.package-lab-fix')), [], 'alfred fix: no temporary file is left behind')
   }
 
   // Batch checks (P4.3), without Electron: every fixture in one folder, and a file that isn't a ZIP. One row each, with the verdict
@@ -1655,7 +1655,7 @@ if (!process.argv.includes('--unit')) {
     assert.equal(csv[0], 'Package,SCORM version,Tool,Verdict,Errors,Warnings,Note'); assert.equal(csv.length, names.length + 3, 'batch: CSV has a line per package and ends with a line break')
     assert.ok(csv.some(l => l.startsWith('blank.zip,') && l.includes(',Error,')), 'batch: CSV has the blank row')
     const page = readFileSync(htmlFile, 'utf8')
-    assert.match(page, /<h1>SCORM Lab: batch check<\/h1>/); assert.ok(names.every(n => page.includes(`>${n}.zip</a>`)), 'batch: the summary links each package')
+    assert.match(page, /<h1>Package Lab: batch check<\/h1>/); assert.ok(names.every(n => page.includes(`>${n}.zip</a>`)), 'batch: the summary links each package')
     assert.match(page, /<details id="pkg-1"><summary>[^<]*<\/summary><div class="sl">/, 'batch: each package has its report, collapsed')
     const text = node(['batch', folder]); assert.equal(text.status, 0, text.stderr)
     assert.match(text.stdout, new RegExp(`${names.length + 1} packages: `)); assert.match(text.stdout, /broken\.zip\s+Failed/, 'batch: text table')
@@ -1679,7 +1679,7 @@ if (!process.argv.includes('--unit')) {
   const out = join(work, 'good-run.json'), g = run(good, '--out', out)
   assert.ok(calls(g).includes('LMSInitialize '), 'good: initialised: ' + calls(g))
   const saved = JSON.parse(readFileSync(out, 'utf8'))
-  assert.ok(saved.format === 'scorm-lab-run' && saved.trace.coverage.length > 0 && saved.trace.scripts.length > 0, 'good: full run saved with coverage')
+  assert.ok(saved.format === 'package-lab-run' && saved.trace.coverage.length > 0 && saved.trace.scripts.length > 0, 'good: full run saved with coverage')
   assert.ok(!g.findings.some(f => f.sev === 'error'), 'good: no errors: ' + titles(g))
   assert.ok(g.screens.some(s => s.text > 20), 'good: something showed')
   const idx = id => STEPS.findIndex(s => s[0] === id)
@@ -1708,7 +1708,7 @@ if (!process.argv.includes('--unit')) {
   assert.equal(node(['report', out, '--redact-names', '--key-out', keyFile]).status, 2, 'redact: names need --redact')
   // The key file: it must be a key file; it is written only after the report, and never over another file.
   const badKey = join(work, 'bad-key.json'), notRun = join(work, 'not-a-run.json'), key2 = join(work, 'key2.json')
-  writeFileSync(badKey, '{"format":"scorm-lab-redaction-key","key":"abc"}'); writeFileSync(notRun, '{}')
+  writeFileSync(badKey, '{"format":"package-lab-redaction-key","key":"abc"}'); writeFileSync(notRun, '{}')
   const bk = node(['report', out, '--redact', '--redact-names', '--key', badKey, '--out', redOut])
   assert.ok(bk.status === 2 && /isn’t a key file/.test(bk.stderr), 'redact: a key file with the wrong shape is refused: ' + bk.stderr)
   writeFileSync(badKey, 'not json'); assert.equal(node(['report', out, '--redact', '--redact-names', '--key', badKey, '--out', redOut]).status, 2, 'redact: a key file that is not JSON is refused')
@@ -1723,7 +1723,7 @@ if (!process.argv.includes('--unit')) {
     const ca = JSON.parse(node(['analyze', cmi5Zip, '--json']).stdout), ta = JSON.parse(node(['analyze', tincanZip, '--json']).stdout)
     assert.deepEqual([ca.format, ca.manifest.version, ca.item.type, ca.item.launch, ca.verdict.sev], ['cmi5', 'cmi5', 'au', 'au/index.html', 'ok'], 'cmi5: analyze: ' + JSON.stringify(ca.findings.map(f => f.title)))
     assert.deepEqual([ta.format, ta.item.type, ta.item.launch, ta.verdict.sev], ['tincan', 'activity', 'index.html', 'ok'], 'tincan: analyze')
-    assert.match(node(['analyze', cmi5Zip]).stdout, /^SCORM Lab · cmi5\.zip\ncmi5 · 1 items/, 'cmi5: the header names the format'); assert.match(node(['items', tincanZip]).stdout, /Sample Tin Can course {2}activity/)
+    assert.match(node(['analyze', cmi5Zip]).stdout, /^Package Lab · cmi5\.zip\ncmi5 · 1 items/, 'cmi5: the header names the format'); assert.match(node(['items', tincanZip]).stdout, /Sample Tin Can course {2}activity/)
   }
   const c5Out = join(work, 'cmi5-run.json'), c5 = run(cmi5Zip, '--out', c5Out), c5Saved = JSON.parse(readFileSync(c5Out, 'utf8'))
   assert.equal(c5.furthest, 'terminated', 'cmi5: the good AU reaches terminated: ' + JSON.stringify(c5.milestones.filter(m => !m.reached)) + titles(c5))
@@ -1778,7 +1778,7 @@ if (!process.argv.includes('--unit')) {
   }
   if (slow) {
     const pl = run(polling, '--wait', '4'), plf = pl.findings.find(f => /was waiting for/.test(f.title))
-    assert.ok(plf && plf.evidence.some(e => /polls every 250 ms/.test(e) && (process.env.SCORM_LAB_FORCE_TRACE === '1' || !/tests/.test(e))), 'polling: a poller without a trace: ' + titles(pl))
+    assert.ok(plf && plf.evidence.some(e => /polls every 250 ms/.test(e) && (process.env.PACKAGE_LAB_FORCE_TRACE === '1' || !/tests/.test(e))), 'polling: a poller without a trace: ' + titles(pl))
     const plt = run(polling, '--wait', '4', '--trace'), pltf = plt.findings.find(f => /was waiting for/.test(f.title))
     assert.ok(pltf && /`window\.API` to change \(checked every 250 ms\)/.test(pltf.title) && pltf.evidence.some(e => /boot\.js:1 polls every 250 ms \(\d+ runs\); tests `window\.API → undefined`, \d+ times/.test(e)), 'polling: the condition when traced: ' + titles(plt))
   }
@@ -1836,7 +1836,7 @@ if (!process.argv.includes('--unit')) {
     const lx = JSON.parse(node(['experiment', good, '--preset', 'lms', '--wait', '2', '--json']).stdout)
     assert.deepEqual(lx.variants.map(v => v.name), ['default', ...PROFILE_NAMES.slice(1).map(n => 'lms ' + n)], 'experiment: the lms preset')
   }
-  // What the content sees of its own address: https, a secure context (SCORM Lab serves https://lms.lab.invalid/ and https://cdn.content.invalid/),
+  // What the content sees of its own address: https, a secure context (Package Lab serves https://lms.lab.invalid/ and https://cdn.content.invalid/),
   // while the trace keeps the lab:// form. A course that reads location.href with a regex must not get lab:// (that once hid a hang).
   const seen = fixture('seen', d => sub(d, 'lesson.html', '<script src="scorm.js"></script>', `<script>
 var m = location.href.match(/https?:\\/\\/[^\\/]*\\.([^\\/:\\.]*\\.[^\\/:\\.]*).[^\\/:]*\\//)
@@ -1877,7 +1877,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
   console.log('storage: ok')
 
   // Device sizes in Electron, and other browsers (P2.3). Without Playwright WebKit refuses and says how to install it.
-  const noPw = node(['run', good, '--browser', 'webkit', '--wait', '1'], { env: { ...process.env, SCORM_LAB_NO_PLAYWRIGHT: '1' } })
+  const noPw = node(['run', good, '--browser', 'webkit', '--wait', '1'], { env: { ...process.env, PACKAGE_LAB_NO_PLAYWRIGHT: '1' } })
   assert.equal(noPw.status, 2, 'browser: no Playwright fails'); assert.match(noPw.stderr, /Playwright, which isn’t installed here\. Install it with: npm i -D playwright && npx playwright install webkit/, 'browser: the refusal says how to install: ' + noPw.stderr)
   assert.equal(node(['run', good, '--browser', 'firefox']).status, 2, 'browser: a bad name fails'); assert.equal(node(['run', good, '--viewport', 'tv']).status, 2, 'viewport: a bad size fails')
   const vpOut = join(work, 'iphone-run.json'), vpRun = run(good, '--viewport', 'iphone', '--wait', '2', '--out', vpOut), vpSaved = JSON.parse(readFileSync(vpOut, 'utf8'))
@@ -1887,7 +1887,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
   assert.ok(calls(vpRun).includes('LMSInitialize '), 'viewport: good still works at phone size')
   console.log('browsers and device sizes (quick): ok')
   let wkReady = false   // Playwright and its WebKit are here (slow checks; not repeated in the forced-trace pass, which only changes Electron runs)
-  if (slow && process.env.SCORM_LAB_FORCE_TRACE !== '1') {
+  if (slow && process.env.PACKAGE_LAB_FORCE_TRACE !== '1') {
     const wkProbe = node(['run', good, '--browser', 'webkit', '--wait', '3', '--json'])
     if (wkProbe.status !== 0 && /Install it with/.test(wkProbe.stderr)) console.log('webkit: skipped (' + wkProbe.stderr.trim().split('\n')[0] + ')')
     else {
@@ -1927,7 +1927,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
 
   // Tracing (P1.4): hosted, traced, records its failed configuration check and startCourse, keeps the original source,
   // and finds what the untraced run found.
-  const forced = process.env.SCORM_LAB_FORCE_TRACE === '1'
+  const forced = process.env.PACKAGE_LAB_FORCE_TRACE === '1'
   if (!forced) assert.ok(!saved.trace.sites && !saved.launch.options.trace, 'trace: off by default')
   const trOut = join(work, 'hosted-traced.json'), trRun = run(hosted, '--trace', '--out', trOut), trSaved = JSON.parse(readFileSync(trOut, 'utf8'))
   const says = lastEvents(trSaved.trace, 1e6).map(e => `${e.file}:${e.line} ${e.say}`), sc = says.indexOf('boot.js:3 startCourse() called')
@@ -1981,7 +1981,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
   const hOut = join(work, 'hosted-answered.json')
   const hAns = run(hosted, '--answer', '/api/player/config=200:{}', '--pin', 'previewMode=false', '--out', hOut), hAnsT = titles(hAns)
   assert.ok(!hAnsT.some(t => /set its own window.API/.test(t)), 'answer: no fallback, so no own API: ' + hAnsT)
-  assert.ok(calls(hAns).includes('LMSInitialize '), 'answer: the content reaches SCORM Lab’s LMS: ' + calls(hAns))
+  assert.ok(calls(hAns).includes('LMSInitialize '), 'answer: the content reaches Package Lab’s LMS: ' + calls(hAns))
   assert.ok(hAns.findings.some(f => /^Answered 1 request with your responses$/.test(f.title) && /api\/player\/config → 200/.test(f.evidence.join())), 'answer: finding: ' + hAnsT)
   assert.ok(hAnsT.some(t => /tried to change a pinned value/.test(t) && /previewMode = false from boot\.js/.test(t)), 'pin: write finding points at boot.js: ' + hAnsT)
   const hSaved = JSON.parse(readFileSync(hOut, 'utf8'))
@@ -2034,7 +2034,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
   assert.ok(exBy['api both'].better > 0 && exBy['api 1.2'].better > 0, 'experiment: both and 1.2 get further')
   const exTitles = ex.findings.map(f => f.title)
   assert.ok(exTitles.some(t => /^api both gets further/.test(t)) && exTitles.some(t => /^api 1\.2 gets further/.test(t)) && !exTitles.some(t => /api none gets further/.test(t)), 'experiment findings: ' + exTitles)
-  assert.ok(existsSync(join(exDir, '02-api_both.json')) && JSON.parse(readFileSync(exBy['api both'].out, 'utf8')).format === 'scorm-lab-run', 'experiment: runs saved in --out')
+  assert.ok(existsSync(join(exDir, '02-api_both.json')) && JSON.parse(readFileSync(exBy['api both'].out, 'utf8')).format === 'package-lab-run', 'experiment: runs saved in --out')
   assert.deepEqual(JSON.parse(readFileSync(join(exDir, 'experiment.json'), 'utf8')).variants.map(v => v.name), ex.variants.map(v => v.name), 'experiment: --out also keeps the result as experiment.json')
   if (slow) {   // --variants with a file: two more runs
   const exText = node(['experiment', mismatch, '--variants', (writeFileSync(join(work, 'variants.json'), JSON.stringify([{ name: 'deep', patch: { depth: 1 } }])), join(work, 'variants.json')), '--wait', '3'])
@@ -2064,7 +2064,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     const dvGood = JSON.parse(node(['discover', good, '--wait', '3', '--json']).stdout)
     assert.deepEqual(dvGood.findings.map(f => f.title), ['The content made no requests to a server'], 'discover: nothing to discover in good')
   }
-  if (slow) {   // scorm-lab diff --run (P3.3): good reaches wrote, blank only launched
+  if (slow) {   // package-lab diff --run (P3.3): good reaches wrote, blank only launched
     const dr = node(['diff', good, blank, '--run', '--wait', '3', '--json']); assert.equal(dr.status, 0, 'diff --run: ' + dr.stderr)
     const bj = JSON.parse(dr.stdout).behaviour
     assert.ok(idx(bj.a.furthest) >= idx('wrote') && bj.b.furthest === 'launched' && bj.better === -1, 'diff --run: how far each got: ' + [bj.a.furthest, bj.b.furthest]); assert.ok(bj.counts.apiCalls.a > bj.counts.apiCalls.b, 'diff --run: counts')
@@ -2141,7 +2141,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     assert.deepEqual([tcRun.furthest, tcSaved.trace.lrs.documents.map(d => d.id)], ['completion', ['bookmark']], 'tincan: reaches the completion statement, and its state document is kept')
     assert.ok(!node(['report', tcOut, '--redact']).stdout.includes('example.com'), 'tincan: the redacted report')
     // The same through the handlers (what the apps and the xAPI tab use): upload, launch, the run's trace.lrs, and the saved run opening again.
-    const wd = join(work, 'web-cmi5'), srv = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, SCORM_LAB_DATA: wd }, stdio: ['ignore', 'pipe', 'ignore'] })
+    const wd = join(work, 'web-cmi5'), srv = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, PACKAGE_LAB_DATA: wd }, stdio: ['ignore', 'pipe', 'ignore'] })
     let wlog = ''; srv.stdout.on('data', d => { wlog += d })
     try {
       await until(() => /http:\/\/\S+/.test(wlog), 30000, 'web start')
@@ -2160,7 +2160,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
 
   // The web interface: token, upload, launch, live frames, the run, saved runs.
   const data = join(work, 'web-data')
-  const server = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, SCORM_LAB_DATA: data }, stdio: ['ignore', 'pipe', 'ignore'] })
+  const server = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, PACKAGE_LAB_DATA: data }, stdio: ['ignore', 'pipe', 'ignore'] })
   let log = ''; server.stdout.on('data', d => { log += d })
   try {
     await until(() => /http:\/\/\S+/.test(log), 30000, 'web start')
@@ -2213,7 +2213,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     await assert.rejects(invoke('file', { path: 'constructor' }), /isn’t in the package/, 'web: constructor is not a file')
     await invoke('override-revert', {})
     const po = await invoke('options', { item: 1, pins: [{ path: 'previewMode', value: false }], responses: [{ match: '/api/*', status: 404, body: '{}' }], launchParams: 'a=1' })
-    assert.equal(po.command, "scorm-lab run gated.zip --item 1 --pin previewMode=false --answer '/api/*=404:{}' --launch-params a=1", 'web: options handler builds the pin and answer flags')
+    assert.equal(po.command, "package-lab run gated.zip --item 1 --pin previewMode=false --answer '/api/*=404:{}' --launch-params a=1", 'web: options handler builds the pin and answer flags')
     await assert.rejects(invoke('options', { pins: [{ path: 'location.search', value: 'a' }] }), /launch parameters/, 'web: a bad pin is refused')
     await assert.rejects(invoke('options', { responses: [{ match: 'a', bodyFile: '/etc/passwd' }] }), /command line/, 'web: bodyFile is not read over HTTP')
     let ov = await invoke('override-set', { path: 'img/logo.png', base64: 'AAECAw==' })
@@ -2260,7 +2260,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
       assert.ok(done, 'web: discovery finished: ' + dText.slice(-500))
       assert.equal((dText.match(/"state":"round"/g) ?? []).length, 3, 'web: an event per run')
       assert.deepEqual(done.result.requests[0].skeleton, { assets: { base: '' }, lms: { enabled: false, version: '' } }, 'web: the skeleton')
-      assert.ok(existsSync(done.result.file) && JSON.parse(readFileSync(done.result.file, 'utf8')).format === 'scorm-lab-discovery', 'web: the result is saved')
+      assert.ok(existsSync(done.result.file) && JSON.parse(readFileSync(done.result.file, 'utf8')).format === 'package-lab-discovery', 'web: the result is saved')
     }
     // Drill-down over the handlers (slow): an untraced run of levels, traced again, watched, then the chain.
     if (slow) {
@@ -2311,7 +2311,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     // A WebKit run over the handlers (slow, with Playwright): the options line, the run through the CLI's Node path, and Stop.
     if (slow && !forced && wkReady) {
       assert.equal((await fetch(base + '/api/upload?name=good.zip', { method: 'POST', headers: H, body: readFileSync(good) })).status, 200)
-      assert.equal((await invoke('options', { browser: 'webkit', viewport: 'iphone' })).command, 'scorm-lab run good.zip --browser webkit --viewport iphone', 'web: browser and device size in the CLI line')
+      assert.equal((await invoke('options', { browser: 'webkit', viewport: 'iphone' })).command, 'package-lab run good.zip --browser webkit --viewport iphone', 'web: browser and device size in the CLI line')
       assert.equal((await invoke('options', { viewport: 'custom' }).catch(e => e)).message?.match(/viewport/)?.[0], 'viewport', 'web: a bad device size is refused')
       const nw = (await invoke('state')).runs.length
       await invoke('launch', { item: 0, auto: 3, browser: 'webkit', viewport: 'iphone' })
@@ -2328,11 +2328,11 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     if (slow) {
       assert.equal((await fetch(base + '/api/upload?name=blank.zip', { method: 'POST', headers: H, body: readFileSync(blank) })).status, 200)
       await invoke('override-set', { path: 'notes.txt', content: 'from the web' })
-      const dl = await fetch(base + '/api/export', { headers: H }), sum = JSON.parse(decodeURIComponent(dl.headers.get('x-scorm-lab-summary'))), dlBuf = Buffer.from(await dl.arrayBuffer())
+      const dl = await fetch(base + '/api/export', { headers: H }), sum = JSON.parse(decodeURIComponent(dl.headers.get('x-package-lab-summary'))), dlBuf = Buffer.from(await dl.arrayBuffer())
       assert.ok(dl.status === 200 && dl.headers.get('content-type') === 'application/zip' && /attachment; filename="blank-fixed\.zip"/.test(dl.headers.get('content-disposition')), 'web export: a zip download: ' + dl.status + ' ' + dl.headers.get('content-disposition'))
       assert.ok(sum.file === 'blank-fixed.zip' && sum.applied.includes('case') && sum.gone >= 1, 'web export: summary: ' + JSON.stringify(sum))
       const dlFile = join(work, 'web-fixed.zip'); writeFileSync(dlFile, dlBuf); assert.equal(spawnSync('unzip', ['-t', dlFile]).status, 0, 'web export: unzip -t')
-      const dlFiles = unzip(dlBuf); assert.ok(dlFiles.has('js/app.js') && dlFiles.get('notes.txt').toString() === 'from the web' && dlFiles.has('SCORM-LAB-CHANGES.txt'), 'web export: includes the fixes, the overrides and the change list')
+      const dlFiles = unzip(dlBuf); assert.ok(dlFiles.has('js/app.js') && dlFiles.get('notes.txt').toString() === 'from the web' && dlFiles.has('PACKAGE-LAB-CHANGES.txt'), 'web export: includes the fixes, the overrides and the change list')
       assert.equal((await fetch(base + '/api/export?only=nope', { headers: H })).status, 500, 'web export: an unknown fix is an error')
       const noFix = await fetch(base + '/api/export?only=', { headers: H }), noFixFiles = unzip(Buffer.from(await noFix.arrayBuffer()))
       assert.ok(noFix.status === 200 && noFixFiles.has('js/App.js') && noFixFiles.get('notes.txt') && !noFixFiles.has('js/app.js'), 'web export: an empty list of fixes keeps only the changed files')
@@ -2348,12 +2348,12 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
   } finally { server.kill() }
 
   // The Concierge module, if the concierge repo is next to this one.
-  const mod = join(root, '..', 'concierge', 'modules', 'scorm-lab', 'run')
+  const mod = join(root, '..', 'concierge', 'modules', 'package-lab', 'run')
   if (existsSync(mod)) {
-    const t0 = Date.now(), dataDir = mkdtempSync(join(tmpdir(), 'scorm-lab-concierge-'))
-    writeFileSync(join(dataDir, 'config.json'), JSON.stringify({ scormlab: root, node: process.execPath }))
+    const t0 = Date.now(), dataDir = mkdtempSync(join(tmpdir(), 'package-lab-concierge-'))
+    writeFileSync(join(dataDir, 'config.json'), JSON.stringify({ packagelab: root, node: process.execPath }))
     const cgiRaw = (method, path, query = '', input = '') => spawnSync(mod, [], { cwd: dataDir, input, encoding: input instanceof Buffer ? undefined : 'utf8', timeout: 60000,
-      env: { HOME: process.env.HOME, USER: process.env.USER, PATH: '/usr/bin:/bin', CONCIERGE_BASE: '/m/scorm-lab', CONCIERGE_CSRF: 'tok', CONCIERGE_MODULE: join(mod, '..'), REQUEST_METHOD: method, PATH_INFO: path, QUERY_STRING: query } })
+      env: { HOME: process.env.HOME, USER: process.env.USER, PATH: '/usr/bin:/bin', CONCIERGE_BASE: '/m/package-lab', CONCIERGE_CSRF: 'tok', CONCIERGE_MODULE: join(mod, '..'), REQUEST_METHOD: method, PATH_INFO: path, QUERY_STRING: query } })
     const cgi = (method, path, query = '', input = '') => {
       const r = cgiRaw(method, path, query, input)
       assert.equal(r.status, 0, `module ${path}: ${r.stderr}`)
@@ -2362,7 +2362,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     const waitFor = async (f, re, ms = 90000) => { let page = ''; for (const end = Date.now() + ms; Date.now() < end && !re.test(page); await new Promise(r => setTimeout(r, 1000))) page = f(); assert.match(page, re, 'module: waited for ' + re); return page }
     const fileOf = out => { const m = /^Concierge-File: (.*)$/m.exec(out); assert.ok(m && existsSync(m[1]), 'module: a file to download: ' + out); return m[1] }
     const form = (path, body) => cgi('POST', path, '', 'csrf=tok&' + body)
-    assert.match(cgi('POST', '/upload', 'name=blank.zip', readFileSync(blank)), /data-scorm-lab-id="1"/)
+    assert.match(cgi('POST', '/upload', 'name=blank.zip', readFileSync(blank)), /data-package-lab-id="1"/)
     assert.match(cgi('GET', '/pkg', 'id=1'), /wrong capitals/, 'module: static report')
     cgi('POST', '/run', '', 'csrf=tok&id=1&item=1&api=manifest&depth=0&wait=10')
     let page = ''
@@ -2381,9 +2381,9 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
       const same = page => assert.equal((page.match(/<form method="post"/g) ?? []).length, (page.match(/name="csrf" value="tok"/g) ?? []).length, 'module: every POST form carries the CSRF token')
       same(pkgPage)
       // Escaping: a package named with HTML shows as text, in the list and on its page.
-      assert.match(cgi('POST', '/upload', 'name=' + encodeURIComponent('x<img src=x onerror=alert(1)>.zip'), readFileSync(blank)), /data-scorm-lab-id="2"/)
+      assert.match(cgi('POST', '/upload', 'name=' + encodeURIComponent('x<img src=x onerror=alert(1)>.zip'), readFileSync(blank)), /data-package-lab-id="2"/)
       for (const page of [cgi('GET', '/'), cgi('GET', '/pkg', 'id=2')]) assert.ok(page.includes('x&lt;img src=x onerror=alert(1)&gt;') && !page.includes('<img src=x'), 'module: names are escaped')
-      assert.match(cgi('POST', '/upload', 'name=good.zip', readFileSync(good)), /data-scorm-lab-id="3"/)
+      assert.match(cgi('POST', '/upload', 'name=good.zip', readFileSync(good)), /data-package-lab-id="3"/)
       // Overrides: the path is checked, the file is kept under a number.
       for (const bad of ['../x', '/etc/passwd', 'a/../b', 'a=b', '']) assert.match(cgi('POST', '/override', 'id=1&path=' + encodeURIComponent(bad), 'x'), /class="error"/, 'module: override path refused: ' + bad)
       assert.match(cgi('POST', '/override', 'id=1&path=notes.txt', 'from the module'), /<p>ok<\/p>/)
@@ -2422,7 +2422,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
       assert.match(form('/make', 'id=1&item=1'), /Made/); fileOf(cgi('GET', '/download', 'id=1&item=1&what=static'))
       // Report fragments from the CLI escape the package's own text.
       const htmlPkg = fixture('htmltitle', d => { sub(d, 'imsmanifest.xml', 'Fire Safety Basics (sample)', '&lt;img src=x onerror=alert(1)&gt;'); sub(d, 'imsmanifest.xml', 'Lesson and quiz', '&lt;script&gt;alert(2)&lt;/script&gt;') })
-      assert.match(cgi('POST', '/upload', 'name=html.zip', readFileSync(htmlPkg)), /data-scorm-lab-id="4"/)
+      assert.match(cgi('POST', '/upload', 'name=html.zip', readFileSync(htmlPkg)), /data-package-lab-id="4"/)
       const htmlPage = cgi('GET', '/pkg', 'id=4')
       assert.ok(/&lt;script&gt;alert\(2\)|&lt;img src=x/.test(htmlPage) && !htmlPage.includes('<img src=x') && !htmlPage.includes('<script>alert(2)'), 'module: the package page escapes the package text')
       // Limits: at most three workers at once, and a package count.
@@ -2488,13 +2488,13 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
   } else console.log('concierge module: skipped (no ../concierge)')
 
   // Tracing (slow): the overhead on good (when its page has loaded, the median of three runs), and every end-to-end
-  // check again with every run traced (SCORM_LAB_FORCE_TRACE=1).
+  // check again with every run traced (PACKAGE_LAB_FORCE_TRACE=1).
   if (slow && !forced) {
     const loaded = (...a) => { const o = join(work, 'overhead.json'); run(good, '--out', o, ...a); return JSON.parse(readFileSync(o, 'utf8')).trace.probe.find(p => p.type === 'dom' && p.readyState === 'complete' && /lesson\.html/.test(p.frame))?.t }
     const median = f => [f(), f(), f()].sort((a, b) => a - b)[1], plainMs = median(() => loaded()), tracedMs = median(() => loaded('--trace'))
     console.log(`trace overhead: good loaded in ${plainMs} ms, ${tracedMs} ms traced`)
     assert.ok(tracedMs < 2 * plainMs + 50, `trace: under twice the time (${plainMs} → ${tracedMs} ms)`)
-    const t0 = Date.now(), all = spawnSync(process.execPath, [new URL(import.meta.url).pathname, '--slow'], { env: { ...process.env, SCORM_LAB_FORCE_TRACE: '1' }, encoding: 'utf8', maxBuffer: 64 * 1024 ** 2 })
+    const t0 = Date.now(), all = spawnSync(process.execPath, [new URL(import.meta.url).pathname, '--slow'], { env: { ...process.env, PACKAGE_LAB_FORCE_TRACE: '1' }, encoding: 'utf8', maxBuffer: 64 * 1024 ** 2 })
     assert.equal(all.status, 0, 'forced trace pass:\n' + all.stdout.slice(-2000) + all.stderr.slice(-4000))
     console.log(`forced trace pass: ok (${Math.round((Date.now() - t0) / 1000)} s)`)
   }

@@ -119,4 +119,4 @@ export function withProgress(kind, trace, boot, findings, launch, before) {
 export const runAnalysis = ({ kind, launch, trace, boot, analysis, before }) =>
   withProgress(kind, trace, boot, [...launchFindings(trace, boot), ...runFindings(trace, { kind, ...launch }, analysis), ...(kind === 'package' ? [...staticFindings(analysis), ...(boot?.risks ?? [])] : [])], launch, before)
 // A run as saved to disk: what Open saved… and the CLI read back. See docs/developer-guide.md for the format.
-export const savedRun = r => ({ format: 'scorm-lab-run', version: 1, kind: r.kind, label: r.label, package: r.package, launch: r.launch, trace: r.trace, boot: r.boot, findings: r.findings, milestones: r.milestones })
+export const savedRun = r => ({ format: 'package-lab-run', version: 1, kind: r.kind, label: r.label, package: r.package, launch: r.launch, trace: r.trace, boot: r.boot, findings: r.findings, milestones: r.milestones })

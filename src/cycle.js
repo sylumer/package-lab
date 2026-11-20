@@ -1,15 +1,15 @@
 // The save-and-resume cycle (P2.4), pure: reading a macro file, making a macro from the clicks a run recorded, and the
 // findings from a run that left the way a learner does and a second run that resumed from what the first left.
-// Running the two launches is up to the caller (src/main.js in the apps, bin/scorm-lab.js headless).
+// Running the two launches is up to the caller (src/main.js in the apps, bin/package-lab.js headless).
 import { normaliseOptions } from './options.js'
 
-// A macro file is a list of events, or { format: 'scorm-lab-macro', version: 1, events }. Returns the checked events.
+// A macro file is a list of events, or { format: 'package-lab-macro', version: 1, events }. Returns the checked events.
 export function readMacro(json) {
   const events = Array.isArray(json) ? json : json && typeof json === 'object' && Array.isArray(json.events) ? json.events : null
   if (!events) throw new Error('A macro file holds a list of events, or { "events": [ … ] }.')
   return normaliseOptions({ macro: events }).macro
 }
-export const macroFile = events => ({ format: 'scorm-lab-macro', version: 1, events })
+export const macroFile = events => ({ format: 'package-lab-macro', version: 1, events })
 
 // The clicks, keys and typing the probe saw in the content's frames (probe.js, type 'input'), as macro events.
 // Text kept only with the recordInput option, and never from password-like fields (the probe reports those by length only, and they are left out here).

@@ -31,7 +31,7 @@ Confidence: LOW. One vendor knowledge-base article read; it does not cover LMS o
 - `extern/`, `*.ini` (community-reported, unconfirmed)
 - `imsmanifest.xml` at zip root (expected for SCORM; unconfirmed for Lectora)
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Detects `.awt` files, `trivantis`, `a001index.html`. Static: a source project in the ZIP (info).
 

@@ -1,6 +1,6 @@
 // Experiments: one launch run several ways, and a table of how far each way got. Pure: planning the variants,
 // summarising results, and the findings that turn a hypothesis into a fact. Running them is up to the caller
-// (bin/scorm-lab.js headless, src/main.js in the apps).
+// (bin/package-lab.js headless, src/main.js in the apps).
 import { normaliseOptions } from './options.js'
 import { furthest, progress, runCounts } from './milestones.js'
 import { verdict } from './report.js'

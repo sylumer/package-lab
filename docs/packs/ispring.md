@@ -30,7 +30,7 @@ Confidence: MEDIUM for package shape and LMS-profile setting (vendor article rea
 - `res/` folder (confirmed as example name in one article)
 - Candidate strings, unconfirmed: `LMSCommit`, `Commit`, `API_1484_11`
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Detects `ispring` in names or scripts. Static: more than one SCO in the manifest (iSpring exports one; info).
 

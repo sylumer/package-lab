@@ -1,10 +1,10 @@
-// SCORM Lab's main process: the window, the package server (lab://run/), runs and their recorders, and the three
+// Package Lab's main process: the window, the package server (lab://run/), runs and their recorders, and the three
 // ways of driving them: the desktop window (IPC), the web interface (src/web.js) and headless runs for the CLI
 // (--run=<job.json>). See docs/developer-guide.md.
 //
 // Command-line flags (all optional):
 //   <file.zip>           open this package in the window
-//   --run=<job.json>     headless: launch one item, wait, write the run to job.out, quit (used by bin/scorm-lab.js)
+//   --run=<job.json>     headless: launch one item, wait, write the run to job.out, quit (used by bin/package-lab.js)
 //   --serve[=port]       start the web interface (default port 4880); --host=<address> (default 127.0.0.1)
 //   --no-window          no desktop window (with --serve: a server only)
 //   --show-runs          with --no-window: show the content windows anyway
@@ -40,7 +40,7 @@ import { codeViewAsync } from './codeview.js'
 import { timelineView } from './timeline.js'
 import { createLrs, maskTokens, MAX_BODY } from './lrs.js'
 import { instrument, instrumentHtml, restoreTrace, lastEvents, eventCount, MAX_TRACED } from './instrument.js'
-// Electron's own warning about pages without a CSP would show as an error of every run's content; it is about SCORM Lab, not the course.
+// Electron's own warning about pages without a CSP would show as an error of every run's content; it is about Package Lab, not the course.
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'lab', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
@@ -56,9 +56,9 @@ const SHOW_RUNS = WINDOW || flag('show-runs') !== undefined
 const DEFAULT_PORT = 4880
 
 // Headless runs use a throwaway profile, so they never touch the desktop app's saved runs or its lock.
-if (JOB) app.setPath('userData', join(tmpdir(), `scorm-lab-run-${process.pid}`))
-// SCORM_LAB_DATA moves everything else (saved runs, the web token, sign-ins for references): for tests and side-by-side setups.
-else if (process.env.SCORM_LAB_DATA) app.setPath('userData', process.env.SCORM_LAB_DATA)
+if (JOB) app.setPath('userData', join(tmpdir(), `package-lab-run-${process.pid}`))
+// PACKAGE_LAB_DATA moves everything else (saved runs, the web token, sign-ins for references): for tests and side-by-side setups.
+else if (process.env.PACKAGE_LAB_DATA) app.setPath('userData', process.env.PACKAGE_LAB_DATA)
 
 let ui = null, web = null, pkg = null, config = {}, active = null, nextId = 1
 let served = null   // the files the running content is served from: the package's, with any overrides on top
@@ -152,7 +152,7 @@ function watchPopups(wc, extra, ropts, wins, top = true) {
     extra.push(rec); wins.push(child)
     // The LMS page opens the content's window blank, and goes on to the content once the recorder is attached: a window
     // that starts loading at once is half loaded before the debugger is there, so its requests and probe are missed.
-    // Only the run window holds SCORM Lab's LMS page; a window the content opens isn't scripted into.
+    // Only the run window holds Package Lab's LMS page; a window the content opens isn't scripted into.
     rec.start().catch(() => {}).then(() => top && wc.executeJavaScript('window.__labPopupReady?.()').catch(() => {}))
     watchPopups(child.webContents, extra, ropts, wins, false)
     child.on('close', e => { if (!rec.stopped) { e.preventDefault(); rec.stop().finally(() => child.destroy()) } })
@@ -356,7 +356,7 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, leave = false, ...re
   const norm = normaliseOptions({ ...rest, files: rest.files ?? pkg?.overrides })
   if ((norm.tool ?? null) !== (pkg.analysis.tool ?? null)) pkg.analysis = analyze(pkg.files, { tool: norm.tool })   // the Authoring tool setting changes the pack findings
   const cmi = givenCmi ?? (norm.resume && pkg.lastCmi ? pkg.lastCmi : null)
-  const plan = launchPlan({ pkg, item: itemIndex, cmi, options: { ...norm, ...(process.env.SCORM_LAB_FORCE_TRACE === '1' && norm.browser === 'chromium' ? { trace: true } : {}) },   // tests: every Electron run traced
+  const plan = launchPlan({ pkg, item: itemIndex, cmi, options: { ...norm, ...(process.env.PACKAGE_LAB_FORCE_TRACE === '1' && norm.browser === 'chromium' ? { trace: true } : {}) },   // tests: every Electron run traced
     origins: WEBKIT_ORIGINS })   // https in Electron too: content that reads its own address must see a real one (lab:// hid a hang)
   const { o, res, files, config: cfg, launch, headers, label } = plan
   if (o.browser === 'webkit') { if (o.macro.length || leave) throw webkitMacro(); return beginWebkit({ plan, itemIndex, cmi }) }
@@ -375,11 +375,11 @@ const webkitMacro = () => new Error('Macros and the save-and-resume test run in 
 // ponytail: no live view for WebKit; the Live tab stays empty. Stream Playwright screenshots when it matters.
 async function beginWebkit({ plan, itemIndex, cmi }) {
   await finish()
-  const { o, label, launch, res, files } = plan, dir = mkdtempSync(join(tmpdir(), 'scorm-lab-webkit-')), zip = join(dir, 'package.zip'), job = join(dir, 'job.json')
+  const { o, label, launch, res, files } = plan, dir = mkdtempSync(join(tmpdir(), 'package-lab-webkit-')), zip = join(dir, 'package.zip'), job = join(dir, 'job.json')
   writeFileSync(zip, pkg.zip)
   writeFileSync(job, JSON.stringify({ zip, name: pkg.name, item: itemIndex, options: o, cmi, out: join(dir, 'run.json'), stop: join(dir, 'stop'), ready: join(dir, 'ready'), wait: o.auto || 3600 }))
   // This binary as plain Node: the Electron it is, with ELECTRON_RUN_AS_NODE.
-  const child = spawn(process.execPath, [join(import.meta.dirname, 'webkit-runner.js'), job], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|HOME|TMPDIR|SCORM_LAB_.*|PLAYWRIGHT_.*)$/.test(k))), ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'pipe'] })
+  const child = spawn(process.execPath, [join(import.meta.dirname, 'webkit-runner.js'), job], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|HOME|TMPDIR|PACKAGE_LAB_.*|PLAYWRIGHT_.*)$/.test(k))), ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'pipe'] })
   let err = ''
   child.stderr.on('data', d => { err = (err + d).slice(-4000) })
   const exited = new Promise(r => child.on('exit', code => { r(code); a.webkit && (a.webkit.done = true) })), ready = join(dir, 'ready')
@@ -414,7 +414,7 @@ async function finishWebkit(a) {
 
 function readRun(file) {
   const d = JSON.parse(readFileSync(file, 'utf8'))
-  if (!d.trace) throw new Error(`${basename(file)} isn’t a SCORM Lab run.`)
+  if (!d.trace) throw new Error(`${basename(file)} isn’t a Package Lab run.`)
   const id = nextId++
   const run = { id, kind: d.kind, label: (d.label ?? basename(file)) + ' (saved)', launch: d.launch, trace: d.trace, file, boot: d.boot, package: d.package,
     ...withProgress(d.kind, d.trace, d.boot, [...launchFindings(d.trace, d.boot), ...runFindings(d.trace, { kind: d.kind, ...d.launch }), ...(d.boot?.risks ?? []),
@@ -487,7 +487,7 @@ async function discoverStart({ item, request, rounds = 5, ...rest }) {
       try {
         const dir = join(app.getPath('userData'), 'discoveries'); mkdirSync(dir, { recursive: true })
         result.file = join(dir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${pkg.name.replace(/[^\w.-]+/g, '_').slice(0, 60)}.json`)
-        writeFileSync(result.file, JSON.stringify({ format: 'scorm-lab-discovery', version: 1, package: pkg.name, item, base, request: request || null, ...result }))
+        writeFileSync(result.file, JSON.stringify({ format: 'package-lab-discovery', version: 1, package: pkg.name, item, base, request: request || null, ...result }))
       } catch { result.file = '' }
       emit('discover', { state: 'done', result })
     } catch (e) { emit('discover', { state: 'error', message: e.message }) } finally { experiment = null }
@@ -596,7 +596,7 @@ function sourceOf({ run, url, path }) {
 function runReport({ run, redact }) {
   const r = runs.get(+run); if (!r) throw new Error('Choose a run.')
   const base = String(r.package ?? 'run').replace(/\.zip$/i, '').replace(/[^\w.-]+/g, '_').slice(0, 60)
-  return { name: `${base}${redact ? '-redacted' : ''}-report.html`, html: renderReport({ title: `SCORM Lab: ${r.package ?? r.label}`, subtitle: r.label, run: savedRun(r), redact: !!redact,
+  return { name: `${base}${redact ? '-redacted' : ''}-report.html`, html: renderReport({ title: `Package Lab: ${r.package ?? r.label}`, subtitle: r.label, run: savedRun(r), redact: !!redact,
     ...(redact && pkg && r.package === pkg.name && { analysis: pkg.analysis, files: pkg.files }) }) }   // the open package's analysis lets the static findings be redacted at the source too
 }
 
@@ -704,7 +704,7 @@ const handlers = {
     return { cmp, findings: sortFindings(compareFindings(cmp)) }
   },
   'open-run': async () => {
-    const r = await dialog.showOpenDialog(ui, { title: 'Open a saved run', defaultPath: runsDir(), filters: [{ name: 'SCORM Lab run', extensions: ['json'] }], properties: ['openFile', 'multiSelections'] })
+    const r = await dialog.showOpenDialog(ui, { title: 'Open a saved run', defaultPath: runsDir(), filters: [{ name: 'Package Lab run', extensions: ['json'] }], properties: ['openFile', 'multiSelections'] })
     return r.canceled ? [] : r.filePaths.map(readRun)
   },
   // Saved runs by name, newest first, for web clients (which can't use the file dialog).
@@ -747,7 +747,7 @@ for (const [name, fn] of Object.entries(handlers)) ipcMain.handle(name, (_e, arg
 // ---- Start-up ----
 let pendingOpen = argv.find(a => /\.zip$/i.test(a) && !a.startsWith('--')) ?? null
 function openPath(p) {
-  try { const info = loadPackage(p); if (ui) { ui.show(); ui.focus() } return info } catch (e) { if (ui) dialog.showErrorBox('SCORM Lab', `Couldn’t open ${basename(p)}: ${e.message}`); else console.error(e) }
+  try { const info = loadPackage(p); if (ui) { ui.show(); ui.focus() } return info } catch (e) { if (ui) dialog.showErrorBox('Package Lab', `Couldn’t open ${basename(p)}: ${e.message}`); else console.error(e) }
 }
 // macOS hands files to the app this way (Finder's Open With, `open -a`, Alfred), before or after it's ready.
 app.on('open-file', (e, p) => { e.preventDefault(); if (app.isReady() && (ui || web)) openPath(p); else pendingOpen = p })
@@ -764,7 +764,7 @@ if (WINDOW) {
 }
 
 function createWindow() {
-  ui = new BrowserWindow({ width: 1400, height: 900, title: 'SCORM Lab', webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, sandbox: true } })
+  ui = new BrowserWindow({ width: 1400, height: 900, title: 'Package Lab', webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, sandbox: true } })
   ui.loadFile(join(import.meta.dirname, 'ui', 'index.html'))
   ui.on('closed', () => { ui = null; if (!web && process.platform !== 'darwin') app.quit() })
   ui.webContents.once('did-finish-load', () => { if (pendingOpen) { openPath(pendingOpen); pendingOpen = null } })
@@ -792,7 +792,7 @@ app.whenReady().then(async () => {
     web = await startWeb({ host, port, uiDir: join(import.meta.dirname, 'ui'), dataDir: app.getPath('userData'), handlers, accept: role => { if (role === 'compare') { if (!pkg) throw new Error('Open a package first, then choose the one to compare it with.'); if (active || experiment) throw new Error('Stop the run first.') } },
       upload: (name, buf, role) => role === 'compare' ? comparePackageData(name, buf) : loadPackageData(name, buf),
       download: o => { const { zip, file, summary } = buildExport(o); if (!zip) throw new Error('Nothing to change: no autofix found anything to correct, and no file has been changed.'); return { name: file, buf: zip, summary } }, onLive: n => { live.watchers = n; live.restart() } })
-    console.log(`SCORM Lab web interface: ${web.url}`)
+    console.log(`Package Lab web interface: ${web.url}`)
   }
   if (WINDOW) createWindow()
   else if (pendingOpen) { openPath(pendingOpen); pendingOpen = null }
@@ -801,7 +801,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => { if (!web && !JOB && process.platform !== 'darwin') app.quit() })
 app.on('activate', () => { if (WINDOW && !ui && app.isReady()) createWindow() })
 
-// ---- Headless runs (bin/scorm-lab.js run) ----
+// ---- Headless runs (bin/package-lab.js run) ----
 // The job file: { zip, item, options (see options.js), resumeFrom, close (leave like a learner at the end: the cycle's first run), out, live (folder) }. Writes
 // the run to out in the saved-run format. With live: frames to live/frame.jpg, progress to live/status.json, and
 // input (and { type: 'stop' }) read from live/input/*.json.

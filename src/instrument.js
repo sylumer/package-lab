@@ -276,7 +276,7 @@ export function traceFindings(trace) {
   const un = trace.untraced ?? []
   if (un.length) out.push({ sev: 'info', title: `${un.length} script file${un.length > 1 ? 's were' : ' was'} not traced`,
     detail: 'These ran as they are, so the Execution tab shows nothing from them. Everything else about the run is the same.',
-    evidence: un.slice(0, 10).map(u => `${u.file}: ${u.why}`), fix: 'A file over 2 MB is left out to keep the run quick; a file SCORM Lab couldn’t read as JavaScript may use syntax it doesn’t know yet. The rest of the trace still applies.' })
+    evidence: un.slice(0, 10).map(u => `${u.file}: ${u.why}`), fix: 'A file over 2 MB is left out to keep the run quick; a file Package Lab couldn’t read as JavaScript may use syntax it doesn’t know yet. The rest of the trace still applies.' })
   if (trace.truncated?.exec) out.push({ sev: 'info', title: 'The execution trace is incomplete',
     detail: 'The content ran more than 200,000 functions and decisions, so the oldest were dropped. The last ones, which show where it stopped, are kept.',
     evidence: [`${eventCount(trace)} events kept`], fix: 'Stop the run sooner after the point you care about, or change the files so less runs before it.' })

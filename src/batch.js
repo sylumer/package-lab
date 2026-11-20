@@ -22,7 +22,7 @@ const cells = (r, run) => [r.package, r.scorm ?? '', r.tool, SEV_LABEL[r.verdict
 // A row for a package that couldn't be checked: its error is the note.
 export const failedRow = (path, why) => ({ package: clean(basename(path)), path: resolve(path), scorm: null, tool: '', verdict: 'failed', note: clean(`Couldn’t open it: ${why}`), errors: 0, warnings: 0, furthest: null })
 
-// The default item is the first SCO, else the first with something to launch (as `scorm-lab analyze` checks it). Returns { row, fragment }:
+// The default item is the first SCO, else the first with something to launch (as `package-lab analyze` checks it). Returns { row, fragment }:
 // the row, and with fragment: true the package's report as an HTML fragment (renderReport). Never throws: a package it can't read is a failed row.
 export function checkPackage(path, { fragment = false } = {}) {
   try {
@@ -36,7 +36,7 @@ export function checkPackage(path, { fragment = false } = {}) {
       verdict: v.sev, note: clean(v.title), errors: c.errors, warnings: c.warnings, furthest: null }
     if (!fragment) return { row }
     const subtitle = item ? `${item.title || item.id} (${item.res.path ?? item.res.href}), from the files only. Run it to see what actually happens.` : 'No item to launch. From the files only.'
-    return { row, fragment: renderReport({ title: `SCORM Lab: ${name}`, subtitle, findings, boot, analysis: a, files, fragment: true }) }
+    return { row, fragment: renderReport({ title: `Package Lab: ${name}`, subtitle, findings, boot, analysis: a, files, fragment: true }) }
   } catch (e) {
     return { row: failedRow(path, e.message) }
   }
@@ -81,7 +81,7 @@ export async function staticRows(files, { jobs = 1, fragment = false } = {}) {
   return out
 }
 
-// The row of a package after a run (its run JSON from `scorm-lab run --json`): the run's verdict and counts, and the furthest milestone.
+// The row of a package after a run (its run JSON from `package-lab run --json`): the run's verdict and counts, and the furthest milestone.
 export function runRow(row, json) {
   return { ...row, verdict: json.verdict.sev, note: clean(json.verdict.title), errors: json.counts.errors, warnings: json.counts.warnings, furthest: furthest(json.milestones ?? [])?.label ?? null }
 }
@@ -140,9 +140,9 @@ export function batchHtml(items, { folder = '', run = false } = {}) {
   const head = columns(run).map(c => `<th>${esc(c)}</th>`).join('')
   const body = items.map(({ row, fragment }, i) => `<tr>${cells(row, run).map((c, k) => `<td>${k === 0 && fragment !== undefined ? `<a href="#pkg-${i + 1}">${esc(c)}</a>` : esc(c)}</td>`).join('')}</tr>`).join('')
   const sections = items.map(({ row, fragment }, i) => fragment === undefined ? '' : `<details id="pkg-${i + 1}"><summary>${esc(row.package)} · ${esc(SEV_LABEL[row.verdict])}</summary>${fragment}</details>`).join('')
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SCORM Lab: batch check</title><style>${PAGE_CSS}</style></head><body><main>
-<h1>SCORM Lab: batch check</h1><p class="muted">${esc(folder)} · ${esc(summaryText(batchSummary(rows)))} · ${run ? 'with runs' : 'from the files alone'}</p>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Package Lab: batch check</title><style>${PAGE_CSS}</style></head><body><main>
+<h1>Package Lab: batch check</h1><p class="muted">${esc(folder)} · ${esc(summaryText(batchSummary(rows)))} · ${run ? 'with runs' : 'from the files alone'}</p>
 <div class="scroll"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
 ${sections}
-<p class="muted">Made by SCORM Lab on ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))}. Everything here was worked out on this computer.</p></main></body></html>`
+<p class="muted">Made by Package Lab on ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))}. Everything here was worked out on this computer.</p></main></body></html>`
 }

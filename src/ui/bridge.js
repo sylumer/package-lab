@@ -3,7 +3,7 @@
 // server-sent events from /api/events. It also adds what only the web interface needs: upload, live and web.
 if (!window.lab) {
   const events = new EventSource('/api/events')
-  events.onerror = () => { const s = document.getElementById('status'); if (s) s.textContent = 'Lost the connection to SCORM Lab: reconnecting…' }
+  events.onerror = () => { const s = document.getElementById('status'); if (s) s.textContent = 'Lost the connection to Package Lab: reconnecting…' }
   window.lab = {
     web: true,
     async invoke(channel, arg) {
@@ -29,7 +29,7 @@ if (!window.lab) {
     async download(only) {   // only: a list of fix ids (empty: none), or leave out for all
       const r = await fetch('/api/export' + (only ? '?only=' + encodeURIComponent(only.join(',')) : ''), { credentials: 'same-origin' })
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `${r.status} ${r.statusText}`)
-      const summary = JSON.parse(decodeURIComponent(r.headers.get('X-Scorm-Lab-Summary')))
+      const summary = JSON.parse(decodeURIComponent(r.headers.get('X-Package-Lab-Summary')))
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(await r.blob()), download: summary.file })
       document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000)
       return summary

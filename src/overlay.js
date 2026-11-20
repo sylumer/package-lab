@@ -33,7 +33,7 @@ export function overrideFinding(overrides = {}) {
   const paths = Object.keys(overrides)
   if (!paths.length) return null
   return { sev: 'info', title: `This run used ${paths.length} changed file${paths.length === 1 ? '' : 's'}: ${paths.slice(0, 5).join(', ')}${paths.length > 5 ? ', …' : ''}`,
-    detail: 'These files were replaced inside SCORM Lab for this run. The package on disk is unchanged, so everything below describes the changed copy, not the original.',
+    detail: 'These files were replaced inside Package Lab for this run. The package on disk is unchanged, so everything below describes the changed copy, not the original.',
     evidence: paths.map(p => `${p}: ${overrides[p].base64 !== undefined ? 'replaced file' : 'changed text'}, ${kb(entryBuffer(overrides[p]).length)}`),
     fix: 'To see the original again, run without the changes: revert them in the Files tab, or leave out --override.' }
 }

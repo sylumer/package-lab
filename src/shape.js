@@ -21,7 +21,7 @@ export const shapePrefix = responses => {
 }
 
 // ---- Which requests went to a server ----
-// fetch and XHR requests to the host's root (lab://run/ outside the package and SCORM Lab's pages) or another site.
+// fetch and XHR requests to the host's root (lab://run/ outside the package and Package Lab's pages) or another site.
 const isServer = (r, trace) => /^(XHR|Fetch)$/.test(r.type) && (/^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(r.url) && !(trace?.lrs && /\/__lrs\//.test(r.url)) || /^https?:/.test(r.url))
 // The pattern that answers a request: its path on the host's root (any query), or its address on another site.
 export function requestPattern(url) {
@@ -104,7 +104,7 @@ export function inferShape(reads) {
 }
 
 // ---- The discovery loop ----
-// run(name, options) runs one launch to its end and resolves to the saved run (src/main.js and bin/scorm-lab.js give
+// run(name, options) runs one launch to its end and resolves to the saved run (src/main.js and bin/package-lab.js give
 // it; a run with an id keeps it as runId). request is a pattern, or none for every server request the first run made.
 // onRound(row, index) is called after each run with its experiment row (experiments.js).
 // Throws if the settings can't be used, before anything runs.
@@ -165,7 +165,7 @@ export function discoverFindings(d) {
     detail: `Without an answer it got as far as “${d.noAnswer.label}”. With a response holding just the fields it read, it got further, so this request is what holds it back outside its own platform.`,
     evidence: d.rows.map(r => `${r.name}: ${r.furthestLabel ?? r.progress}`), fix: 'Save the stand-in as a response to keep testing past it, and look for the export setting or LMS feature that provides it.' })
   for (const r of d.requests.filter(x => !x.fields.length)) out.push({ sev: 'info', title: `The content didn’t read what ${short(r.url)} sent`,
-    detail: 'SCORM Lab answered the request and watched the response, and saw nothing read. The content may ignore it, never get as far as reading it, or read it in a way SCORM Lab doesn’t follow (a Blob, a stream, a worker).',
+    detail: 'Package Lab answered the request and watched the response, and saw nothing read. The content may ignore it, never get as far as reading it, or read it in a way Package Lab doesn’t follow (a Blob, a stream, a worker).',
     evidence: [`${r.method} ${short(r.url)}${r.from ? ' from ' + r.from : ''}`], fix: '' })
   return out
 }

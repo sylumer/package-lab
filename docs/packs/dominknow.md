@@ -29,7 +29,7 @@ Confidence: LOW. One vendor community article read; publish panel described, no 
 - Unconfirmed: no package file names found. Only the zip itself is known.
 - Check for `imsmanifest.xml` at zip root as the generic SCORM marker; not confirmed for dominKnow.
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Detects the name `dominknow`. Static: no manifest, which matches a Web package publish (info).
 

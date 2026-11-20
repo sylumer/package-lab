@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// scorm-lab: the command-line interface. Static analysis runs here in Node; runs, the desktop window and the web
-// interface start Electron (this repo's, or the installed SCORM Lab.app). See docs/cli.md.
+// package-lab: the command-line interface. Static analysis runs here in Node; runs, the desktop window and the web
+// interface start Electron (this repo's, or the installed Package Lab.app). See docs/cli.md.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, openSync, closeSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
@@ -37,16 +37,16 @@ import { batchFiles, staticRows, runRow, failedRun, batchSummary, summaryText, b
 
 const APP_DIR = new URL('..', import.meta.url).pathname
 const VERSION = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')).version
-const INSTALLED = '/Applications/SCORM Lab.app'
-const DATA_DIR = join(homedir(), 'Library', 'Application Support', 'SCORM Lab')
+const INSTALLED = '/Applications/Package Lab.app'
+const DATA_DIR = join(homedir(), 'Library', 'Application Support', 'Package Lab')
 
-const HELP = `SCORM Lab ${VERSION}: find out why a SCORM package doesn't work.
+const HELP = `Package Lab ${VERSION}: find out why an e-learning package (SCORM, cmi5, xAPI) doesn't work.
 
-Usage: scorm-lab <command> [options]
+Usage: package-lab <command> [options]
 
 Commands
   analyze <package.zip>     Check the package without running it: manifest, scripts, launch path.
-  doctor                    Check this Mac can run SCORM Lab: Node, Electron, Playwright and WebKit, the data folder, port 4880.
+  doctor                    Check this Mac can run Package Lab: Node, Electron, Playwright and WebKit, the data folder, port 4880.
   fix <package.zip>         Write a corrected copy of the package: the mechanical fixes, plus any --override files.
   items <package.zip>       List the items that can be launched, with their numbers.
   run <package.zip>         Launch an item in a hidden browser, record it, and report what went wrong.
@@ -59,9 +59,9 @@ Commands
   report <package.zip | run.json>
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
-  serve                     Start the web interface, to use SCORM Lab from another device.
-  completion zsh            A zsh completion script: scorm-lab completion zsh > ~/.zfunc/_scorm-lab.
-  help                      This help. Also: scorm-lab <command> --help.
+  serve                     Start the web interface, to use Package Lab from another device.
+  completion zsh            A zsh completion script: package-lab completion zsh > ~/.zfunc/_package-lab.
+  help                      This help. Also: package-lab <command> --help.
   version                   The version.
   Every command takes --json, except serve, which takes it with --url only.
 
@@ -107,7 +107,7 @@ Options for doctor
 
 Options for completion, help, version, open
   --json                    Print JSON instead of text. open: which app it opened (installed or repo) and its path.
-  (completion takes the shell: scorm-lab completion zsh)
+  (completion takes the shell: package-lab completion zsh)
 
 Options for fix
   --only <id,…>             Only these fixes (default: all): ${FIX_IDS.join(', ')}.
@@ -201,7 +201,7 @@ function redactOptions(o) {
   if (o.key) {
     if (!existsSync(resolve(o.key))) fail(`No such key file: ${o.key}`)
     let k; try { k = JSON.parse(readFileSync(resolve(o.key), 'utf8')) } catch { k = null }
-    if (k?.format !== 'scorm-lab-redaction-key' || typeof k.key !== 'string' || !/^[0-9a-f]{64}$/.test(k.key) || (k.names !== undefined && (!k.names || typeof k.names !== 'object' || Array.isArray(k.names)))) fail(`${o.key} isn’t a key file from --key-out (JSON with format "scorm-lab-redaction-key" and a 64-digit hex key).`)
+    if (k?.format !== 'package-lab-redaction-key' || typeof k.key !== 'string' || !/^[0-9a-f]{64}$/.test(k.key) || (k.names !== undefined && (!k.names || typeof k.names !== 'object' || Array.isArray(k.names)))) fail(`${o.key} isn’t a key file from --key-out (JSON with format "package-lab-redaction-key" and a 64-digit hex key).`)
     key = Buffer.from(k.key, 'hex')
   }
   return { names: true, key, map: new Map() }
@@ -220,7 +220,7 @@ function toolOf(o = {}) {
   try { return normaliseOptions({ tool: t }).tool } catch (e) { fail(e.message) }
 }
 function openZip(path, o) {
-  if (!path) fail('Name a package: scorm-lab <command> <package.zip>')
+  if (!path) fail('Name a package: package-lab <command> <package.zip>')
   if (!existsSync(path)) fail(`No such file: ${path}`)
   let files
   try { files = unzip(readFileSync(path)) } catch (e) { fail(`${basename(path)} isn’t a readable ZIP: ${e.message}`) }
@@ -250,7 +250,7 @@ function printFindings(findings) {
 }
 function printHeader(pkg, item) {
   const a = pkg.analysis, m = a.manifest
-  console.log(paint('1', `SCORM Lab · ${pkg.name}`))
+  console.log(paint('1', `Package Lab · ${pkg.name}`))
   console.log(`${m ? formatName(a) : a.format === 'scorm' ? 'No manifest' : 'No readable course file'} · ${launchable(a).length} items · ${a.fingerprints.length ? 'made with ' + a.fingerprints.join(', ') : 'authoring tool not recognised'} · ${a.files} files (${(a.size / 1048576).toFixed(1)} MB)`)
   if (item) console.log(`Item: ${item.title || item.id} (${item.type || '?'}) → ${item.res.path ?? item.res.href}`)
 }
@@ -277,12 +277,12 @@ function appVersion(app) {
 
 // ---- Electron ----
 function electron() {
-  const env = process.env.SCORM_LAB_ELECTRON
+  const env = process.env.PACKAGE_LAB_ELECTRON
   if (env) return /(^|\/)electron$/i.test(env) ? [env, [APP_DIR]] : [env, []]
   try { const bin = createRequire(import.meta.url)('electron'); if (typeof bin === 'string' && existsSync(bin)) return [bin, [APP_DIR]] } catch { /* not installed here */ }
-  const app = join(INSTALLED, 'Contents', 'MacOS', 'SCORM Lab')
+  const app = join(INSTALLED, 'Contents', 'MacOS', 'Package Lab')
   if (existsSync(app)) return [app, []]
-  fail('Electron isn’t installed: run npm install in the scorm-lab folder, or install SCORM Lab.app.')
+  fail('Electron isn’t installed: run npm install in the package-lab folder, or install Package Lab.app.')
 }
 
 // Launch options from --options <file.json>, and from the flags that were given (flags win).
@@ -383,7 +383,7 @@ function buildOptions(o) {
 
 // Runs one item headless and returns the saved run. Options as for the run command.
 function runPackage(pkg, o, options) {
-  const item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'scorm-lab-cli-'))
+  const item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'package-lab-cli-'))
   const out = o.out ? resolve(o.out) : join(dir, 'run.json')
   try { options ??= buildOptions(o) } catch (e) { rmSync(dir, { recursive: true, force: true }); throw e }
   const wait = options.wait
@@ -411,7 +411,7 @@ function runWebkit(pkg, item, o, options, dir, out) {
   const traceFile = join(dir, 'webkit-trace.json'), jobFile = join(dir, 'webkit-job.json')
   writeFileSync(jobFile, JSON.stringify({ zip: pkg.path, item: item.index, options, cmi, out: traceFile, wait: options.wait }))
   const r = spawnSync(process.execPath, [join(APP_DIR, 'src', 'webkit-runner.js'), jobFile], { encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'], timeout: (options.wait + 20) * 1000, killSignal: 'SIGKILL',   // it ends itself soon after its wait
-    env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|HOME|TMPDIR|SCORM_LAB_.*|PLAYWRIGHT_.*)$/.test(k))) })
+    env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|HOME|TMPDIR|PACKAGE_LAB_.*|PLAYWRIGHT_.*)$/.test(k))) })
   if (!existsSync(traceFile)) {
     rmSync(dir, { recursive: true, force: true })
     fail((r.stderr ?? '').split('\n').filter(l => l.trim()).slice(-3).join('\n') || `The WebKit run didn’t finish${r.error ? `: ${r.error.message}` : r.status ? ` (exit ${r.status})` : ''}.`)
@@ -443,10 +443,10 @@ function printRows(rows, first = 'Variant', base = 'the default') {
   }
 }
 
-// Batch --run (P4.3): each package runs as `scorm-lab run --json --out` in a child process, so Electron stays out of this one. One at a
+// Batch --run (P4.3): each package runs as `package-lab run --json --out` in a child process, so Electron stays out of this one. One at a
 // time, or two with --jobs over 1. A run's row and report replace the static ones in results.
 async function runBatch(results, { jobs, dir, wait, out, json }) {
-  const limit = jobs > 1 ? 2 : 1, waitArgs = wait !== undefined ? ['--wait', wait] : [], cli = join(APP_DIR, 'bin', 'scorm-lab.js')
+  const limit = jobs > 1 ? 2 : 1, waitArgs = wait !== undefined ? ['--wait', wait] : [], cli = join(APP_DIR, 'bin', 'package-lab.js')
   const one = (path, file) => new Promise(done => {
     const child = spawn(process.execPath, [cli, 'run', path, '--json', '--out', file, ...waitArgs], { stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = '', stderr = '', stopped = false
@@ -470,7 +470,7 @@ async function runBatch(results, { jobs, dir, wait, out, json }) {
       const got = await one(r.row.path, join(dir, `run-${i + 1}.json`))
       if (got.error) { r.row = failedRun(r.row, got.error); continue }
       r.row = runRow(r.row, got.json)
-      if (out) r.fragment = renderReport({ title: `SCORM Lab: ${r.row.package}`, subtitle: got.run.label, run: got.run, fragment: true })
+      if (out) r.fragment = renderReport({ title: `Package Lab: ${r.row.package}`, subtitle: got.run.label, run: got.run, fragment: true })
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, results.length) }, lane))
@@ -502,7 +502,7 @@ const commands = {
     if (out) writeFileSync(out, r.zip)
     if (o.json) console.log(JSON.stringify({ package: pkg.name, out, applied: r.applied, notes: r.notes, overridden: r.overridden, proof: r.proof }, null, 1))
     else {
-      console.log(paint('1', `SCORM Lab · fix · ${pkg.name}`))
+      console.log(paint('1', `Package Lab · fix · ${pkg.name}`))
       if (!r.zip) console.log('Nothing to change: none of the fixes found anything to correct, and no --override was given. No file written.')
       for (const f of r.applied) { console.log(`\n${f.label} ${paint('2', `[${f.id}]`)}`); for (const c of f.changes) console.log(`  · ${c}`) }
       if (r.notes.length) { console.log('\nNot done:'); for (const n of r.notes.flatMap(f => f.notes)) console.log(`  · ${n}`) }
@@ -511,7 +511,7 @@ const commands = {
         console.log(`\nFindings cleared: ${r.proof.gone.length} of ${r.proof.before}${r.proof.gone.map(t => `\n  ✓ ${t}`).join('')}`)
         if (r.proof.added.length) console.log(`New or reworded:${r.proof.added.map(t => `\n  + ${t}`).join('')}`)
         console.log(`Still there: ${r.proof.remaining.length}`)
-        console.log(paint('2', `\nWrote ${out} (the changes are listed inside it, in SCORM-LAB-CHANGES.txt)`))
+        console.log(paint('2', `\nWrote ${out} (the changes are listed inside it, in PACKAGE-LAB-CHANGES.txt)`))
       }
     }
     return 0
@@ -520,11 +520,11 @@ const commands = {
   // P5.2 extends it. Exit status is 0 unless the command fails: a missing optional part is a finding, not a failure.
   async doctor(o) {
     if (o.port !== undefined && !(typeof o.port === 'string' && /^[0-9]+$/.test(o.port) && +o.port >= 1 && +o.port <= 65535)) fail(`--port needs a whole number from 1 to 65535, not “${o.port}”.`)
-    const port = +(o.port ?? 4880), data = process.env.SCORM_LAB_DATA ?? DATA_DIR, checks = [], add = (id, label, ok, detail) => checks.push({ id, label, ok, detail })
+    const port = +(o.port ?? 4880), data = process.env.PACKAGE_LAB_DATA ?? DATA_DIR, checks = [], add = (id, label, ok, detail) => checks.push({ id, label, ok, detail })
     const major = +process.versions.node.split('.')[0]
     add('node', 'Node.js 20 or later', major >= 20, `Node ${process.versions.node}`)
     let app = null; try { app = electron()[0] } catch { /* shown below */ }
-    add('electron', 'Electron, to run packages', !!app, app ? `${app}` : 'Not installed: run npm install in the scorm-lab folder, or install SCORM Lab.app. Checking packages still works.')
+    add('electron', 'Electron, to run packages', !!app, app ? `${app}` : 'Not installed: run npm install in the package-lab folder, or install Package Lab.app. Checking packages still works.')
     let webkit = false, wkDetail
     try { const pw = await loadPlaywright(); webkit = existsSync(pw.webkit.executablePath()); wkDetail = webkit ? 'Playwright and its WebKit are installed.' : 'Playwright is installed but not WebKit: npx playwright install webkit' } catch (e) { wkDetail = e.message }
     add('webkit', 'Playwright and WebKit, for --browser webkit', webkit, wkDetail)
@@ -534,20 +534,20 @@ const commands = {
     const free = (await bindable('127.0.0.1')) && (await bindable('0.0.0.0'))
     add('port', `Port ${port} free, for serve`, free, free ? `Nothing is listening on ${port}.` : `Something is already listening on ${port}: use serve --port.`)
     // The installed desktop app is reported as the top-level `app`, not as a check: packages run without it, and the Concierge module reads checks[].
-    const installed = [INSTALLED, join(homedir(), 'Applications', 'SCORM Lab.app')].find(p => existsSync(p)) ?? null, version = installed ? appVersion(installed) : null
+    const installed = [INSTALLED, join(homedir(), 'Applications', 'Package Lab.app')].find(p => existsSync(p)) ?? null, version = installed ? appVersion(installed) : null
     const appDetail = installed ? `${installed}${version ? `, version ${version}` : ''}` : 'Not installed: npm run install-app puts it in /Applications. Packages run from this repo’s Electron without it.'
     const json = { version: VERSION, ok: checks.every(c => c.ok), checks, capabilities: { analyze: major >= 20, run: !!app, webkit },
       profiles: PROFILE_NAMES, tools: PACKS.map(p => p.id), viewports: Object.keys(VIEWPORTS), presets: Object.keys(PRESETS), fixes: FIX_IDS.map(id => ({ id, label: FIXES[id].label })),
       app: installed ? { path: installed, version } : null }
     if (o.json) console.log(JSON.stringify(json, null, 1))
     else {
-      console.log(paint('1', `SCORM Lab ${VERSION} · doctor`))
+      console.log(paint('1', `Package Lab ${VERSION} · doctor`))
       for (const c of checks) console.log(`${c.ok ? SEV.ok('ok   ') : SEV.warn('check')} ${c.label}${paint('2', ` · ${clean(c.detail)}`)}`)
-      console.log(`${installed ? SEV.ok('ok   ') : paint('2', 'no   ')} SCORM Lab.app, the installed desktop app${paint('2', ` · ${clean(appDetail)}`)}`)
+      console.log(`${installed ? SEV.ok('ok   ') : paint('2', 'no   ')} Package Lab.app, the installed desktop app${paint('2', ` · ${clean(appDetail)}`)}`)
       // What to do next, from the checks that failed.
       const tips = []
-      if (!app) tips.push('Packages can’t be run yet: npm install in the scorm-lab folder (or npm run install-app for the desktop app).')
-      if (!webkit) tips.push('WebKit runs are optional: npm i -D playwright && npx playwright install webkit, in the scorm-lab folder.')
+      if (!app) tips.push('Packages can’t be run yet: npm install in the package-lab folder (or npm run install-app for the desktop app).')
+      if (!webkit) tips.push('WebKit runs are optional: npm i -D playwright && npx playwright install webkit, in the package-lab folder.')
       if (!free) tips.push(`serve needs a free port: use serve --port with another number, or stop what is using ${port}.`)
       console.log(tips.length ? `\nTo do:\n${tips.map(t => `  · ${t}`).join('\n')}` : '\nReady: this Mac can check and run SCORM packages.')
     }
@@ -602,7 +602,7 @@ const commands = {
     const json = { package: pkg.name, item: itemJson(item, launchable(pkg.analysis).findIndex(i => i.index === item.index)), base: options, variants: rows, findings }
     if (dir) {
       writeFileSync(join(dir, 'experiment.json'), JSON.stringify(json, null, 1))
-      writeFileSync(join(dir, 'report.html'), renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: `${item.title || item.id}: ${rows.length} variants, the default first`, findings, analysis: pkg.analysis, extra: experimentHtml(rows) }))
+      writeFileSync(join(dir, 'report.html'), renderReport({ title: `Package Lab: ${pkg.name}`, subtitle: `${item.title || item.id}: ${rows.length} variants, the default first`, findings, analysis: pkg.analysis, extra: experimentHtml(rows) }))
     }
     if (o.json) console.log(JSON.stringify(json, null, 1))
     else {
@@ -675,7 +675,7 @@ const commands = {
   cycle(o) {
     const pkg = openZip(o._[0], o)
     if (pkg.analysis.format !== 'scorm') fail('The save-and-resume test is for SCORM packages: a cmi5 or Tin Can package saves through its LRS, not the SCORM data model.')
-    const options = buildOptions(o), item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'scorm-lab-cycle-')), keep = o.out ? resolve(o.out) : null
+    const options = buildOptions(o), item = pickItem(pkg.analysis, o.item), dir = mkdtempSync(join(tmpdir(), 'package-lab-cycle-')), keep = o.out ? resolve(o.out) : null
     if (options.browser === 'webkit') { rmSync(dir, { recursive: true, force: true }); fail('The save-and-resume test runs in Chromium only: WebKit runs have no input to replay.') }
     if (keep) mkdirSync(keep, { recursive: true })
     const f1 = join(keep ?? dir, '01-first.json'), f2 = join(keep ?? dir, '02-resumed.json')
@@ -702,7 +702,7 @@ const commands = {
   // Package against package (P3.3). Files, manifest, loading path and findings come from the files alone; --run adds a
   // run of each (same item, same options) and compares the milestones and counts.
   diff(o) {
-    const [pa, pb] = [openZip(o._[0], o), o._[1] ? openZip(o._[1], o) : fail('Name two packages: scorm-lab diff <a.zip> <b.zip>')]
+    const [pa, pb] = [openZip(o._[0], o), o._[1] ? openZip(o._[1], o) : fail('Name two packages: package-lab diff <a.zip> <b.zip>')]
     for (const k of ['item', 'out']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
     if (o.item !== undefined) { pickItem(pa.analysis, o.item); pickItem(pb.analysis, o.item) }
     const d = comparePackages(pa, pb, { item: o.item })
@@ -713,10 +713,10 @@ const commands = {
       })
       d.behaviour = compareBehaviour(runs[0], runs[1], [pa.name, pb.name])
     }
-    if (o.out) writeFileSync(resolve(o.out), renderReport({ title: `SCORM Lab: ${pa.name} against ${pb.name}`, subtitle: 'Package diff. A is the first package, B the second; the findings and loading path below are B’s.', findings: d.b.findings, diff: d, analysis: pb.analysis }))
+    if (o.out) writeFileSync(resolve(o.out), renderReport({ title: `Package Lab: ${pa.name} against ${pb.name}`, subtitle: 'Package diff. A is the first package, B the second; the findings and loading path below are B’s.', findings: d.b.findings, diff: d, analysis: pb.analysis }))
     if (o.json) { console.log(JSON.stringify(d, null, 1)); return 0 }
     const f = d.files, kb = n => n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`
-    console.log(paint('1', `SCORM Lab · diff`))
+    console.log(paint('1', `Package Lab · diff`))
     console.log(`A: ${clean(pa.name)}   B: ${clean(pb.name)}\n${d.summary}`)
     if (d.behaviour) { console.log(paint('1', '\nBehaviour')); console.log(clean(d.behaviour.summary)); console.log(`A: ${strip(d.behaviour.a.milestones)}\nB: ${strip(d.behaviour.b.milestones)}`); for (const [k, v] of Object.entries(d.behaviour.counts)) console.log(paint('2', `  ${k}: ${v.a} → ${v.b}`)) }
     console.log(paint('1', '\nFiles'))
@@ -744,14 +744,14 @@ const commands = {
   },
   // Batch checks (P4.3): one row per package from its files (worker threads, --jobs at a time); --run also runs each (runBatch).
   async batch(o) {
-    if (!o._.length) fail('Name a folder or some packages: scorm-lab batch <folder | zips…>')
+    if (!o._.length) fail('Name a folder or some packages: package-lab batch <folder | zips…>')
     for (const k of ['csv', 'out', 'jobs', 'wait']) if (Object.hasOwn(o, k) && (typeof o[k] !== 'string' || !o[k])) fail(`--${k} needs a value.`)
     const asked = o.jobs === undefined ? 1 : /^\d+$/.test(o.jobs) && +o.jobs >= 1 ? +o.jobs : fail('--jobs needs a whole number, 1 or more.')
     const jobs = Math.min(asked, availableParallelism())   // more threads than cores only slows the checks down
     const files = batchFiles(o._, { recursive: !!o.recursive, onSkip: p => process.stderr.write(`Skipped the symbolic link to a folder ${p} (links to folders are not followed).\n`) })
     if (!files.length) fail('No .zip packages found there.')
     if (!o.json) process.stderr.write(`Checking ${files.length} package${files.length === 1 ? '' : 's'}…\n`)
-    const dir = mkdtempSync(join(tmpdir(), 'scorm-lab-batch-'))
+    const dir = mkdtempSync(join(tmpdir(), 'package-lab-batch-'))
     try {
       const results = await staticRows(files, { jobs, fragment: !!o.out })
       if (o.run) await runBatch(results, { jobs, dir, wait: o.wait, out: !!o.out, json: !!o.json })
@@ -760,7 +760,7 @@ const commands = {
       if (o.out) writeFileSync(resolve(o.out), batchHtml(results, { folder, run }))
       if (o.json) console.log(JSON.stringify({ folder, run, summary: s, rows, csv: o.csv ? resolve(o.csv) : null, out: o.out ? resolve(o.out) : null }, null, 1))
       else {
-        console.log(paint('1', 'SCORM Lab · batch'))
+        console.log(paint('1', 'Package Lab · batch'))
         printGrid(batchTable(rows, run))
         console.log(`\n${summaryText(s)}`)
         if (o.csv) console.log(paint('2', `CSV written to ${resolve(o.csv)}`))
@@ -771,7 +771,7 @@ const commands = {
   },
   report(o) {
     const input = o._[0]
-    if (!input) fail('Name a package or a saved run: scorm-lab report <package.zip | run.json>')
+    if (!input) fail('Name a package or a saved run: package-lab report <package.zip | run.json>')
     // With --json the HTML goes to a file (--out, or the temporary one --open makes), and the JSON to standard output.
     if (o.json && !o.out && !o.open) fail('report --json needs --out or --open: the HTML report goes to a file, and the JSON to standard output.')
     const red = redactOptions(o)
@@ -779,28 +779,28 @@ const commands = {
     if (/\.json$/i.test(input)) {
       if (!existsSync(input)) fail(`No such file: ${input}`)
       const run = JSON.parse(readFileSync(input, 'utf8'))
-      if (!run.trace) fail(`${basename(input)} isn’t a SCORM Lab run.`)
-      html = renderReport({ title: `SCORM Lab: ${run.package ?? run.label}`, subtitle: run.label, run, fragment: !!o.fragment, redact: red })
+      if (!run.trace) fail(`${basename(input)} isn’t a Package Lab run.`)
+      html = renderReport({ title: `Package Lab: ${run.package ?? run.label}`, subtitle: run.label, run, fragment: !!o.fragment, redact: red })
       findings = run.findings ?? []; trace = run.trace
     } else {
       const pkg = openZip(input, o)
       if (o.run) {
         const { run } = runPackage(pkg, { ...o, out: undefined })
-        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: run.label, run, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment, redact: red })
+        html = renderReport({ title: `Package Lab: ${pkg.name}`, subtitle: run.label, run, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment, redact: red })
         findings = run.findings; trace = run.trace
       } else {
         const checked = check(pkg, o.item)
         const { item, boot } = checked
         findings = checked.findings
         // The item's title is the package's own text: a redacted report ignores this subtitle and the findings, and works both out again from the redacted boot graph and analysis.
-        html = renderReport({ title: `SCORM Lab: ${pkg.name}`, subtitle: `${item.title || item.id} (${item.res.path ?? item.res.href}), from the files only. Run it to see what actually happens.`, findings, boot, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment,
+        html = renderReport({ title: `Package Lab: ${pkg.name}`, subtitle: `${item.title || item.id} (${item.res.path ?? item.res.href}), from the files only. Run it to see what actually happens.`, findings, boot, analysis: pkg.analysis, files: pkg.files, fragment: !!o.fragment,
           redact: red && { ...red, package: pkg.name } })
       }
     }
-    const out = o.out ? resolve(o.out) : o.open ? join(mkdtempSync(join(tmpdir(), 'scorm-lab-report-')), 'report.html') : null
+    const out = o.out ? resolve(o.out) : o.open ? join(mkdtempSync(join(tmpdir(), 'package-lab-report-')), 'report.html') : null
     if (out) { writeFileSync(out, html); if (!o.open && !o.json) console.error(`Report written to ${out}`) } else process.stdout.write(html)
     // The key goes last, and only once the report is out: a failed report leaves no key behind. A new file ('wx'), readable by the owner only.
-    if (red?.names && o['key-out']) writeFileSync(resolve(o['key-out']), JSON.stringify({ format: 'scorm-lab-redaction-key', version: 1, key: red.key.toString('hex'), names: Object.fromEntries(red.map) }, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
+    if (red?.names && o['key-out']) writeFileSync(resolve(o['key-out']), JSON.stringify({ format: 'package-lab-redaction-key', version: 1, key: red.key.toString('hex'), names: Object.fromEntries(red.map) }, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
     if (o.open && out) spawnSync('open', [out])
     // A redacted report's JSON leaves out the findings and the verdict's title: they quote the course's own text.
     // With --redact-names the file names are hashed, so the paths (input and out) are left out of the JSON as well.
@@ -813,7 +813,7 @@ const commands = {
     const zip = o._[0] ? resolve(o._[0]) : null
     if (zip && !existsSync(zip)) fail(`No such file: ${zip}`)
     let app, path
-    if (existsSync(INSTALLED) && !process.env.SCORM_LAB_ELECTRON) { spawnSync('open', ['-a', INSTALLED, ...(zip ? [zip] : [])]); app = 'installed'; path = INSTALLED }
+    if (existsSync(INSTALLED) && !process.env.PACKAGE_LAB_ELECTRON) { spawnSync('open', ['-a', INSTALLED, ...(zip ? [zip] : [])]); app = 'installed'; path = INSTALLED }
     else {
       const [bin, pre] = electron()
       spawn(bin, [...pre, ...(zip ? [zip] : [])], { detached: true, stdio: 'ignore' }).unref()
@@ -826,7 +826,7 @@ const commands = {
     if (o.json && !o.url) fail('serve --json needs --url: a running server has no JSON output (it runs until stopped). For the address as JSON, use serve --url --json.')
     if (o.url) {
       const t = join(DATA_DIR, 'web-token')
-      if (!existsSync(t)) fail('The web interface hasn’t been started yet, so there is no address. Run scorm-lab serve.')
+      if (!existsSync(t)) fail('The web interface hasn’t been started yet, so there is no address. Run package-lab serve.')
       const url = `http://${o.host && o.host !== '0.0.0.0' ? o.host : o.host ? 'localhost' : '127.0.0.1'}:${o.port ?? 4880}/?token=${readFileSync(t, 'utf8').trim()}`
       console.log(o.json ? JSON.stringify({ url }, null, 1) : url)
       return 0
@@ -848,7 +848,7 @@ const commands = {
   // The zsh completion script (src/completion.js): commands, flags, file completion for packages.
   completion(o) {
     const shell = o._[0]
-    if (shell !== 'zsh') fail('Name the shell: scorm-lab completion zsh')
+    if (shell !== 'zsh') fail('Name the shell: package-lab completion zsh')
     const script = zshCompletion()
     if (o.json) console.log(JSON.stringify({ shell, script }, null, 1))
     else process.stdout.write(script)
@@ -859,7 +859,7 @@ const commands = {
 const o = parse(process.argv.slice(2)), name = o._.shift() ?? 'help'
 const cmd = o.help || o.h ? commands.help : name === '--version' || o.version ? commands.version : commands[name]
 try {
-  if (!cmd) fail(`Unknown command “${name}”. Try scorm-lab help.`)
+  if (!cmd) fail(`Unknown command “${name}”. Try package-lab help.`)
   const code = await cmd(o)
   if (code !== null) process.exitCode = code
 } catch (e) {

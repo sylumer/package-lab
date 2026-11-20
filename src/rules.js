@@ -61,7 +61,7 @@ function evidenceFrom(scan, key, max) {
 export function runFindings(trace, launch = {}, analysis = null) {
   const out = [], probe = trace.probe ?? []
   const allApi = probe.filter(p => p.type === 'api'), lookups = probe.filter(p => p.type === 'lookup')
-  // In a package run, calls the probe logged (host: true) went to an API object that isn't SCORM Lab's LMS.
+  // In a package run, calls the probe logged (host: true) went to an API object that isn't Package Lab's LMS.
   const shim = launch.kind === 'package' ? allApi.filter(c => c.host) : [], api = allApi.filter(c => !shim.includes(c))
   const contentAssigns = launch.kind === 'package' ? probe.filter(p => p.type === 'assign' && !isLab(p.frame)) : []
   const pkgReq = trace.requests.filter(r => !isLab(r.url) && !isLrs(r.url, trace) && !/^(data|blob):/.test(r.url))

@@ -25,7 +25,7 @@ export function milestones(trace, boot) {
   const nodes = boot ? bootRun(boot, trace) : [], root = nodes[0]?.run
   const pkgReq = (trace.requests ?? []).filter(r => !isLab(r.url) && !isLrs(r.url, trace) && !/^(data|blob):/.test(r.url))
   const isJs = r => /\.m?js(\?|$)/i.test(r.url)
-  // Script tags on other sites can't be requested through SCORM Lab's host, so they aren't counted.
+  // Script tags on other sites can't be requested through Package Lab's host, so they aren't counted.
   const scripts = boot ? nodes.filter(n => n.how === 'tag' && n.kind === 'script' && !/^(remote|remote-http|local)$/.test(n.status)) : pkgReq.filter(isJs)
   const scriptsBad = boot ? scripts.find(n => !n.run || n.run.failed || n.run.status >= 400) : scripts.find(r => r.failed && !r.canceled || r.status >= 400)
   const dom = probe.find(p => p.type === 'dom' && !isLab(p.frame) && ((p.text ?? 0) >= 20 || p.media > 0))

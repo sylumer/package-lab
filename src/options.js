@@ -176,10 +176,10 @@ export function normaliseOptions(o = {}) {
 }
 
 const quote = s => /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`
-// The `scorm-lab run …` line that makes the same launch. Fields with no flag go to --options options.json.
+// The `package-lab run …` line that makes the same launch. Fields with no flag go to --options options.json.
 // ponytail: assumes the --options file is written by the user; add a flag for each field when it matters.
 export function cliCommand(options, { zip = 'package.zip', item } = {}) {
-  const o = normaliseOptions(options), a = ['scorm-lab', 'run', quote(zip)]
+  const o = normaliseOptions(options), a = ['package-lab', 'run', quote(zip)]
   if (item) a.push('--item', String(item))
   if (o.expose !== DEFAULTS.expose) a.push('--api', o.expose)
   if (o.depth) a.push('--depth', String(o.depth))

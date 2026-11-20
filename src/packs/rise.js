@@ -8,7 +8,7 @@ export default {
     const out = [], tc = named(files, /(^|\/)tincan\.xml$/i)
     if (tc.length && (!a.manifest || a.format === 'tincan'))
       out.push({ sev: 'info', basis: 'pattern', title: 'this looks like an xAPI export, not SCORM',
-        detail: 'Rise reports say a tincan.xml means xAPI content. There is no imsmanifest.xml, so an LMS that expects SCORM will refuse it. (SCORM Lab runs it against its own LRS.)',
+        detail: 'Rise reports say a tincan.xml means xAPI content. There is no imsmanifest.xml, so an LMS that expects SCORM will refuse it. (Package Lab runs it against its own LRS.)',
         evidence: tc, fix: 'Publish again choosing SCORM 1.2 or SCORM 2004 in Rise’s LMS export, and upload the ZIP as exported.' })
     return out
   },

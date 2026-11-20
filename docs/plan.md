@@ -1,4 +1,4 @@
-# SCORM Lab: build plan for the next stage
+# Package Lab: build plan for the next stage
 
 This is a work plan to be carried out from start to finish by an orchestrating Claude session that sends work to
 subagents, without asking the owner anything once it has begun. It covers every addition agreed on 2026-11-13:
@@ -34,7 +34,7 @@ Progress is recorded in [plan-status.md](plan-status.md). Decisions made along t
 
 ## How to run this plan
 
-The orchestrator (an Opus session in `~/github/scorm-lab`) works as follows:
+The orchestrator (an Opus session in `~/github/package-lab`) works as follows:
 
 1. **Set up once.** Read this file, `docs/developer-guide.md`, `DESIGN.md` and `plan-status.md`. Create the branch:
    ```bash
@@ -72,8 +72,8 @@ agents branch from `origin/main`, and there is no origin. The only parallel work
 subagents (marked **research** below) and documentation-only work packages, run alongside an implementation work
 package that doesn't touch `docs/`.
 
-**Concierge.** Work packages that change the Concierge module (`~/github/concierge/modules/scorm-lab/run`) work on a
-branch `scorm-lab-next` in that repo, created the first time it's needed. They commit there, and merge
+**Concierge.** Work packages that change the Concierge module (`~/github/concierge/modules/package-lab/run`) work on a
+branch `package-lab-next` in that repo, created the first time it's needed. They commit there, and merge
 `--ff-only` into its `main` at the end of the plan. `~/github/concierge` has other work in progress at times: stage
 only the files the work package touched (`git add <paths>`), never `git add -A`, and never commit anything else.
 
@@ -190,7 +190,7 @@ Run them in table order. The only allowed reordering is to skip ahead past somet
 **Goal.** One structure for everything that changes how a run is set up, passed the same way from every interface
 and saved with the run, so later work packages only add fields.
 
-**Files.** New `src/options.js`; `src/main.js`, `bin/scorm-lab.js`, `src/ui/app.js`, `src/ui/index.html`, tests and
+**Files.** New `src/options.js`; `src/main.js`, `bin/package-lab.js`, `src/ui/app.js`, `src/ui/index.html`, tests and
 docs.
 
 **Spec.**
@@ -207,7 +207,7 @@ docs.
 - The CLI parses flags into the same object, puts it in the job file as `options`, and gets `--options <file.json>`
   for anything a flag can't express (later work packages add flags too).
 - UI: a collapsible **More options** area under the toolbar, with a JSON view of the current options (read-only for
-  now) and **Copy as CLI command**, which prints the equivalent `scorm-lab run …` line.
+  now) and **Copy as CLI command**, which prints the equivalent `package-lab run …` line.
 
 **Acceptance.**
 - `normaliseOptions` has unit tests for defaults, every field's validation, and unknown-field errors.
@@ -264,7 +264,7 @@ and web get an **Experiments** tab; tests and docs.
   over the base with `normaliseOptions`.
 - CLI:
   ```bash
-  scorm-lab experiment <zip> [--item n] [--wait s] [--variants file.json | --preset <name>] [--json] [--out dir]
+  package-lab experiment <zip> [--item n] [--wait s] [--variants file.json | --preset <name>] [--json] [--out dir]
   ```
   It runs the variants sequentially with the existing headless path, saves each run in `--out` if given, and prints a
   table: variant, furthest milestone, API calls, errors, verdict, and progress against the base.
@@ -293,11 +293,11 @@ and web get an **Experiments** tab; tests and docs.
 
 ### P1.1 Change files and rerun: overlays (sonnet)
 
-**Goal.** Edit any file of the package in SCORM Lab and run the edited version straight away, with the original kept,
+**Goal.** Edit any file of the package in Package Lab and run the edited version straight away, with the original kept,
 then see whether it got further.
 
 **Files.** `src/main.js` (serve and package state), `src/ui/` (a file browser and editor), `src/options.js` (`files`),
-`bin/scorm-lab.js` (`--override <path>=<local file>`), tests and docs.
+`bin/package-lab.js` (`--override <path>=<local file>`), tests and docs.
 
 **Spec.**
 
@@ -366,7 +366,7 @@ code runs.
 **Acceptance.**
 - With the `hosted` fixture:
   - answering `/api/player/config` with `{}` makes `startCourse` run without the fallback, so there is no own-API
-    finding and there are calls to SCORM Lab's LMS;
+    finding and there are calls to Package Lab's LMS;
   - pinning `previewMode=false` produces a "tried to change a pinned value" finding pointing at `boot.js`.
 - A `let` fixture produces the can't-pin finding.
 
@@ -377,7 +377,7 @@ the response, and build a stand-in response by experiment until the content stop
 direct answer to "it works on its platform but not in an LMS".
 
 **Files.** New `src/shape.js` (pure), `src/host/probe.js`, `src/main.js` (the discovery loop), the UI, the CLI
-(`scorm-lab discover`), tests and docs.
+(`package-lab discover`), tests and docs.
 
 **Spec.**
 
@@ -419,7 +419,7 @@ same.
 
 **CLI.**
 ```bash
-scorm-lab discover <zip> [--item n] [--request glob] [--rounds n] [--json] [--out dir]
+package-lab discover <zip> [--item n] [--request glob] [--rounds n] [--json] [--out dir]
 ```
 
 **Acceptance.**
@@ -485,7 +485,7 @@ tests and docs.
 - The `hosted` fixture with tracing records the `if (!r.ok)` decision, and the `startCourse` entry with
   `window.scorm` false.
 - Every existing end-to-end test still passes with `--trace` forced on, through a temporary environment switch
-  `SCORM_LAB_FORCE_TRACE=1` in one test pass. Instrumented runs must not change any fixture's findings except the
+  `PACKAGE_LAB_FORCE_TRACE=1` in one test pass. Instrumented runs must not change any fixture's findings except the
   tracing-only ones.
 - Overhead: the `good` fixture's run time with tracing is under twice that without.
 
@@ -524,10 +524,10 @@ each `undefined` came from.
    - A **Drill-down** tab with a numbered chain, readable as a story: "1. In `boot.js:12`, `if (cfg.lms)` was false
      because `cfg.lms` was undefined. 2. `cfg` came from the response to `/api/player/config`, which failed (404).
      3. …".
-   - A finding: "Why it stopped: *one-line chain summary*". Severity `error` when the chain ends at a cause SCORM Lab
+   - A finding: "Why it stopped: *one-line chain summary*". Severity `error` when the chain ends at a cause Package Lab
      can name (failed request, missing script, version), otherwise `warn`.
 
-**CLI.** `scorm-lab drill <zip> [run options] [--json]`. It runs with tracing, then the watch run, then prints the
+**CLI.** `package-lab drill <zip> [run options] [--json]`. It runs with tracing, then the watch run, then prints the
 chain.
 
 **Acceptance.**
@@ -601,7 +601,7 @@ chain.
 - **Finding:** "The content can't reach the LMS from another origin". Its fix explains that the LMS and content must
   share an origin, or the content must use a cross-domain wrapper, with evidence.
 - Make sure the recorder still attaches to the content frame (an out-of-process iframe through auto-attach).
-- The opus subagent decides how the probe's API accessor behaves when blocked, and checks that SCORM Lab's own host
+- The opus subagent decides how the probe's API accessor behaves when blocked, and checks that Package Lab's own host
   still logs calls.
 
 **Presets** (research subagents: haiku, searching public documentation only): `generic` (the current behaviour),
@@ -707,7 +707,7 @@ explained.
   - Suspend data written in run 2 starts from run 1's, not empty.
 - **UI.** **Test saving** button: runs the cycle with the current options and macro, and shows the two runs side by
   side, with the cycle findings.
-- **CLI.** `scorm-lab cycle <zip> [run options] [--macro file.json] [--json]`.
+- **CLI.** `package-lab cycle <zip> [run options] [--macro file.json] [--json]`.
 
 **Acceptance.**
 - `good` passes the cycle when given a macro that clicks **Next** then **Save and exit**.
@@ -737,12 +737,12 @@ explained.
   - **`manifest-case`:** rename to `imsmanifest.xml`.
   - **`manifest-not-root`:** re-root the ZIP.
 - **Export.** Combine the selected autofixes and overlays (P1.1) into `<name>-fixed.zip`, and put
-  `SCORM-LAB-CHANGES.txt` inside, listing every change and the SCORM Lab version.
+  `PACKAGE-LAB-CHANGES.txt` inside, listing every change and the Package Lab version.
   - Desktop: **Export corrected package…** (a save dialog).
   - Web and Concierge: a download.
   - CLI:
     ```bash
-    scorm-lab fix <zip> [--only id,…] [--override …] --out fixed.zip
+    package-lab fix <zip> [--only id,…] [--override …] --out fixed.zip
     ```
 - **Proof.** After export, run `analyze` on the result and report which findings are gone. Optionally run it as a
   variant in an experiment.
@@ -809,7 +809,7 @@ the export setting to change.
   - Desktop and web: **Compare packages…** opens a second package. The result appears in a **Package diff** view.
   - CLI:
     ```bash
-    scorm-lab diff <a.zip> <b.zip> [--run] [--json] [--out report.html]
+    package-lab diff <a.zip> <b.zip> [--run] [--json] [--out report.html]
     ```
   - Report: a diff section, with a collapsible diff per file.
 
@@ -877,7 +877,7 @@ in `src/timeline.js` with unit tests. Same in the report as a static SVG.
 
 - **CLI:**
   ```bash
-  scorm-lab batch <folder | zips…> [--run] [--wait s] [--recursive] [--json] [--csv file] [--out report.html] [--jobs n]
+  package-lab batch <folder | zips…> [--run] [--wait s] [--recursive] [--json] [--csv file] [--out report.html] [--jobs n]
   ```
   `--jobs` is the parallel static checks; runs are always one at a time unless `--jobs` is over 1, then at most 2.
 - **Output:**
@@ -948,10 +948,10 @@ Interfaces: a report option (CLI `report --redact`, desktop and web export, and 
 
 ### P5.1 Concierge module catch-up (sonnet)
 
-In `~/github/concierge/modules/scorm-lab/run`, on branch `scorm-lab-next`:
+In `~/github/concierge/modules/package-lab/run`, on branch `package-lab-next`:
 
 - **Run form:** profile, browser (WebKit only if Playwright is present: check with
-  `scorm-lab doctor --json`, a small new CLI command listing capabilities), device size, storage, trace (on by
+  `package-lab doctor --json`, a small new CLI command listing capabilities), device size, storage, trace (on by
   default), and **Test saving** (the cycle).
 - **Experiments:** **Try variants** with a preset select, then a table page that updates as runs finish (use a worker
   per experiment, with the same polling pattern as runs).
@@ -970,8 +970,8 @@ Update the module's header comment, `modules/README.md` and `docs/concierge.md`.
 - **Alfred:** add actions for experiments (`⇧↩` on `scorm`: run the `standard` preset and open the report), fix
   (export a corrected package next to the original), and the folder batch action.
 - **Rebuild** with `npm run alfred -- --no-open` in the tests.
-- **CLI:** `scorm-lab doctor` (Node, Electron, Playwright and WebKit, the installed app, data folder, port 4880 free).
-  Shell completion scripts for zsh (`scorm-lab completion zsh`). Consistent `--json` on every command.
+- **CLI:** `package-lab doctor` (Node, Electron, Playwright and WebKit, the installed app, data folder, port 4880 free).
+  Shell completion scripts for zsh (`package-lab completion zsh`). Consistent `--json` on every command.
 
 ### P5.3 Documentation pass (haiku, then a sonnet review)
 
@@ -997,10 +997,10 @@ Update the module's header comment, `modules/README.md` and `docs/concierge.md`.
 ### P5.4 Final check and release build (sonnet)
 
 - `npm test` (with `--slow` checks), and `node test/test.js --unit`.
-- `npm run package`. Check that the built app runs `scorm-lab run` through `SCORM_LAB_ELECTRON` on `good`.
+- `npm run package`. Check that the built app runs `package-lab run` through `PACKAGE_LAB_ELECTRON` on `good`.
 - `npm run alfred -- --no-open` builds.
-- Merge `next` into `main` (`--ff-only`), and `scorm-lab-next` into concierge `main` (`--ff-only`). If concierge
-  `main` moved, rebase `scorm-lab-next` onto it first. If that conflicts, stop the merge, leave the branch, and say
+- Merge `next` into `main` (`--ff-only`), and `package-lab-next` into concierge `main` (`--ff-only`). If concierge
+  `main` moved, rebase `package-lab-next` onto it first. If that conflicts, stop the merge, leave the branch, and say
   so in the final summary.
 - Bump `version` in `package.json` to 0.2.0, and the module's `module.json` to 1.1.0.
 - Write the final summary in `plan-status.md`. Don't install the app, the module or the workflow on the machine;
@@ -1013,8 +1013,8 @@ Update the module's header comment, `modules/README.md` and `docs/concierge.md`.
 Use this for every work package. Fill in the brackets. Keep it self-contained: subagents don't see this conversation.
 
 ```
-You are implementing work package [ID] "[title]" of SCORM Lab, a local tool that diagnoses SCORM packages
-(repo: ~/github/scorm-lab, branch `next`, already checked out; work in this checkout, not a worktree).
+You are implementing work package [ID] "[title]" of Package Lab, a local tool that diagnoses SCORM packages
+(repo: ~/github/package-lab, branch `next`, already checked out; work in this checkout, not a worktree).
 
 Read first: docs/plan.md (section [ID] and "Rules for every work package"), docs/developer-guide.md, and the files
 named in the work package. Follow the code's existing patterns (plain ESM, no runtime dependencies beyond those the
@@ -1040,7 +1040,7 @@ not done with the reason.
 For review subagents:
 
 ```
-Review the uncommitted diff in ~/github/scorm-lab (git diff and new files) for work package [ID] in docs/plan.md.
+Review the uncommitted diff in ~/github/package-lab (git diff and new files) for work package [ID] in docs/plan.md.
 Check it against the spec and acceptance criteria, the "Rules for every work package", behaviour preservation, and
 security (escaping in HTML, paths confined, no data leaving the machine). One line per problem with file:line and
 severity. Say "no problems" if none. Don't edit files.

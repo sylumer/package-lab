@@ -1,6 +1,6 @@
-# SCORM Lab command line
+# Package Lab command line
 
-`scorm-lab` checks, runs and reports on SCORM packages from the terminal, scripts and other tools. Alfred and the
+`package-lab` checks, runs and reports on SCORM packages from the terminal, scripts and other tools. Alfred and the
 Concierge module use it too.
 
 - [Installing](#installing)
@@ -37,14 +37,14 @@ In the repo:
 npm install
 ```
 
-To put `scorm-lab` on your PATH:
+To put `package-lab` on your PATH:
 
 ```bash
 npm link
 ```
 
-Without linking, use `node bin/scorm-lab.js`. Commands that run a package (`run`, `experiment`, `discover`, `drill`, `cycle`, `diff --run`, `batch --run`, `report --run`, `open`, `serve`)
-need Electron. That is either this repo's own (installed by `npm install`) or `/Applications/SCORM Lab.app`. `analyze`,
+Without linking, use `node bin/package-lab.js`. Commands that run a package (`run`, `experiment`, `discover`, `drill`, `cycle`, `diff --run`, `batch --run`, `report --run`, `open`, `serve`)
+need Electron. That is either this repo's own (installed by `npm install`) or `/Applications/Package Lab.app`. `analyze`,
 `items` and plain `report` need only Node.
 
 ## Commands
@@ -61,12 +61,12 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `cycle <package.zip>` | Tests saving: runs, leaves the way a learner does, then resumes from what it left, and checks the content saved and read its place |
 | `diff <a.zip> <b.zip>` | What changed between two packages: files with text diffs, manifest, loading path and findings; with `--run`, how far each got |
 | `batch <folder \| zips…>` | Checks every package in a folder (or the zips named): one row each, with its verdict. `--run` runs each one too. [Details](#batch) |
-| `doctor` | Checks this Mac can run SCORM Lab (Node, Electron, Playwright and WebKit, the data folder, port 4880, the installed app) and lists the names the options accept. Says what to do next |
+| `doctor` | Checks this Mac can run Package Lab (Node, Electron, Playwright and WebKit, the data folder, port 4880, the installed app) and lists the names the options accept. Says what to do next |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run. Each `file:line` in a finding's evidence links to a read-only excerpt (±20 lines) of that file, from the package or the saved run's sources |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
 | `completion zsh` | Prints a zsh completion script. [Details](#completion) |
-| `help`, `version` | Help and the version. `scorm-lab <command> --help` shows the help too. All take `--json` ([JSON output](#json-output)) |
+| `help`, `version` | Help and the version. `package-lab <command> --help` shows the help too. All take `--json` ([JSON output](#json-output)) |
 
 ## Choosing an item
 
@@ -100,7 +100,7 @@ AU to send its statements (a few seconds for a script-driven AU; a learner-drive
 ## analyze
 
 ```bash
-scorm-lab analyze course.zip [--item n] [--json] [--strict] [--tool id]
+package-lab analyze course.zip [--item n] [--json] [--strict] [--tool id]
 ```
 
 `--tool` applies an authoring tool's [rule pack](findings.md#from-authoring-tool-packs) even when the package shows no sign of it (a
@@ -112,7 +112,7 @@ Prints a summary line, then the findings from the files, worst first, and the ve
 severity, title, explanation, evidence (`·` lines) and **Try:**.
 
 ```
-SCORM Lab · course.zip
+Package Lab · course.zip
 SCORM 2004 4th edition · 3 items · made with Xyleme · 412 files (38.2 MB)
 Item: Module 1 (sco) → index.html
 
@@ -127,7 +127,7 @@ ERROR  Paths differ from the files only in capitals  (1 errors, 0 warnings, 2 no
 ## items
 
 ```bash
-scorm-lab items course.zip [--json]
+package-lab items course.zip [--json]
 ```
 
 Lists each launchable item: its number, title (indented by depth), type, identifier and launch file.
@@ -135,7 +135,7 @@ Lists each launchable item: its number, title (indented by depth), type, identif
 ## run
 
 ```bash
-scorm-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth n] [--window]
+package-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth n] [--window]
                          [--resume-from run.json] [--wait seconds] [--out run.json] [--live folder]
                          [--no-caught] [--show] [--json] [--strict] [--options options.json]
                          [--options-from run.json] [--override path=file …] [--pin name=json …]
@@ -143,7 +143,7 @@ scorm-lab run course.zip [--item n] [--api manifest|both|1.2|2004|none] [--depth
                          [--storage normal|blocked|partitioned] [--browser chromium|webkit] [--viewport preset|WxH] [--profile name] [--profile-file profile.json]
 ```
 
-Launches the item in a hidden browser, with SCORM Lab's test LMS. It lets the item run for `--wait` seconds (default
+Launches the item in a hidden browser, with Package Lab's test LMS. It lets the item run for `--wait` seconds (default
 10), then analyses it. With no one using the course, this shows whether it starts, finds the LMS, initialises and reads
 its data. Anything that needs a learner, such as finishing or committing, needs a [live run](#live-runs) or the desktop
 app.
@@ -161,7 +161,7 @@ app.
 | `--pin` | none | `<name>=<json>`: forces a value the content reads, before its own code runs (see [Pins and answers](#pins-and-answers)). Repeat it for more |
 | `--answer` | none | `<pattern>=@<file>` or `<pattern>=<status>:<body>`: answers matching requests with a response of your own (see [Pins and answers](#pins-and-answers)). Repeat it for more |
 | `--launch-params` | none | Extra query parameters added to the launch address, like `a=1&b=2` |
-| `--profile` | `generic` | Hosts the content the way an LMS does: `generic` (SCORM Lab's own), `moodle`, `scorm-cloud`, `cornerstone`, `successfactors`, `docebo`, `totara`, `blackboard` or `canvas` (see [Profiles](#profiles)) |
+| `--profile` | `generic` | Hosts the content the way an LMS does: `generic` (Package Lab's own), `moodle`, `scorm-cloud`, `cornerstone`, `successfactors`, `docebo`, `totara`, `blackboard` or `canvas` (see [Profiles](#profiles)) |
 | `--profile-file` | none | A custom profile from a JSON file (see [Profiles](#profiles)). With `--profile` too, that preset is its base unless the file names one |
 | `--tool` | auto | An authoring tool's rule pack to apply whether or not the package shows it (see [analyze](#analyze)) |
 | `--storage` | `normal` | Storage in the content's frames: `blocked` makes `localStorage` and `sessionStorage` throw a `SecurityError`, `document.cookie` read empty and `indexedDB.open` fail, as Safari does for content in another site's page; `partitioned` empties the run window's storage first. With `normal`, a profile whose `cookies` is `third-party-blocked` (`scorm-cloud`) blocks it too. See the [user guide](user-guide.md#storage-blocked-in-the-contents-frames). In an options file: `"storage": "blocked"` |
@@ -210,7 +210,7 @@ object). The run keeps it in `launch.options.profile`, and every field resolved 
 
 ```bash
 # Does it still find the LMS when the LMS serves it from another domain?
-scorm-lab run course.zip --profile-file other.json     # other.json: { "contentOrigin": "other" }
+package-lab run course.zip --profile-file other.json     # other.json: { "contentOrigin": "other" }
 ```
 
 #### Changing files and running again
@@ -228,8 +228,8 @@ The run's findings start with "This run used *N* changed files", and `launch.opt
 content, so the run can be repeated from the run alone:
 
 ```bash
-scorm-lab run course.zip --override js/app.js=fixed-app.js --out changed.json
-scorm-lab run course.zip --options-from changed.json     # the same changes again
+package-lab run course.zip --override js/app.js=fixed-app.js --out changed.json
+package-lab run course.zip --options-from changed.json     # the same changes again
 ```
 
 To see whether a change helped, compare `furthest` in the two `run --json` outputs (with and without `--override`), or
@@ -240,8 +240,8 @@ use an [experiment](#experiment). The desktop and web interfaces compare for you
 A pin forces a value the content reads, before its own code runs. The value is JSON, so text needs quotes:
 
 ```bash
-scorm-lab run course.zip --pin previewMode=false
-scorm-lab run course.zip --pin config.mode='"live"' --pin 'navigator.userAgent="Mozilla/5.0 (test)"'
+package-lab run course.zip --pin previewMode=false
+package-lab run course.zip --pin config.mode='"live"' --pin 'navigator.userAgent="Mozilla/5.0 (test)"'
 ```
 
 A name is a global (`previewMode`) or a dotted path (`config.mode`). `navigator.userAgent` is the only `navigator` name
@@ -253,8 +253,8 @@ An answer replaces the server's reply to matching requests. The pattern is a glo
 alone. `@file` answers with 200 and the file's text; `status:body` gives the status and body yourself:
 
 ```bash
-scorm-lab run course.zip --answer '/api/player/config=@config.json'
-scorm-lab run course.zip --answer '/api/player/config=200:{}' --answer '*/user.json=404:'
+package-lab run course.zip --answer '/api/player/config=@config.json'
+package-lab run course.zip --answer '/api/player/config=200:{}' --answer '*/user.json=404:'
 ```
 
 Anything beyond a pattern, status and body (a method, headers) goes in the options file, where a response can name a
@@ -266,7 +266,7 @@ Anything beyond a pattern, status and body (a method, headers) goes in the optio
 ```
 
 A response with no content type gets `application/json` if its body starts with `{` or `[`, otherwise `text/plain`, and
-`Access-Control-Allow-Origin: *` unless you set it. SCORM Lab's own pages are never answered. Flags add to the pins and
+`Access-Control-Allow-Origin: *` unless you set it. Package Lab's own pages are never answered. Flags add to the pins and
 responses of an options file or `--options-from` run.
 
 #### Tracing
@@ -279,7 +279,7 @@ the **Execution** tab. To have the decisions explained, use [`drill`](#drill). S
 [developer guide](developer-guide.md#the-execution-trace) for the format. To read the last events from a script:
 
 ```bash
-scorm-lab run course.zip --trace --out run.json
+package-lab run course.zip --trace --out run.json
 node -e "import('./src/instrument.js').then(m => { const t = JSON.parse(require('fs').readFileSync('run.json')).trace; for (const e of m.lastEvents(t, 50)) console.log(e.file + ':' + e.line, e.say) })"
 ```
 
@@ -287,12 +287,12 @@ node -e "import('./src/instrument.js').then(m => { const t = JSON.parse(require(
 
 `--browser webkit` runs the content in Safari's engine through Playwright, in a Node process of the CLI (not Electron),
 with the same test LMS, package files, changed files, pins, answers, profile and storage setting. It is an optional
-extra: install it with `npm i -D playwright && npx playwright install webkit` in the SCORM Lab folder. Without it the
+extra: install it with `npm i -D playwright && npx playwright install webkit` in the Package Lab folder. Without it the
 command exits with status 2 and says so.
 
 ```bash
-scorm-lab run course.zip --browser webkit --viewport iphone --out ios.json
-scorm-lab experiment course.zip --preset browsers
+package-lab run course.zip --browser webkit --viewport iphone --out ios.json
+package-lab experiment course.zip --preset browsers
 ```
 
 The saved run has `trace.browser` set to `webkit`. It has no coverage, no caught errors, no script sources and no script
@@ -308,7 +308,7 @@ start of its text), the counts (API calls, requests, failures, uncaught errors),
 
 #### Copy as CLI command
 
-**Copy as CLI command** (under More options, in the desktop app and the web interface) copies the `scorm-lab run` line
+**Copy as CLI command** (under More options, in the desktop app and the web interface) copies the `package-lab run` line
 for the current launch. It starts with the package's file name and adds `--item` when the item isn't the first. Each
 setting that a flag can express gets one; the rest go in a file the line names:
 
@@ -330,7 +330,7 @@ Runs one item several ways, one after another, with the same headless runs as `r
 each got.
 
 ```bash
-scorm-lab experiment course.zip [--item n] [--wait s] [--variants file.json | --preset name] [--json] [--out folder]
+package-lab experiment course.zip [--item n] [--wait s] [--variants file.json | --preset name] [--json] [--out folder]
 ```
 
 The first run is the **default**: the launch options from the other flags (`--api`, `--depth`, `--window`, `--wait`,
@@ -380,7 +380,7 @@ answers. See [What the content wants from its server](user-guide.md#what-the-con
 works and what it can't see.
 
 ```bash
-scorm-lab discover course.zip [--item n] [--request pattern] [--rounds n] [--json] [--out folder] [run options]
+package-lab discover course.zip [--item n] [--request pattern] [--rounds n] [--json] [--out folder] [run options]
 ```
 
 It runs the item (headless, like `run`) without an answer first. Then it answers the requests with a stand-in that
@@ -442,7 +442,7 @@ Why it stopped: the decisions that led to where the run stopped, each with its v
 came from. See [Why it stopped](user-guide.md#why-it-stopped-drill-down) for how it works.
 
 ```bash
-scorm-lab drill course.zip [--item n] [--json] [--out folder] [run options]
+package-lab drill course.zip [--item n] [--json] [--out folder] [run options]
 ```
 
 It runs the item with tracing (whatever `--trace` says), works out the chain, and, if the chain has values it needs to
@@ -481,7 +481,7 @@ other branch never ran, and the findings (see [From a drill-down](findings.md#fr
 - `decisions` are the key decisions: in the dead end, and their other branch is code that never ran. `result` is 1 or
   0 (for `??`, 1 means it had a value); `untaken` is the first lines of the other branch and the functions it calls that never ran.
 - `chain[].cause`, on the last step only, is `request` (with `request`), `script` (with `file`), `file` (with `file`
-  and `field` if one is missing) or `version`. `cause` is null when the chain ends somewhere SCORM Lab can't name;
+  and `field` if one is missing) or `version`. `cause` is null when the chain ends somewhere Package Lab can't name;
   a step with `discover: true` is a server response that Discover can work out.
 - `watch` is the paths the watch run watched; `watched` is false when there was nothing to watch (one run only).
 
@@ -493,7 +493,7 @@ Tests that progress is saved and resumed, without a person clicking through. See
 [Testing that progress is saved and resumed](user-guide.md#testing-that-progress-is-saved-and-resumed).
 
 ```bash
-scorm-lab cycle course.zip [--item n] [--macro macro.json] [--json] [--strict] [--out folder] [run options]
+package-lab cycle course.zip [--item n] [--macro macro.json] [--json] [--strict] [--out folder] [run options]
 ```
 
 It runs the item twice, one after the other:
@@ -537,7 +537,7 @@ and `b` run 2.
 
 ### Macros
 
-A macro file is a JSON list of events, or `{ "format": "scorm-lab-macro", "version": 1, "events": [ … ] }`. Each event
+A macro file is a JSON list of events, or `{ "format": "package-lab-macro", "version": 1, "events": [ … ] }`. Each event
 has `t`, the milliseconds since the run started (0 to 3,600,000), and a `type`:
 
 | Type | Fields | Does |
@@ -564,7 +564,7 @@ WebKit.
 ## fix
 
 ```bash
-scorm-lab fix course.zip [--only id,…] [--override path=file …] [--out fixed.zip] [--json]
+package-lab fix course.zip [--only id,…] [--override path=file …] [--out fixed.zip] [--json]
 ```
 
 Writes a corrected copy of the package and says what it changed. The original is not touched. Without `--out` the
@@ -587,15 +587,15 @@ file is `course-fixed.zip` in the current folder. If there is nothing to change,
 | `--out` | Where to write the ZIP |
 | `--json` | Prints `{ package, out, applied: [{ id, label, changes }], notes: [{ id, label, notes }], overridden, proof: { before, after, gone, remaining, added } }` |
 
-Inside the new ZIP, `SCORM-LAB-CHANGES.txt` lists every change and the SCORM Lab version. After writing it, `fix`
+Inside the new ZIP, `PACKAGE-LAB-CHANGES.txt` lists every change and the Package Lab version. After writing it, `fix`
 checks the result again without running it, and prints which findings are gone (`proof.gone`), which are still there,
 and which are new or worded differently (a fix can change a count in a title). What a fix left alone, and why (a file that isn't valid UTF-8, a rename that would replace a file, something it couldn't convert), is printed under **Not done** and listed in `notes`; notes are not changes, so if there are only notes no file is written. An unknown id in `--only` is an error
-(status 2). Check the result with `scorm-lab analyze fixed.zip`, or run it.
+(status 2). Check the result with `package-lab analyze fixed.zip`, or run it.
 
 ## diff
 
 ```bash
-scorm-lab diff a.zip b.zip [--item n] [--run [run options]] [--json] [--out report.html]
+package-lab diff a.zip b.zip [--item n] [--run [run options]] [--json] [--out report.html]
 ```
 
 Compares two packages: **a** is the one that worked (or the older one), **b** the other. Without `--run` it reads the
@@ -647,7 +647,7 @@ it got less far, 0 for no difference. Files and findings are the same lists as `
 ## batch
 
 ```bash
-scorm-lab batch <folder | zips…> [--run [run options]] [--recursive] [--jobs n] [--csv file.csv] [--out report.html] [--json]
+package-lab batch <folder | zips…> [--run [run options]] [--recursive] [--jobs n] [--csv file.csv] [--out report.html] [--json]
 ```
 
 Checks every package in a folder, one row each. Without `--run` each package is checked from its files alone, the same
@@ -661,7 +661,7 @@ The table has these columns:
 |---|---|
 | Package | The file name |
 | SCORM version | From the manifest (`1.2`, `2004 4th edition`), or blank |
-| Tool | The authoring tool SCORM Lab recognised, or blank |
+| Tool | The authoring tool Package Lab recognised, or blank |
 | Verdict | **OK**, **Warning** or **Error**: the worst finding, as `analyze` shows it. **Failed**: the package couldn't be opened or its run didn't finish |
 | Errors, Warnings | The counts of findings of each kind |
 | Furthest milestone | With `--run` only: the furthest step the run reached (for example "Wrote data") |
@@ -704,10 +704,10 @@ or the options are wrong.
 ## report
 
 ```bash
-scorm-lab report course.zip [--item n] [--out report.html] [--open] [--fragment]
-scorm-lab report course.zip --run [run options] [--out report.html] [--open]
-scorm-lab report run.json [--out report.html] [--open] [--fragment]
-scorm-lab report run.json --redact [--redact-names --key-out key.json] [--out report.html]
+package-lab report course.zip [--item n] [--out report.html] [--open] [--fragment]
+package-lab report course.zip --run [run options] [--out report.html] [--open]
+package-lab report run.json [--out report.html] [--open] [--fragment]
+package-lab report run.json --redact [--redact-names --key-out key.json] [--out report.html]
 ```
 
 Writes a self-contained HTML report. It works in light and dark mode, and has no external files or scripts. It
@@ -743,19 +743,19 @@ run saved on its own, the findings that need the package's files (static finding
 --run --redact` to have them too.
 
 ```bash
-scorm-lab report run.json --redact --out report-for-vendor.html
-scorm-lab report run.json --redact --redact-names --key-out ~/keep/course-key.json --out report-for-vendor.html
+package-lab report run.json --redact --out report-for-vendor.html
+package-lab report run.json --redact --redact-names --key-out ~/keep/course-key.json --out report-for-vendor.html
 ```
 
 With `--redact-names`, every folder and file name appears as a hash such as `f4c278f5e9`, and a file keeps its extension
-(`f4c278f5e9.html`). The key file (`scorm-lab-redaction-key`, version 1) holds the secret and the table. It is written
+(`f4c278f5e9.html`). The key file (`package-lab-redaction-key`, version 1) holds the secret and the table. It is written
 as a new file after the report is written, so a failed report leaves none. `--key` must name a JSON key file from
 `--key-out`, or the command stops with an error.
 
 ## doctor
 
 ```bash
-scorm-lab doctor [--port n] [--json]
+package-lab doctor [--port n] [--json]
 ```
 
 Checks what this Mac can do, so a program (the Concierge module builds its run form from it) or you can tell why
@@ -765,9 +765,9 @@ itself fails. The checks:
 | Check | Passes when |
 |---|---|
 | `node` | Node.js is 20 or later |
-| `electron` | Electron is installed in this repo, or SCORM Lab.app is installed: packages can be run |
+| `electron` | Electron is installed in this repo, or Package Lab.app is installed: packages can be run |
 | `webkit` | Playwright is installed with its WebKit: `--browser webkit` works |
-| `data` | SCORM Lab's data folder (`SCORM_LAB_DATA`, or the default) exists |
+| `data` | Package Lab's data folder (`PACKAGE_LAB_DATA`, or the default) exists |
 | `port` | The port (default 4880, or `--port`, a whole number from 1 to 65535: anything else is an error, status 2) is free for `serve`, both on this Mac only (127.0.0.1) and on every address (0.0.0.0) |
 | *(not a check)* | The installed app is reported as the top-level `app`, not in `checks`, so the list stays as the Concierge module reads it. The text output shows it on its own line |
 
@@ -780,27 +780,27 @@ itself fails. The checks:
   "capabilities": { "analyze": true, "run": true, "webkit": false },
   "profiles": ["generic", "moodle", "…"], "tools": ["xyleme", "…"], "viewports": ["iphone", "ipad", "android-phone"],
   "presets": ["standard", "api", "…"], "fixes": [{ "id": "manifest-case", "label": "Rename the manifest to imsmanifest.xml" }, "…"],
-  "app": { "path": "/Applications/SCORM Lab.app", "version": "0.2.0" }
+  "app": { "path": "/Applications/Package Lab.app", "version": "0.2.0" }
 }
 ```
 
-`ok` is true when every check passes. `app` is `null` when SCORM Lab.app isn't in `/Applications` or `~/Applications`, else `{ path, version }` (the version from its `Info.plist`). `capabilities.run` needs Electron; `capabilities.webkit` needs Playwright and its WebKit (a WebKit run uses no Electron). The lists are the names `--profile`, `--tool`, `--viewport`, `experiment --preset` and
+`ok` is true when every check passes. `app` is `null` when Package Lab.app isn't in `/Applications` or `~/Applications`, else `{ path, version }` (the version from its `Info.plist`). `capabilities.run` needs Electron; `capabilities.webkit` needs Playwright and its WebKit (a WebKit run uses no Electron). The lists are the names `--profile`, `--tool`, `--viewport`, `experiment --preset` and
 `fix --only` accept. The installed app is shown too, but it isn't a check: a Mac that runs packages from this repo's Electron is fine without it. `doctor` ends with a **To do** list (or *Ready*) for the checks that failed.
 
 ## open
 
 ```bash
-scorm-lab open [course.zip]
+package-lab open [course.zip]
 ```
 
-Opens the desktop app. If `/Applications/SCORM Lab.app` exists, it opens that (so a running copy gets the package);
+Opens the desktop app. If `/Applications/Package Lab.app` exists, it opens that (so a running copy gets the package);
 otherwise it starts this repo's Electron.
 
 ## serve
 
 ```bash
-scorm-lab serve [--port 4880] [--host 127.0.0.1] [--window] [--show-runs]
-scorm-lab serve --url [--port 4880]
+package-lab serve [--port 4880] [--host 127.0.0.1] [--window] [--show-runs]
+package-lab serve --url [--port 4880]
 ```
 
 Starts the [web interface](web.md) and prints its address with the access token. It stays running until Ctrl-C.
@@ -817,22 +817,22 @@ Starts the [web interface](web.md) and prints its address with the access token.
 ## completion
 
 ```bash
-scorm-lab completion zsh > ~/.zfunc/_scorm-lab
+package-lab completion zsh > ~/.zfunc/_package-lab
 ```
 
 Prints a zsh completion script: the commands, each one's flags (with the choices for `--api`, `--browser`, `--preset`,
 `--profile`, `--tool`, `--viewport` and `--storage`), and file completion for packages (`*.zip`), JSON files and folders.
-To use it, save it as `_scorm-lab` in a folder on your `fpath` (`fpath=(~/.zfunc $fpath)` before `compinit` in
-`~/.zshrc`), then start a new shell. Or source it: `source <(scorm-lab completion zsh)`. Only `zsh` is supported. With
+To use it, save it as `_package-lab` in a folder on your `fpath` (`fpath=(~/.zfunc $fpath)` before `compinit` in
+`~/.zshrc`), then start a new shell. Or source it: `source <(package-lab completion zsh)`. Only `zsh` is supported. With
 `--json` it prints `{ shell, script }`. The script is made from the command table in `src/completion.js`, which the
 tests check against the help text.
 
 ## help and version
 
 ```bash
-scorm-lab help [--json]
-scorm-lab version [--json]
-scorm-lab <command> --help
+package-lab help [--json]
+package-lab version [--json]
+package-lab <command> --help
 ```
 
 `help` prints the list of commands with a line each, and the options of every command. `<command> --help` prints the same
@@ -918,9 +918,9 @@ credential in it). `diff --json` is described under [diff](#diff). `items --json
 
 | File | Written by | Contents |
 |---|---|---|
-| `folder/frame.jpg` | SCORM Lab | The content window, about every 0.4 s while it changes (JPEG, up to 1280 px wide) |
-| `folder/frame.json` | SCORM Lab | `{ "w": 1100, "h": 768, "t": ms since launch }`: the window's size in CSS pixels |
-| `folder/status.json` | SCORM Lab | `{ "state": "starting" \| "running" \| "analysing" \| "done", "until": epoch ms, "api", "requests", "errors", "t" }` |
+| `folder/frame.jpg` | Package Lab | The content window, about every 0.4 s while it changes (JPEG, up to 1280 px wide) |
+| `folder/frame.json` | Package Lab | `{ "w": 1100, "h": 768, "t": ms since launch }`: the window's size in CSS pixels |
+| `folder/status.json` | Package Lab | `{ "state": "starting" \| "running" \| "analysing" \| "done", "until": epoch ms, "api", "requests", "errors", "t" }` |
 | `folder/input/*.json` | you | One event per file, read in name order and deleted. Write to a temporary name and rename, so a half-written file is never read |
 
 Input events:
@@ -940,32 +940,32 @@ Input goes to the newest open window of the run: a popup the content opened, or 
 
 | Variable | Effect |
 |---|---|
-| `SCORM_LAB_ELECTRON` | The Electron or SCORM Lab binary to use. A path ending in `electron` is given the repo as its app; anything else (such as `/Applications/SCORM Lab.app/Contents/MacOS/SCORM Lab`) runs on its own |
-| `SCORM_LAB_DATA` | Moves SCORM Lab's data folder (saved runs, web token, reference sign-ins) for `serve` and `open`. Default `~/Library/Application Support/SCORM Lab` |
+| `PACKAGE_LAB_ELECTRON` | The Electron or Package Lab binary to use. A path ending in `electron` is given the repo as its app; anything else (such as `/Applications/Package Lab.app/Contents/MacOS/Package Lab`) runs on its own |
+| `PACKAGE_LAB_DATA` | Moves Package Lab's data folder (saved runs, web token, reference sign-ins) for `serve` and `open`. Default `~/Library/Application Support/Package Lab` |
 | `NO_COLOR` | Plain text output |
-| `SCORM_LAB_NO_PLAYWRIGHT` | `1` makes Playwright fail to load, as it does where it isn't installed, so `--browser webkit` refuses with its how-to-install message. For SCORM Lab's own tests |
-| `SCORM_LAB_FORCE_TRACE` | `1` traces every package run, as `--trace` does. For SCORM Lab's own tests |
+| `PACKAGE_LAB_NO_PLAYWRIGHT` | `1` makes Playwright fail to load, as it does where it isn't installed, so `--browser webkit` refuses with its how-to-install message. For Package Lab's own tests |
+| `PACKAGE_LAB_FORCE_TRACE` | `1` traces every package run, as `--trace` does. For Package Lab's own tests |
 
 ## Examples
 
 ```bash
 # Does the version matter? Compare the default with both APIs offered.
-scorm-lab run course.zip --json | jq '.counts.apiCalls'
-scorm-lab run course.zip --api both --json | jq '.counts.apiCalls'
+package-lab run course.zip --json | jq '.counts.apiCalls'
+package-lab run course.zip --api both --json | jq '.counts.apiCalls'
 
 # Deep frames, as in many LMSs.
-scorm-lab run course.zip --depth 3
+package-lab run course.zip --depth 3
 
 # Resume test: run, keep it, run again from its data.
-scorm-lab run course.zip --wait 30 --out first.json
-scorm-lab run course.zip --resume-from first.json
+package-lab run course.zip --wait 30 --out first.json
+package-lab run course.zip --resume-from first.json
 
 # The same, automatically: click through with a macro, leave like a learner, resume, and check.
-scorm-lab cycle course.zip --macro macro.json --wait 8
+package-lab cycle course.zip --macro macro.json --wait 8
 
 # Check every package in a folder; list the ones with errors.
-for z in exports/*.zip; do scorm-lab analyze "$z" --strict >/dev/null || echo "$z"; done
+for z in exports/*.zip; do package-lab analyze "$z" --strict >/dev/null || echo "$z"; done
 
 # A report to send to the author.
-scorm-lab report course.zip --run --wait 20 --out course-report.html
+package-lab report course.zip --run --wait 20 --out course-report.html
 ```

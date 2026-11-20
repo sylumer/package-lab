@@ -38,7 +38,7 @@ Confidence: LOW. Mostly forum reports. No Articulate primary doc was readable (c
 - `imsmanifest.xml` at zip root (expected in any SCORM zip; not confirmed for Storyline specifically)
 - Candidate strings to grep, unconfirmed: `strLMSStandard`, `blnLMSPresent`, `API_1484_11`, `LMSInitialize`
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Detects `story_content/` or `story.html`. Static: `story.html` without `scormdriver.js` (may be a Web publish; info). Run (info): story.html loaded, no API lookup and no driver, which fits a Web publish launched as LMS. The forum report that the driver ignores the SCORM setting has no rule of its own: the general version-mismatch finding covers it. `strLMSStandard` and `blnLMSPresent` are not confirmed for Storyline, so no rule reads them; the SCORM Driver pack reads `strLMSStandard`.
 

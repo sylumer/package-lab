@@ -1,4 +1,4 @@
-// The web interface: the same UI as the desktop window, served over HTTP, so SCORM Lab can be used from another
+// The web interface: the same UI as the desktop window, served over HTTP, so Package Lab can be used from another
 // machine. The UI's bridge (ui/bridge.js) turns lab.invoke into POST /api/invoke/<name> and lab.on into server-sent
 // events from /api/events. Content windows still run on this Mac; /api/live streams their frames and
 // /api/invoke/live-input sends clicks and keys back.
@@ -29,7 +29,7 @@ export function startWeb({ host = '127.0.0.1', port = 4880, uiDir, dataDir, hand
   const secret = token(dataDir), files = new Set(readdirSync(uiDir))
   const events = new Set(), liveClients = new Set()
   const same = (a, b) => typeof a === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b))
-  const cookie = req => /(?:^|;\s*)scormlab=([0-9a-f]+)/.exec(req.headers.cookie ?? '')?.[1]
+  const cookie = req => /(?:^|;\s*)packagelab=([0-9a-f]+)/.exec(req.headers.cookie ?? '')?.[1]
   const send = (res, status, type, body, extra = {}) => { res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', ...extra }); res.end(body) }
   const json = (res, status, data) => send(res, status, 'application/json; charset=utf-8', JSON.stringify(data))
   const body = (req, max) => new Promise((resolve, reject) => {
@@ -51,10 +51,10 @@ export function startWeb({ host = '127.0.0.1', port = 4880, uiDir, dataDir, hand
       const u = new URL(req.url, 'http://x')
       if (u.searchParams.has('token')) {
         if (!same(u.searchParams.get('token'), secret)) return send(res, 403, 'text/plain; charset=utf-8', 'Wrong token.')
-        return send(res, 302, 'text/plain', '', { Location: '/', 'Set-Cookie': `scormlab=${secret}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000` })
+        return send(res, 302, 'text/plain', '', { Location: '/', 'Set-Cookie': `packagelab=${secret}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000` })
       }
       if (!same(cookie(req), secret))
-        return send(res, 401, 'text/html; charset=utf-8', '<!doctype html><meta charset="utf-8"><title>SCORM Lab</title><p style="font:15px system-ui;margin:2em">Open the address SCORM Lab printed when it started (it ends <code>?token=…</code>). <code>scorm-lab serve --url</code> prints it again.</p>')
+        return send(res, 401, 'text/html; charset=utf-8', '<!doctype html><meta charset="utf-8"><title>Package Lab</title><p style="font:15px system-ui;margin:2em">Open the address Package Lab printed when it started (it ends <code>?token=…</code>). <code>package-lab serve --url</code> prints it again.</p>')
       const p = u.pathname
       if (req.method === 'GET' && (p === '/' || files.has(p.slice(1)))) {
         const name = p === '/' ? 'index.html' : p.slice(1)
@@ -69,7 +69,7 @@ export function startWeb({ host = '127.0.0.1', port = 4880, uiDir, dataDir, hand
       }
       if (req.method === 'GET' && p === '/api/export') {   // the corrected package (P3.1), built in memory like uploads are read
         const d = await download({ only: u.searchParams.has('only') ? u.searchParams.get('only').split(',').filter(Boolean) : undefined }), plain = d.name.replace(/[^\w. -]/g, '_')
-        return send(res, 200, 'application/zip', d.buf, { 'Content-Disposition': `attachment; filename="${plain}"; filename*=UTF-8''${encodeURIComponent(d.name).replace(/['()*!]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())}`, 'X-Scorm-Lab-Summary': encodeURIComponent(JSON.stringify(d.summary)), 'Access-Control-Expose-Headers': 'X-Scorm-Lab-Summary' })
+        return send(res, 200, 'application/zip', d.buf, { 'Content-Disposition': `attachment; filename="${plain}"; filename*=UTF-8''${encodeURIComponent(d.name).replace(/['()*!]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())}`, 'X-Package-Lab-Summary': encodeURIComponent(JSON.stringify(d.summary)), 'Access-Control-Expose-Headers': 'X-Package-Lab-Summary' })
       }
       const m = /^\/api\/invoke\/([\w-]+)$/.exec(p)
       if (req.method === 'POST' && m && handlers[m[1]] && !DESKTOP_ONLY.has(m[1])) {

@@ -49,7 +49,7 @@ assert.ok(html.includes('F &amp; G') && html.includes('<div class="sl">section</
 
 // Folders: the zips of a folder (sorted; subfolders only with recursive); anything that isn't a folder is taken as a package path.
 {
-  const dir = mkdtempSync(join(tmpdir(), 'scorm-lab-batch-unit-'))
+  const dir = mkdtempSync(join(tmpdir(), 'package-lab-batch-unit-'))
   mkdirSync(join(dir, 'sub')); mkdirSync(join(dir, '.hidden'))
   for (const f of ['b.zip', 'a.ZIP', 'notes.txt', 'sub/c.zip', '.hidden/d.zip']) writeFileSync(join(dir, f), 'x')
   assert.deepEqual(batchFiles([dir]).map(p => p.slice(dir.length + 1)), ['a.ZIP', 'b.zip'], 'a folder: its zips, sorted, no hidden folders')
@@ -59,7 +59,7 @@ assert.ok(html.includes('F &amp; G') && html.includes('<div class="sl">section</
 
 // Symbolic links to folders are skipped (and reported), even with recursive; a link to a zip is checked.
 {
-  const dir = mkdtempSync(join(tmpdir(), 'scorm-lab-batch-link-'))
+  const dir = mkdtempSync(join(tmpdir(), 'package-lab-batch-link-'))
   mkdirSync(join(dir, 'real')); writeFileSync(join(dir, 'real', 'inner.zip'), 'x'); writeFileSync(join(dir, 'one.zip'), 'x')
   symlinkSync(join(dir, 'real'), join(dir, 'linkdir')); symlinkSync(join(dir, 'one.zip'), join(dir, 'linkzip.zip'))
   const skipped = []
@@ -70,7 +70,7 @@ assert.ok(html.includes('F &amp; G') && html.includes('<div class="sl">section</
 
 // A package that can't be read is a failed row, not an error: a file that isn't a ZIP, and a missing one.
 {
-  const dir = mkdtempSync(join(tmpdir(), 'scorm-lab-batch-bad-'))
+  const dir = mkdtempSync(join(tmpdir(), 'package-lab-batch-bad-'))
   const bad = join(dir, 'broken.zip'); writeFileSync(bad, 'not a zip')
   const r = checkPackage(bad), gone = checkPackage(join(dir, 'gone.zip'))
   assert.equal(r.row.verdict, 'failed'); assert.match(r.row.note, /^Couldn’t open it: /); assert.equal(r.row.package, 'broken.zip')

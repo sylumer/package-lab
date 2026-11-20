@@ -107,7 +107,7 @@ export class Recorder {
         const text = p.data?.description?.split('\n')[0] ?? p.data?.value ?? ''
         // A lookup through parent, top or opener that another origin refused (P2.1): recorded as a probe report, with
         // the frame (its address, read while paused) and the stack. The probe can't see these: the refusal comes before
-        // any accessor on the other window runs. SCORM Lab's own injected scripts (no address) are left out.
+        // any accessor on the other window runs. Package Lab's own injected scripts (no address) are left out.
         const at = p.callFrames[0], url = f => f.url || this.scriptUrl.get(sid + ':' + f.location.scriptId) || ''
         if (p.reason === 'exception' && isBlocked(text) && at && url(at)) {
           const src = await this.send('Debugger.getScriptSource', { scriptId: at.location.scriptId }, sid).then(r => r.scriptSource).catch(() => '')

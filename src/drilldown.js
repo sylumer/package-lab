@@ -287,7 +287,7 @@ function fromResponse(ctx, req, root, rest) {
     }
     return [{ text: `${code(root)} came from ${file}, where ${code(rest.join('.') || root)} is ${JSON.stringify(v)?.slice(0, 80)}.`, short: `${file} says ${JSON.stringify(v)?.slice(0, 40)}` }]
   }
-  return [{ text: `${code(root)} came from the response to ${url} (${req.status}). SCORM Lab can’t see what the server sent: Discover (the Server needs tab, or scorm-lab discover) works out what the content reads from it.`,
+  return [{ text: `${code(root)} came from the response to ${url} (${req.status}). Package Lab can’t see what the server sent: Discover (the Server needs tab, or package-lab discover) works out what the content reads from it.`,
     short: `the response to ${url}`, request: url, discover: true }]
 }
 // What a value's code says about where it came from: a response, the query string, the LMS.
@@ -319,7 +319,7 @@ function whyNotRun(ctx, a, level) {
 }
 // The decision that kept code from running, as a step, and (for a value that was undefined) where that came from.
 function guardSteps(ctx, g, level, what) {
-  if (!g) return [{ text: `SCORM Lab found no decision around the code where ${what}.`, short: 'no decision found' }]
+  if (!g) return [{ text: `Package Lab found no decision around the code where ${what}.`, short: 'no decision found' }]
   const line = g.prog.text.slice(0, g.at).split('\n').length
   const id = ctx.sites.findIndex(s => s?.file === g.prog.file && s.kind === g.kind && ctx.offset(s) === g.at)
   const i = ctx.lastOf.get(id)
@@ -331,13 +331,13 @@ function guardSteps(ctx, g, level, what) {
 // Where the operand op of decision d got its value. Returns steps.
 function origin(ctx, op, d, level) {
   const path = codePath(op.code)
-  if (!path) return [{ text: `SCORM Lab can’t tell where ${code(op.code)} came from.`, short: `${code(op.code)} (unknown)` }]
+  if (!path) return [{ text: `Package Lab can’t tell where ${code(op.code)} came from.`, short: `${code(op.code)} (unknown)` }]
   const [root, ...rest] = path.split('.'), prog = d.sn?.prog
   // A name local to the function: a parameter of a callback is what a request sent; otherwise read its declaration.
   const local = prog && findLocal(prog, d.sn.node, root)
   if (local) {
     if (local.param && isCallback(prog, local.fn)) { const req = requestFrom(ctx, prog.file, d.t); if (req) return fromResponse(ctx, req, root, rest) }
-    return fromCode(ctx, prog, local.init, root, rest, d.t) ?? [{ text: `${code(root)} is local to ${fnLabel(prog, local.fn)} (${d.at}), so SCORM Lab can’t watch it. Read that function to see where it’s set.`, short: `${code(root)} is local` }]
+    return fromCode(ctx, prog, local.init, root, rest, d.t) ?? [{ text: `${code(root)} is local to ${fnLabel(prog, local.fn)} (${d.at}), so Package Lab can’t watch it. Read that function to see where it’s set.`, short: `${code(root)} is local` }]
   }
   if (root === 'API' || root === 'API_1484_11') {
     const wants = root === 'API' ? '1.2' : '2004', offered = ctx.launch?.expose
@@ -388,22 +388,22 @@ function explain(ctx, d, level, lead) {
 }
 
 const FIX = {
-  request: s => `Answer the request yourself (scorm-lab run --answer '${s.request}=@file.json', or Answer this request… in the Network tab), or find out why the server refuses it. Discover works out what the answer should contain.`,
+  request: s => `Answer the request yourself (package-lab run --answer '${s.request}=@file.json', or Answer this request… in the Network tab), or find out why the server refuses it. Discover works out what the answer should contain.`,
   file: s => `Add ${s.field ? code(s.field) + ' to ' : 'valid JSON to '}${s.file} with a file override (the Files tab, or --override) and run again, or pin the value it should have.`,
   script: s => `Check that ${s.file} is in the package and that the code that loads it runs.`,
-  version: () => 'Offer both APIs (scorm-lab run --api both, or API: both) and run again.',
+  version: () => 'Offer both APIs (package-lab run --api both, or API: both) and run again.',
 }
 // The whole drill-down. See the top of the file.
 export function drill(input) {
   const { trace } = input
   if (!trace?.sites || !(trace.exec ?? []).length) {
     return { traced: !!trace?.sites, decisions: [], chain: [], watch: [], watched: !!input.watch, cause: null, summary: '',
-      findings: [{ sev: 'info', title: 'Why it stopped: nothing to drill into', detail: trace?.sites ? 'The traced run recorded no decisions in the package’s scripts.' : 'The run wasn’t traced, so there are no decisions to follow.', evidence: [], fix: 'Drill down on a traced run (Trace the code under More options, or scorm-lab drill).' }] }
+      findings: [{ sev: 'info', title: 'Why it stopped: nothing to drill into', detail: trace?.sites ? 'The traced run recorded no decisions in the package’s scripts.' : 'The run wasn’t traced, so there are no decisions to follow.', evidence: [], fix: 'Drill down on a traced run (Trace the code under More options, or package-lab drill).' }] }
   }
   const ctx = context({ ...input, files: input.files ?? new Map() }), de = deadEnd(ctx.all, ctx.milestones)
   const decisions = keyDecisions(ctx, de)
   // The chain starts from the last key decision whose values explain it: an undefined or null operand, or a false one
-  // that came from somewhere SCORM Lab can name (a failed request).
+  // that came from somewhere Package Lab can name (a failed request).
   let chain = []
   for (const d of [...decisions].reverse()) {
     const steps = explain(ctx, d, 1)
@@ -414,7 +414,7 @@ export function drill(input) {
   const end = chain.at(-1), cause = end?.cause ? { kind: end.cause, text: end.text } : null
   const summary = chain.map(s => s.short).join(' ← ')
   const findings = [chain.length ? { sev: cause ? 'error' : 'warn', title: `Why it stopped: ${summary}`,
-    detail: cause ? 'Each step is the reason for the one before; the last is a cause SCORM Lab can name.' : 'Each step is the reason for the one before. SCORM Lab couldn’t follow the last one to a cause it can name.',
+    detail: cause ? 'Each step is the reason for the one before; the last is a cause Package Lab can name.' : 'Each step is the reason for the one before. Package Lab couldn’t follow the last one to a cause it can name.',
     evidence: chain.map(s => `${s.n}. ${s.text}`), fix: cause ? FIX[cause.kind](end) : end.discover ? 'Run Discover on that request to see what the content reads from it.' : 'Read the code named in the last step: it decides the value.' }
     : { sev: 'info', title: 'Why it stopped: no decision led to code that never ran', detail: 'In the last part of the run, every decision’s other branch ran at some point, or had nothing to run.', evidence: [], fix: 'Look at the Execution tab for the last events before the run went quiet.' }]
   return { traced: true, deadEnd: { t: de.end, quiet: de.quiet, events: de.to - de.from + 1 + (de.near?.length ?? 0) },

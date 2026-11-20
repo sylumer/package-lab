@@ -32,7 +32,7 @@ Confidence: LOW. No Adobe primary doc was readable (helpx returned 403). Finding
 - `SCORM_utilities.js`, `scorm_support.js`
 - Candidate strings, unconfirmed: `cp is not defined`, `CPM`
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Detects `CPM.js`, `index_scorm.html` and `cp.CPProjInit`. Static: the older support files (info). Run: an uncaught "cp is not defined" is shown with the reported cause.
 

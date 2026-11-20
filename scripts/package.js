@@ -1,6 +1,6 @@
-// Builds SCORM Lab.app in dist/ (for this Mac's architecture) with its icon, signed ad hoc so it runs on this Mac.
+// Builds Package Lab.app in dist/ (for this Mac's architecture) with its icon, signed ad hoc so it runs on this Mac.
 // With --install, also copies it to /Applications (replacing an older copy) and registers it with Finder, so
-// Open With, `open -a "SCORM Lab"` and Alfred find it. See docs/developer-guide.md.
+// Open With, `open -a "Package Lab"` and Alfred find it. See docs/developer-guide.md.
 import { packager } from '@electron/packager'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
@@ -24,20 +24,20 @@ if (!existsSync(join(build, 'icon.icns'))) {
 
 const [out] = await packager({
   dir: root, out: join(root, 'dist'), overwrite: true, platform: 'darwin', arch: process.arch,
-  name: 'SCORM Lab', executableName: 'SCORM Lab', appBundleId: 'com.sylumer.scorm-lab', appCategoryType: 'public.app-category.developer-tools',
+  name: 'Package Lab', executableName: 'Package Lab', appBundleId: 'com.sylumer.package-lab', appCategoryType: 'public.app-category.developer-tools',
   icon: join(build, 'icon.icns'), prune: true, asar: false,
   ignore: [/^\/(dist|test|docs|scripts|build|alfred)(\/|$)/, /^\/\.git/, /\.md$/],
-  // Lets Finder offer SCORM Lab under Open With for .zip files, without making it the default.
+  // Lets Finder offer Package Lab under Open With for .zip files, without making it the default.
   extendInfo: { CFBundleDocumentTypes: [{ CFBundleTypeName: 'ZIP archive', CFBundleTypeRole: 'Viewer', LSHandlerRank: 'Alternate', LSItemContentTypes: ['public.zip-archive'] }] },
 })
-const app = join(out, 'SCORM Lab.app')
+const app = join(out, 'Package Lab.app')
 run('codesign', ['--force', '--deep', '--sign', '-', app])
 console.log(`Built ${app}`)
 
 if (process.argv.includes('--install')) {
-  try { execFileSync('osascript', ['-e', 'if application id "com.sylumer.scorm-lab" is running then tell application id "com.sylumer.scorm-lab" to quit']) } catch { /* not running */ }
-  rmSync('/Applications/SCORM Lab.app', { recursive: true, force: true })
-  run('ditto', [app, '/Applications/SCORM Lab.app'])
-  run('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', '/Applications/SCORM Lab.app'])
-  console.log('Installed /Applications/SCORM Lab.app')
+  try { execFileSync('osascript', ['-e', 'if application id "com.sylumer.package-lab" is running then tell application id "com.sylumer.package-lab" to quit']) } catch { /* not running */ }
+  rmSync('/Applications/Package Lab.app', { recursive: true, force: true })
+  run('ditto', [app, '/Applications/Package Lab.app'])
+  run('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', '/Applications/Package Lab.app'])
+  console.log('Installed /Applications/Package Lab.app')
 }

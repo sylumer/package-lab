@@ -1,4 +1,4 @@
-# SCORM Lab: design
+# Package Lab: design
 
 A desktop app (Electron) that works out why a SCORM package doesn't work as expected: it won't launch, makes no API
 calls, doesn't save progress, or works on one host and not another. It goes past inspection by running the package
@@ -8,7 +8,7 @@ Everything runs locally. No package content leaves the machine.
 
 ## The core idea: explain one run on its own
 
-There is usually no working copy to compare with: the package may never have worked anywhere. So SCORM Lab works
+There is usually no working copy to compare with: the package may never have worked anywhere. So Package Lab works
 out why from a single run, the way a person does in DevTools, but exhaustively:
 
 0. **Boot path** (`src/bootpath.js`). Before anything runs, the launch page's loading path is worked out from the
@@ -22,7 +22,7 @@ out why from a single run, the way a person does in DevTools, but exhaustively:
 1. **Milestones.** SCORM content has a known path: launch page loads, scripts load, the player starts, the API is
    found, Initialize, the resume values are read, progress is written, Commit, Terminate. The run is placed on that
    path, and the first step not reached is the problem to explain.
-2. **Why it stopped there.** When the content goes quiet short of a milestone, SCORM Lab lists what it was waiting
+2. **Why it stopped there.** When the content goes quiet short of a milestone, Package Lab lists what it was waiting
    for: requests still pending or failed, timers polling for something that never appears, `message` listeners
    waiting for a host that never answers (postMessage handshakes), promises never settled, and the last code that
    ran.
@@ -68,9 +68,9 @@ All of them drive the same main process (`src/main.js`) and the same findings:
   list, and tabs for the package and each run: Findings, Boot path, Package, Files, API, xAPI, Lookups, Network,
   Scripts, Execution, Drill-down, Timeline, Errors, Console, Frames, Compare, Package diff, Folder check, Experiments,
   Test saving and Server needs. [The user guide](docs/user-guide.md) covers each one.
-- **Web interface** (`scorm-lab serve`): the same interface over HTTP with a token, plus a Live tab that streams the
+- **Web interface** (`package-lab serve`): the same interface over HTTP with a token, plus a Live tab that streams the
   running course and sends clicks and keys back. For use from other devices.
-- **CLI** (`bin/scorm-lab.js`): analyze, items, run (headless, with a live folder for frames and input), experiment,
+- **CLI** (`bin/package-lab.js`): analyze, items, run (headless, with a live folder for frames and input), experiment,
   discover, drill, cycle, diff, batch, fix, report (HTML, optionally redacted), doctor, open, serve, completion.
 - **Alfred workflow** and **Concierge module**: thin layers over the CLI.
 

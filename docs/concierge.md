@@ -1,6 +1,6 @@
-# SCORM Lab in Concierge
+# Package Lab in Concierge
 
-The **SCORM Lab** module puts SCORM Lab in the [Concierge](../../concierge/README.md) dashboard. From any browser,
+The **Package Lab** module puts Package Lab in the [Concierge](../../concierge/README.md) dashboard. From any browser,
 phone or tablet that can reach Concierge, you can:
 - upload a package;
 - see what's wrong with it from its files;
@@ -30,30 +30,30 @@ It uses Concierge's HTTPS and macOS login. Packages and runs stay on the Mac.
 ## Requirements
 
 - Concierge.
-- The scorm-lab repo, by default at `~/github/scorm-lab`, with `npm install` run in it. That installs SCORM Lab's
+- The package-lab repo, by default at `~/github/package-lab`, with `npm install` run in it. That installs Package Lab's
   browser (Electron); without it, packages can be checked but not run.
 - Optional: Playwright and its WebKit (`npm i -D playwright && npx playwright install webkit`) for runs in Safari's
-  engine. The run form offers WebKit only when `scorm-lab doctor` says it works.
+  engine. The run form offers WebKit only when `package-lab doctor` says it works.
 - Node.js 20 or later. The module looks in `/opt/homebrew/bin`, `/usr/local/bin`, then your login shell's PATH.
 
 ## Installing
 
-The module is in the Concierge repo at `modules/scorm-lab`. Either:
+The module is in the Concierge repo at `modules/package-lab`. Either:
 - run `make modules` in the Concierge repo (this installs or updates every module in the repo); or
 - copy just this one:
   ```bash
-  rsync -a --delete modules/scorm-lab/ ~/Library/Application\ Support/Concierge/modules/scorm-lab/
+  rsync -a --delete modules/package-lab/ ~/Library/Application\ Support/Concierge/modules/package-lab/
   ```
 
-Reload the dashboard. **SCORM Lab** is under **Tools**, and its tile is on the home page.
+Reload the dashboard. **Package Lab** is under **Tools**, and its tile is on the home page.
 
 ## Settings
 
 If the repo or Node is somewhere else, create
-`~/Library/Application Support/Concierge/data/scorm-lab/config.json`:
+`~/Library/Application Support/Concierge/data/package-lab/config.json`:
 
 ```json
-{ "scormlab": "/path/to/scorm-lab", "node": "/path/to/node" }
+{ "packagelab": "/path/to/package-lab", "node": "/path/to/node" }
 ```
 
 Both keys are optional. If something is missing, the module's pages say what and where.
@@ -161,7 +161,7 @@ The page updates by itself and shows the report when the run is done.
 
   [Findings](findings.md) explains each finding.
 
-**If a run fails** (SCORM Lab couldn't start, or crashed), the page says why and has the log.
+**If a run fails** (Package Lab couldn't start, or crashed), the page says why and has the log.
 
 ## A corrected package and a diff
 
@@ -182,7 +182,7 @@ The tile refreshes every 20 seconds.
 
 ## Where its data is
 
-`~/Library/Application Support/Concierge/data/scorm-lab/`:
+`~/Library/Application Support/Concierge/data/package-lab/`:
 
 | Path | Contents |
 |---|---|
@@ -192,7 +192,7 @@ The tile refreshes every 20 seconds.
 | `packages/<n>/experiments/<e>/` | One experiment: settings, `log.txt`, `done.json`, and `runs/` with each variant's saved run and `experiment.json` |
 | `packages/<n>/overrides.json`, `overrides/` | The package's replacement files, pins and responses |
 | `packages/<n>/fixed/` | The last corrected package |
-| `doctor.json` | What `scorm-lab doctor` said, kept for five minutes |
+| `doctor.json` | What `package-lab doctor` said, kept for five minutes |
 | `preferences.json` | The remembered run settings |
 
 Each package keeps its 30 newest runs and 10 newest experiments; older ones are deleted when a new one finishes. Delete a package from its page,
@@ -217,30 +217,30 @@ or delete its folder.
 
 | Message or symptom | Fix |
 |---|---|
-| "SCORM Lab isn't at …" | Put the repo there, or set `scormlab` in `config.json` |
+| "Package Lab isn't at …" | Put the repo there, or set `packagelab` in `config.json` |
 | "Node.js wasn't found" | `brew install node`, or set `node` in `config.json` |
-| "SCORM Lab's browser (Electron) isn't installed" | Run `npm install` in the repo |
+| "Package Lab's browser (Electron) isn't installed" | Run `npm install` in the repo |
 | A run stays at "starting" | Look at its log (in the run's folder, `log.txt`). The first run after installing can take longer while macOS checks Electron |
-| "The run didn't finish" | The page shows the error and log. Try the same run from Terminal: `scorm-lab run <the zip in packages/<n>/> --show` |
+| "The run didn't finish" | The page shows the error and log. Try the same run from Terminal: `package-lab run <the zip in packages/<n>/> --show` |
 | The live picture is black or doesn't change | The course hasn't drawn yet, or is static; click something |
 
 ## How it works
 
 The module is a Python script, `run`, that Concierge calls for each request, as with all Concierge modules (see
-Concierge's `docs/writing-modules.md`). It does no analysis itself: it calls SCORM Lab's CLI.
+Concierge's `docs/writing-modules.md`). It does no analysis itself: it calls Package Lab's CLI.
 
 | Action | What the module calls |
 |---|---|
-| Upload | `scorm-lab analyze <zip> --json`, saved as `analysis.json` |
-| Reports from the files | `scorm-lab report <zip> --item n --fragment`, cached |
-| What the form offers | `scorm-lab doctor --json`: the profiles, tools, device sizes, presets and fixes, and whether WebKit works |
-| Run | A detached worker (`run --worker <package> <run>`) calls `scorm-lab run <zip> … --live <folder> --out run.json --json` (with `--api`, `--depth`, `--window`, `--resume-from`, `--profile`, `--browser`, `--viewport`, `--storage`, `--tool`, `--trace` and `--override` as set; pins and responses go in a file given with `--options`), then `scorm-lab report run.json --fragment`, then writes `done.json` |
-| Test saving | The same worker calls `scorm-lab cycle <zip> … --out <folder> --json`; the second run becomes `run.json` |
-| Try variants | A detached worker calls `scorm-lab experiment <zip> --preset <name> --out <folder>`; the page reads the saved runs as they appear, then `experiment.json` |
-| Drill-down, Discover | A detached worker calls `scorm-lab drill` or `discover <zip> --options-from run.json --json` |
-| Redacted report | `scorm-lab report run.json --redact --out <file>` |
-| Corrected package | `scorm-lab fix <zip> --only <ids> --override … --json --out <file>` |
-| Package diff | `scorm-lab diff <a.zip> <b.zip> --json`, and `--out <file>` for the download |
-| Live view | The page fetches `/frame` every 0.7 s for the newest `frame.jpg` (as base64 in the page) and `status.json`. Clicks and keys are POSTed to `/input` and written to the run's `live/input/` folder, which SCORM Lab reads |
+| Upload | `package-lab analyze <zip> --json`, saved as `analysis.json` |
+| Reports from the files | `package-lab report <zip> --item n --fragment`, cached |
+| What the form offers | `package-lab doctor --json`: the profiles, tools, device sizes, presets and fixes, and whether WebKit works |
+| Run | A detached worker (`run --worker <package> <run>`) calls `package-lab run <zip> … --live <folder> --out run.json --json` (with `--api`, `--depth`, `--window`, `--resume-from`, `--profile`, `--browser`, `--viewport`, `--storage`, `--tool`, `--trace` and `--override` as set; pins and responses go in a file given with `--options`), then `package-lab report run.json --fragment`, then writes `done.json` |
+| Test saving | The same worker calls `package-lab cycle <zip> … --out <folder> --json`; the second run becomes `run.json` |
+| Try variants | A detached worker calls `package-lab experiment <zip> --preset <name> --out <folder>`; the page reads the saved runs as they appear, then `experiment.json` |
+| Drill-down, Discover | A detached worker calls `package-lab drill` or `discover <zip> --options-from run.json --json` |
+| Redacted report | `package-lab report run.json --redact --out <file>` |
+| Corrected package | `package-lab fix <zip> --only <ids> --override … --json --out <file>` |
+| Package diff | `package-lab diff <a.zip> <b.zip> --json`, and `--out <file>` for the download |
+| Live view | The page fetches `/frame` every 0.7 s for the newest `frame.jpg` (as base64 in the page) and `status.json`. Clicks and keys are POSTed to `/input` and written to the run's `live/input/` folder, which Package Lab reads |
 
 See [Live runs](cli.md#live-runs) for the live folder's format.

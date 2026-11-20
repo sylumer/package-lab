@@ -192,7 +192,7 @@ function redactInput(o) {
   const opts = o.redact === true ? {} : o.redact, run = o.run
   const R = redactRun({ ...(run ?? {}), findings: o.findings ?? run?.findings, boot: o.boot ?? run?.boot, analysis: o.analysis },
     { ...opts, package: opts.package ?? run?.package ?? undefined, paths: o.files ? [...o.files.keys()] : opts.paths })
-  return { run: run ? R : undefined, title: `SCORM Lab: ${R.package ?? R.label ?? 'report'}`, subtitle: run ? R.label : 'From the files only. Run it to see what actually happens.', findings: R.findings, boot: R.boot, analysis: R.analysis,
+  return { run: run ? R : undefined, title: `Package Lab: ${R.package ?? R.label ?? 'report'}`, subtitle: run ? R.label : 'From the files only. Run it to see what actually happens.', findings: R.findings, boot: R.boot, analysis: R.analysis,
     redaction: R.redaction, excerpts: false, files: undefined, diff: undefined }
 }
 
@@ -207,7 +207,7 @@ export function renderReport(input) {
   const pkgTable = a ? `<h2>Package</h2>${table(['', ''], [[a.format && a.format !== 'scorm' ? 'Course file' : 'Manifest', formatName(a)], ['Scripts use', a.apiUse === 'none' ? 'no SCORM API names' : a.apiUse === 'both' ? 'both APIs' : 'SCORM ' + a.apiUse],
     ['Made with', a.fingerprints.join(', ') || 'not recognised'], ['Files', `${a.files} (${(a.size / 1048576).toFixed(1)} MB)`], ['Items', (m?.items ?? []).map(i => `${i.title || i.id} (${i.type || '?'})`).join('; ')]].map(([k, x]) => [`<b>${esc(k)}</b>`, esc(x)]))}` : ''
   const body = `<div class="sl"><style>${CSS}</style>
-${o.fragment ? '' : `<h1>${esc(o.title ?? 'SCORM Lab report')}</h1>`}${o.subtitle ? `<p class="sl-muted">${esc(o.subtitle)}</p>` : ''}
+${o.fragment ? '' : `<h1>${esc(o.title ?? 'Package Lab report')}</h1>`}${o.subtitle ? `<p class="sl-muted">${esc(o.subtitle)}</p>` : ''}
 ${o.redaction ? redactionBanner(o.redaction) : ''}
 <div class="sl-verdict"><span class="sl-badge ${v.sev}">${v.sev === 'warn' ? 'warning' : v.sev === 'ok' ? 'ok' : 'error'}</span><b>${esc(v.title)}</b><span class="sl-muted">${c.errors} errors · ${c.warnings} warnings · ${c.info} notes</span></div>
 ${o.extra ?? ''}
@@ -216,8 +216,8 @@ ${run ? runHtml(run) : ''}
 ${o.boot ?? run?.boot ? `<h2>Loading path</h2>${bootHtml(o.boot ?? run.boot, run?.trace)}` : ''}
 ${pkgTable}
 ${o.diff ? diffHtml(o.diff) : ''}
-<p class="sl-muted">Made by SCORM Lab on ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))}. Everything here was worked out on this computer.</p></div>`
-  return o.fragment ? body : `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(o.title ?? 'SCORM Lab report')}</title><style>${PAGE_CSS}</style></head><body><main>${body}</main></body></html>`
+<p class="sl-muted">Made by Package Lab on ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))}. Everything here was worked out on this computer.</p></div>`
+  return o.fragment ? body : `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(o.title ?? 'Package Lab report')}</title><style>${PAGE_CSS}</style></head><body><main>${body}</main></body></html>`
 }
 
 // An experiment's variants (experiment --out writes report.html with this): the same columns as the text table. rows are summarise()'s rows.

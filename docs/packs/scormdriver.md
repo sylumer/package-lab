@@ -34,7 +34,7 @@ Confidence: MEDIUM. Official Rustici docs read. Licence and GitHub availability 
 - `strContentLocation` (string in `indexAPI.html`)
 - `var SD = window` / `SD.SetPassed`
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Detects `scormdriver/indexAPI.html`, `strContentLocation`, `scormdriver.js`. Static: `strLMSStandard`, read only in `scormdriver*.js` files, against the manifest version (info: "SCORM" is read as 1.2 and "SCORM2004" as 2004, but the docs read here don't list the values; other values are reported neutrally), and `strContentLocation` naming a missing file (warning, read from the files). Run (info): the driver loaded but nothing looked for the LMS.
 

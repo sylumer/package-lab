@@ -1,13 +1,13 @@
 # Findings
 
-Every finding SCORM Lab can report, grouped by where it comes from. Each has a severity:
+Every finding Package Lab can report, grouped by where it comes from. Each has a severity:
 - **error**: this stops the package working;
 - **warning**: this may stop it working, or has a side effect worth knowing about;
 - **info**: context.
 
-Titles below are as SCORM Lab shows them, with *italic* parts filled in.
+Titles below are as Package Lab shows them, with *italic* parts filled in.
 
-Some findings name an **Autofix**: a mechanical correction SCORM Lab can make for you when it exports a
+Some findings name an **Autofix**: a mechanical correction Package Lab can make for you when it exports a
 [corrected package](user-guide.md#exporting-a-corrected-package). They are `manifest-case`, `manifest-not-root`,
 `file-missing`, `manifest-version`, `case`, `http-to-https` and `xyleme-player-type`. Everything else needs a person to decide.
 
@@ -60,7 +60,7 @@ if there are no errors.
 | Scripts refer to other sites | info | The content may depend on them | |
 | Scripts create their own SCORM API object | warning | A preview, offline or standalone shim; the content may talk to it instead of the LMS | Run it: if it sets its own API, find the condition that makes it do so |
 | Scripts have mode switches (preview, standalone, LMS…) | info | Where content usually decides how it behaves on its authoring host and in an LMS | Read the code around them |
-| Made with *tool* | info | The authoring tool or wrapper SCORM Lab recognised | |
+| Made with *tool* | info | The authoring tool or wrapper Package Lab recognised | |
 
 ## From the boot path
 
@@ -90,18 +90,18 @@ These come from following everything the launch page loads (see **Boot path** in
 
 ## From authoring-tool packs
 
-When SCORM Lab recognises the tool that made a package (the "Made with" note), a **rule pack** for that tool adds
+When Package Lab recognises the tool that made a package (the "Made with" note), a **rule pack** for that tool adds
 its own findings. Each title starts with the tool's name, such as "Xyleme: …". Every one says how sure it is, at the
 end of its detail:
 
 - **Matches a known pattern.** It comes from forum reports or thin public documentation, and nothing in this run
   confirms it. These are always **info**.
-- **Confirmed in the package's files.** SCORM Lab read the setting or the file itself (a config key, a driver
+- **Confirmed in the package's files.** Package Lab read the setting or the file itself (a config key, a driver
   setting). These can be warnings.
 - **Confirmed in this run.** The recording shows it happening. These can be warnings.
 
 When you choose the tool yourself (the **Authoring tool** setting, or `--tool`), each of its findings says so in its
-detail, whether or not SCORM Lab recognised the package.
+detail, whether or not Package Lab recognised the package.
 
 Recognition is by file names and text the research notes ([docs/packs](packs/README.md)) list, so a package with no
 such marker gets no pack unless you choose one (the **Authoring tool** option, or `--tool`). The rules below are what each pack can say.
@@ -277,7 +277,7 @@ Added to a run that used changed files (overrides), after the milestones note. S
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
-| This run used *N* changed files: *names* | info | Files were replaced inside SCORM Lab for this run, so the findings describe the changed copy. The package on disk is unchanged | Run again without the changes to see the original |
+| This run used *N* changed files: *names* | info | Files were replaced inside Package Lab for this run, so the findings describe the changed copy. The package on disk is unchanged | Run again without the changes to see the original |
 | Compared with the run before the changes: got further / got less far / no change … | info (warning if it got less far) | Only in the desktop and web interfaces, when the same item has an earlier run in this session without changed files. Says whether the change helped, step by step | If it got further, make the same change in the course's source and publish again. If it got less far, revert the change |
 
 ## From a run: pins and answers
@@ -291,13 +291,13 @@ Added to a package run that used pins or responses. See
 | Couldn’t pin *name* | warning | The browser refused: the name is on a frozen or locked object, or can't be redefined. Also when the content redefined or deleted the pinned name after the pin was set (checked when the page has loaded), so the pin no longer applies | Use a file override instead |
 | Couldn’t pin *name*: the script declares it with let or const | warning | A `let` or `const` at the top of a script makes a name of its own, which a pin can't replace. The content kept its own value. The evidence gives the file and line | Use a file override instead: change that line in the Files tab |
 | Couldn’t answer *N* requests | warning | The browser refused a response, so the request went to the server as normal | Check the status, headers and body |
-| Pinned value never read | info | The content never looked at the pinned value (the name may be wrong, the code that reads it never ran, or the name is declared with `let` or `const` somewhere other than the start of a line, which SCORM Lab can’t see). `navigator.userAgent` pins aren't checked | Check the spelling, and whether the content got as far as the code that reads it |
+| Pinned value never read | info | The content never looked at the pinned value (the name may be wrong, the code that reads it never ran, or the name is declared with `let` or `const` somewhere other than the start of a line, which Package Lab can’t see). `navigator.userAgent` pins aren't checked | Check the spelling, and whether the content got as far as the code that reads it |
 | Answered *N* requests with your responses | info | These requests never reached a server: the content got your response. The evidence lists them | Compare with a run without the answer to see what changed |
 | *A response* matched no request | info | The content never made a request that matches one of your responses | Check the pattern against the Network tab, and whether the content got as far as making the request |
 
 ## From a run in WebKit
 
-A run with **Browser: WebKit** (`--browser webkit`) gets the same findings as any run, from what WebKit lets SCORM Lab
+A run with **Browser: WebKit** (`--browser webkit`) gets the same findings as any run, from what WebKit lets Package Lab
 record: requests, console messages, errors that stop a script, and the probe's reports. It has no script coverage, no
 errors the content catches, no script sources and no code trace, so the findings that use them have nothing to say:
 "*N* errors were thrown and caught", "Pinned value never read" explained by a `let` or `const`, the comparison's
@@ -312,12 +312,12 @@ Added to a package run with **Trace the code** on (`--trace`). See [Tracing](use
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
-| *N* script files were not traced | info | These files ran as they are, so the Execution tab has nothing from them. The evidence gives each file and why: over 2 MB, not UTF-8 text, or SCORM Lab couldn't read it as JavaScript (it may use syntax SCORM Lab doesn't know yet). For a page, the reason names its inline scripts | Nothing, if the code you care about is elsewhere. The rest of the trace still applies |
+| *N* script files were not traced | info | These files ran as they are, so the Execution tab has nothing from them. The evidence gives each file and why: over 2 MB, not UTF-8 text, or Package Lab couldn't read it as JavaScript (it may use syntax Package Lab doesn't know yet). For a page, the reason names its inline scripts | Nothing, if the code you care about is elsewhere. The rest of the trace still applies |
 | The execution trace is incomplete | info | The content ran more than 200,000 functions and decisions, so the oldest were dropped. The last ones, which show where it stopped, are kept | Stop the run sooner after the point you care about |
 
 ## From an experiment
 
-Only after **Run all** on the Experiments tab, or `scorm-lab experiment`. They compare each variant with the default run.
+Only after **Run all** on the Experiments tab, or `package-lab experiment`. They compare each variant with the default run.
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -327,7 +327,7 @@ Only after **Run all** on the Experiments tab, or `scorm-lab experiment`. They c
 
 ## From a save-and-resume test
 
-Only after **Test saving** (the Test saving tab) or `scorm-lab cycle`. The first run plays the macro and then leaves the
+Only after **Test saving** (the Test saving tab) or `package-lab cycle`. The first run plays the macro and then leaves the
 way a learner closing the window does; the second run resumes from the data the first left. See
 [Testing saving](user-guide.md#testing-that-progress-is-saved-and-resumed). When the first finding is an error, the
 checks that need the second run are skipped.
@@ -346,24 +346,24 @@ checks that need the second run are skipped.
 
 ## From a discovery
 
-Only after **Discover** on the Server needs tab, or `scorm-lab discover`. See
+Only after **Discover** on the Server needs tab, or `package-lab discover`. See
 [What the content wants from its server](user-guide.md#what-the-content-wants-from-its-server).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
 | The content needs these from its server | warning | The content asked its server for something (a configuration, settings) and read the fields in the evidence from the answer. The evidence starts with the request and the code that made it, then lists each field, its type, how the code used it (a truthiness test, compared with a string, joined to text…) and where. Without an answer it stops where the detail says. This is why content that works on its own platform doesn't work in an LMS | The export needs a setting that removes this dependency, or the LMS must serve it. A stand-in response with these fields lets the content get as far as the step named in the fix |
 | With a stand-in for *URL*, the content reaches *step* | warning | A response holding just the fields the content read got it further than no answer. The evidence lists how far each round got. That request is what holds it back | Save the stand-in as a response to keep testing past it, and look for the export setting or LMS feature that provides it |
-| The content didn’t read what *URL* sent | info | SCORM Lab answered the request and saw nothing read from the answer. The content may ignore it, stop before reading it, or read it in a way SCORM Lab doesn't follow (a Blob, a stream, a worker) | Look at the code that made the request (the evidence) |
+| The content didn’t read what *URL* sent | info | Package Lab answered the request and saw nothing read from the answer. The content may ignore it, stop before reading it, or read it in a way Package Lab doesn't follow (a Blob, a stream, a worker) | Look at the code that made the request (the evidence) |
 | The content made no requests to a server | info | Its first run made no fetch or XHR request to the server's root or another site | Nothing to discover. If it should have, check how far it got first |
 
 ## From a drill-down
 
-Only after **Drill down** on the Drill-down tab, or `scorm-lab drill`. See [Why it stopped](user-guide.md#why-it-stopped-drill-down).
+Only after **Drill down** on the Drill-down tab, or `package-lab drill`. See [Why it stopped](user-guide.md#why-it-stopped-drill-down).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
-| Why it stopped: *chain* | error | The title is the chain in one line, each step the reason for the one before (`←`). The evidence numbers the steps: the decision that kept the content from code that never ran, with its values; where each `undefined` came from (an assignment, or one that never ran and the decision that kept it from running, up to three levels); and the cause at the end, which SCORM Lab can name: a request that failed, a script that failed or that nothing loads, a JSON file without the field, or an API version the LMS didn't offer | The fix depends on the cause: answer the request, add the field with a file override, check the script, or offer the other API version |
-| Why it stopped: *chain* | warning | The same, but the last step isn't a cause SCORM Lab can name: a value local to a function, a response from a server SCORM Lab can't see, a query parameter, a value from the LMS, something nothing in the package sets, or a value set too late | Read the code in the last step. For a server response, run Discover |
+| Why it stopped: *chain* | error | The title is the chain in one line, each step the reason for the one before (`←`). The evidence numbers the steps: the decision that kept the content from code that never ran, with its values; where each `undefined` came from (an assignment, or one that never ran and the decision that kept it from running, up to three levels); and the cause at the end, which Package Lab can name: a request that failed, a script that failed or that nothing loads, a JSON file without the field, or an API version the LMS didn't offer | The fix depends on the cause: answer the request, add the field with a file override, check the script, or offer the other API version |
+| Why it stopped: *chain* | warning | The same, but the last step isn't a cause Package Lab can name: a value local to a function, a response from a server Package Lab can't see, a query parameter, a value from the LMS, something nothing in the package sets, or a value set too late | Read the code in the last step. For a server response, run Discover |
 | Why it stopped: no decision led to code that never ran | info | In the last part of the run, every decision's other branch ran at some point, or had nothing to run | Look at the Execution tab for the last events before the run went quiet |
 | Why it stopped: nothing to drill into | info | The run had no trace, or the trace has no decisions in the package's scripts | Drill down on a traced run |
 

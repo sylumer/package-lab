@@ -26,7 +26,7 @@ Confidence: LOW. No Intellum or Evolve Authoring primary doc was readable. Note:
 - `imsmanifest.xml` at zip root (generic SCORM)
 - Evolve Authoring-specific markers: none confirmed.
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Detects the `evolveauthoring` string or an `evolve/` folder. Static: a SCORM 2004 manifest, and a manifest inside a wrapper folder (both info, from Intellum guidance).
 

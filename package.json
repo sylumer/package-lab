@@ -1,7 +1,7 @@
 {
-  "name": "scorm-lab",
+  "name": "package-lab",
   "version": "0.2.0",
-  "description": "Find out why a SCORM package doesn't work: check its files, run it under the debugger, and get findings with causes and fixes.",
+  "description": "Find out why an e-learning package (SCORM, cmi5, xAPI) doesn't work: check its files, run it under the debugger, and get findings with causes and fixes.",
   "private": true,
   "type": "module",
   "main": "src/main.js",
@@ -18,8 +18,8 @@
     "electron": "^45.3.2",
     "playwright": "^1.65.1"
   },
-  "productName": "SCORM Lab",
+  "productName": "Package Lab",
   "bin": {
-    "scorm-lab": "bin/scorm-lab.js"
+    "package-lab": "bin/package-lab.js"
   }
 }

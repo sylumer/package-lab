@@ -89,7 +89,7 @@ function scormRuntime(o) {
   const cmi = o.cmi || new Map(), errs = SCORM_ERRORS[v12 ? '1.2' : '2004']
   let state = 'new', last = 0, diag = ''
   if (o.edition === '2nd edition' && !v12) model['cmi.suspend_data'] = ['rw', 's4000']
-  // An LMS profile's own limit (SCORM Lab, P2.1); null keeps the standard's.
+  // An LMS profile's own limit (Package Lab, P2.1); null keeps the standard's.
   const limit = o.limits?.[v12 ? 'suspend12' : 'suspend2004']
   if (limit) model['cmi.suspend_data'] = ['rw', 's' + limit]
   // Values the LMS sets at each launch.
@@ -183,7 +183,7 @@ function scormRuntime(o) {
   function commit(arg) {
     if (String(arg ?? '') !== '') return fail(201, 'The argument must be "".')
     if (state !== 'running') return fail(v12 ? 301 : state === 'new' ? 142 : 143)
-    // An LMS profile's commit (SCORM Lab, P2.1): slow blocks like a synchronous save to a slow server; fail is a save that failed.
+    // An LMS profile's commit (Package Lab, P2.1): slow blocks like a synchronous save to a slow server; fail is a save that failed.
     if (o.commit === 'slow') { const end = Date.now() + (o.slowMs || 0); while (Date.now() < end) { /* waiting for the server */ } }
     if (o.commit === 'fail') return fail(v12 ? 101 : 391, 'The LMS couldn’t save the data (the profile’s commit is set to fail).')
     return 'true'

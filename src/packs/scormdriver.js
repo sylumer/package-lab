@@ -15,7 +15,7 @@ export default {
         const v = /2004/.test(s[1]) ? '2004' : /^scorm$/i.test(s[1]) ? '1.2' : null
         if (v !== m.version) out.push({ sev: 'info', basis: 'pattern', title: v ? `strLMSStandard is "${s[1]}" (read as SCORM ${v}), but the manifest says SCORM ${m.version}` : `strLMSStandard is "${s[1]}", and the manifest says SCORM ${m.version}`,
           detail: v ? 'The driver looks for the API of the standard it is set to, so a mismatch could mean it finds nothing in an LMS that offers the manifest’s version. The reading of the value ("SCORM" as 1.2, "SCORM2004" as 2004) is not from the vendor docs read for these notes.'
-            : 'SCORM Lab does not know what this value selects, so it can only point out that it is not one it reads as SCORM 1.2 or 2004.',
+            : 'Package Lab does not know what this value selects, so it can only point out that it is not one it reads as SCORM 1.2 or 2004.',
           evidence: [`${n}:${lineOf(t, s.index)}  ${s[0]}`, `imsmanifest.xml: SCORM ${m.version}`],
           fix: 'Check the driver’s configuration against the SCORM version you published; run it to see which API it looks for.' })
         break

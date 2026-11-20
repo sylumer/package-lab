@@ -2,7 +2,7 @@
 
 Research notes behind the rule packs in `src/packs/` (P3.2). Each file records what public sources say about one tool:
 its file layout, config keys, known LMS problems, export settings and detection hints, with sources and what is
-unconfirmed. Each ends with how SCORM Lab uses it. How packs work and how to add one: the
+unconfirmed. Each ends with how Package Lab uses it. How packs work and how to add one: the
 [developer guide](../developer-guide.md#rule-packs-p32). The findings they produce: [findings](../findings.md#from-authoring-tool-packs).
 
 | Tool | Notes | Confidence of the research | Rules |

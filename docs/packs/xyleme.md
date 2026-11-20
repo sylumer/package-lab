@@ -45,9 +45,9 @@ These are generic. None is confirmed as a Xyleme marker.
 - A launch file that is very small and points to a remote content location. This is one vendor's model, not Xyleme's. Unconfirmed for Xyleme.
 - Remote calls to a Xyleme or MadCap host in the package code. Unconfirmed.
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
-The pack can't rely on any Xyleme file name, so it recognises the strings in the detection hints above, or a request to a Xyleme host in a run. Its rules use what SCORM Lab records for any package: requests to the host's root (the Server needs tab), content that builds its own API, and a small launch page that fetches from another site (a cloud-player style launch). All static rules are info (a known pattern, not confirmed). Run rules are confirmed in the run, and are info too unless a request names a Xyleme or Bravais host. A package with no marker can be given the pack with the Authoring tool option (`--tool xyleme`). Next steps point to Discover, pins and answers. Nothing here assumes a Xyleme file layout.
+The pack can't rely on any Xyleme file name, so it recognises the strings in the detection hints above, or a request to a Xyleme host in a run. Its rules use what Package Lab records for any package: requests to the host's root (the Server needs tab), content that builds its own API, and a small launch page that fetches from another site (a cloud-player style launch). All static rules are info (a known pattern, not confirmed). Run rules are confirmed in the run, and are info too unless a request names a Xyleme or Bravais host. A package with no marker can be given the pack with the Authoring tool option (`--tool xyleme`). Next steps point to Discover, pins and answers. Nothing here assumes a Xyleme file layout.
 
 ## Sources
 

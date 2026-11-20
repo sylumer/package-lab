@@ -2,7 +2,7 @@
 // launches, where and when it puts the API, the headers on package files, how commits behave and its limits. Pure:
 // the presets, validating a profile, and working out the profile a launch runs with. See docs/developer-guide.md.
 
-// The fields, with SCORM Lab's own test LMS as the values (the `generic` preset). Limits of null mean the standard's.
+// The fields, with Package Lab's own test LMS as the values (the `generic` preset). Limits of null mean the standard's.
 const GENERIC = {
   contentOrigin: 'same',                                       // same: lab://run/pkg/ · other: lab://content/pkg/, another origin
   frames: { depth: 0, kind: 'iframe', sandbox: null, allow: 'fullscreen; autoplay' },
@@ -18,7 +18,7 @@ const FIELDS = Object.keys(GENERIC)
 // Presets other than generic are approximations of what each LMS does by default, from its public documentation.
 const preset = (notes, sources, fields = {}) => ({ ...structuredClone(GENERIC), ...fields, notes, sources, approximation: true })
 export const PROFILES = {
-  generic: { ...structuredClone(GENERIC), notes: 'SCORM Lab’s own test LMS: the content on the LMS’s origin, the API on the top window at once. Content finds it the way the standard’s discovery algorithms do.', sources: ['https://scorm.com/scorm-explained/technical-scorm/run-time/api-discovery-algorithms/'], approximation: false },
+  generic: { ...structuredClone(GENERIC), notes: 'Package Lab’s own test LMS: the content on the LMS’s origin, the API on the top window at once. Content finds it the way the standard’s discovery algorithms do.', sources: ['https://scorm.com/scorm-explained/technical-scorm/run-time/api-discovery-algorithms/'], approximation: false },
   moodle: preset('Approximation. Moodle’s SCORM player shows the content in a frame inside its own page (or a popup, by the activity’s display setting), on the LMS’s origin. Its docs don’t give frame depths; the generic values are used, with one frame between the API and the content.',
     ['https://tracker-old.moodle.org/browse/MDL-26303'], { frames: { ...GENERIC.frames, depth: 1 } }),
   'scorm-cloud': preset('Approximation. An embedded SCORM Cloud launch puts the player in a frame served from SCORM Cloud’s own domain, so its cookies can be blocked as third-party. The content and the API share the player’s origin.',

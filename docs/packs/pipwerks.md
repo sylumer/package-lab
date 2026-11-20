@@ -27,7 +27,7 @@ Confidence: MEDIUM. Repo page read. Function names and file name not confirmed f
 - `SCORM.API.find`, `SCORM.API.get` (fetched readme)
 - `API`, `API_1484_11` (adapter objects a wrapper searches for; general SCORM, unconfirmed here)
 
-## How SCORM Lab uses this
+## How Package Lab uses this
 
 Detects `SCORM_API_wrapper` and `pipwerks.SCORM`. Static: the wrapper is present but no script calls `SCORM.init()` (info). Run: the wrapper's API lookup found nothing.
 

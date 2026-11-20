@@ -1,9 +1,9 @@
-# SCORM Lab web interface
+# Package Lab web interface
 
 The web interface is the desktop app in a browser. Use it from another computer, an iPad or a phone. Courses still run
-on the Mac, in SCORM Lab's own browser; the **Live** tab shows them and sends your clicks and keys back.
+on the Mac, in Package Lab's own browser; the **Live** tab shows them and sends your clicks and keys back.
 
-If you use [Concierge](concierge.md), its SCORM Lab module is the simpler way to work from other devices: it uses
+If you use [Concierge](concierge.md), its Package Lab module is the simpler way to work from other devices: it uses
 Concierge's login and HTTPS. The web interface gives you the whole app: every tab, comparisons and saved runs.
 
 - [Starting it](#starting-it)
@@ -17,7 +17,7 @@ Concierge's login and HTTPS. The web interface gives you the whole app: every ta
 ## Starting it
 
 ```bash
-scorm-lab serve
+package-lab serve
 ```
 
 This prints an address like `http://127.0.0.1:4880/?token=3f9c…`. Open it in a browser. It runs until you press Ctrl-C.
@@ -30,12 +30,12 @@ npm run serve
 This runs it from the repo, without a window.
 
 ```bash
-scorm-lab serve --window
+package-lab serve --window
 ```
 This also opens the desktop window. The window and every browser share one session: the same package, runs and
 running course.
 
-In Alfred, the `scormweb` keyword starts it if it isn't running and opens it (see [Alfred](alfred.md)).
+In Alfred, the `packageweb` keyword starts it if it isn't running and opens it (see [Alfred](alfred.md)).
 
 The port is 4880 unless you pass `--port`. It is recorded in `~/github/PORTS.md`.
 
@@ -45,11 +45,11 @@ The address includes an access token. Opening it once sets a cookie (for a year)
 address, so you can bookmark the plain address afterwards. Without the cookie or token, every page answers "401" with
 instructions.
 
-The token is kept in `~/Library/Application Support/SCORM Lab/web-token`, so the address stays the same between
+The token is kept in `~/Library/Application Support/Package Lab/web-token`, so the address stays the same between
 starts.
 
 ```bash
-scorm-lab serve --url
+package-lab serve --url
 ```
 This prints the address again.
 
@@ -66,7 +66,7 @@ By default it listens on `127.0.0.1`, so only this Mac can reach it. Choose one 
    Then open `http://127.0.0.1:4880/?token=…` there. Remote Login must be on (System Settings › General › Sharing).
 2. **Your network.** Start it with:
    ```bash
-   scorm-lab serve --host 0.0.0.0
+   package-lab serve --host 0.0.0.0
    ```
    It prints an address with the Mac's network IP. Anyone on the network who has the address with its token can use
    it. The connection is plain HTTP, so use this only on a network you trust.
@@ -83,8 +83,8 @@ Everything works as in the [user guide](user-guide.md), except:
 - **Save report…** on the Findings tab of a run downloads that run's HTML report, with **Take the course content out** ticked for a redacted one (see the [user guide](user-guide.md#sending-a-report-without-the-course-content)). The report comes from `POST /api/invoke/report-html`; the web interface has no file names option (that is in the CLI).
 - **Export corrected package…** builds the corrected `.zip` on the Mac and your browser downloads it (it can't use a save dialog). It includes your changed files and the fixes; see the [user guide](user-guide.md#exporting-a-corrected-package). The package is built in memory, so it needs room for a second copy of the package on the Mac. The address is `GET /api/export` (`?only=case,http-to-https` limits the fixes; `?only=` with nothing after it means none, so only your changed files). Before downloading, the page shows the checklist of fixes that apply, as the desktop app does; with nothing to change it answers with an error that says so.
 - **Check a folder…** isn't in the web interface: it needs a folder on the Mac, and the Folder check tab is desktop only.
-  To check a folder from another device, run `scorm-lab batch` on the Mac (in Terminal, or over SSH); see [cli.md](cli.md#batch).
-- **Compare packages…** uploads a second `.zip` from the device you are on and shows the **Package diff** tab: files and text diffs, manifest, loading path and findings, from the files alone. The second package is compared and not kept: the one open on the Mac stays as it is. See the [user guide](user-guide.md#comparing-two-packages); to compare how they run, use [`scorm-lab diff --run`](cli.md#diff).
+  To check a folder from another device, run `package-lab batch` on the Mac (in Terminal, or over SSH); see [cli.md](cli.md#batch).
+- **Compare packages…** uploads a second `.zip` from the device you are on and shows the **Package diff** tab: files and text diffs, manifest, loading path and findings, from the files alone. The second package is compared and not kept: the one open on the Mac stays as it is. See the [user guide](user-guide.md#comparing-two-packages); to compare how they run, use [`package-lab diff --run`](cli.md#diff).
 - **Open saved…** lists the runs saved on the Mac, newest first; click one to open it.
 - **Stop after** is the way to run a course unattended: launch, come back, and read the findings.
 - **More options** and **Copy as CLI command** work as in the desktop app. Copying needs the page to be open on
@@ -130,10 +130,10 @@ popup are shown in the popup, since input goes to the newest window of the run.
 - **Access:** the token, then an `HttpOnly`, `SameSite=Strict` cookie. Cross-site pages can't use your cookie to drive
   it.
 - **No dialogs on the Mac:** the web interface can't open the Mac's file dialogs. It uploads instead, and
-  **Open saved…** only lists and opens files in SCORM Lab's runs folder.
+  **Open saved…** only lists and opens files in Package Lab's runs folder.
 - **What a client can do:** with the address, someone can upload and run packages on the Mac, and read your saved runs
   (which contain package scripts and stored data). Treat the address like a password.
-- **Courses run sandboxed:** in SCORM Lab's browser, with their own storage partition, never in the browser you view
+- **Courses run sandboxed:** in Package Lab's browser, with their own storage partition, never in the browser you view
   them from.
 - **HTTP only:** for remote use, prefer the SSH tunnel, or use the [Concierge module](concierge.md), which is served
   over HTTPS with a login.

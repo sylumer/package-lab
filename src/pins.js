@@ -1,5 +1,5 @@
 // Pins and answers (P1.2). Pure: no Electron, no files. A pin forces a value the content reads; an answer is a response
-// SCORM Lab gives to a request instead of the network. This file holds what both the recorder (to apply them) and the
+// Package Lab gives to a request instead of the network. This file holds what both the recorder (to apply them) and the
 // rules (to explain what happened) need: matching, the probe's prefix, the findings, and the command-line spellings.
 const short = u => String(u ?? '').replace(/lab:\/\/(?:run|content)\/pkg\//g, '')
 
@@ -49,7 +49,7 @@ export function matcher(match) {
     return re.test(url) || !!u && (re.test(u.pathname + u.search) || re.test(u.pathname))
   }
 }
-// The first response of the list that answers this request, as { response, index }, or null. SCORM Lab's own pages are never answered.
+// The first response of the list that answers this request, as { response, index }, or null. Package Lab's own pages are never answered.
 export function answerFor(responses, url, method = 'GET') {
   if (!responses?.length || /^lab:\/\/run\/__(lab|lrs)\//.test(url)) return null
   for (const [index, response] of responses.entries()) {
@@ -97,7 +97,7 @@ export function pinFindings(trace, options = {}) {
     }
     const unread = pins.filter(p => p.path !== USER_AGENT && !done.has(p.path) && !fails.has(p.path))
     if (unread.length) out.push({ sev: 'info', title: 'Pinned value never read',
-      detail: 'The content never looked at ' + (unread.length > 1 ? 'these, so they changed nothing.' : 'this, so it changed nothing.') + ' The name may be wrong, the code that reads it never ran, or the name is declared with let or const somewhere other than the start of a line, which SCORM Lab can’t see.',
+      detail: 'The content never looked at ' + (unread.length > 1 ? 'these, so they changed nothing.' : 'this, so it changed nothing.') + ' The name may be wrong, the code that reads it never ran, or the name is declared with let or const somewhere other than the start of a line, which Package Lab can’t see.',
       evidence: unread.map(p => `${p.path} = ${JSON.stringify(p.value)}`), fix: 'Check the spelling, and whether the content got as far as the code that reads it.' })
   }
   if (responses.length) {

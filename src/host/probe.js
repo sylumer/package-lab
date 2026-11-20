@@ -15,9 +15,9 @@
   // origin is 'null' in a frame sandboxed without allow-same-origin (P2.1).
   report({ type: 'frame', depth, topReachable, opener: !!window.opener, referrer: document.referrer, origin: window.origin })
   const seen = new Map()
-  // On a real LMS or hosted platform (anything but SCORM Lab's own host page, which logs its own calls), the API
+  // On a real LMS or hosted platform (anything but Package Lab's own host page, which logs its own calls), the API
   // object's methods are wrapped so that its calls are recorded too.
-  const ownHost = /^(lab:\/\/run|https:\/\/lms\.lab\.invalid)\/__lab\//.test(location.href)   // SCORM Lab's own pages: lab://run/ in Electron, https://lms.lab.invalid/ in every run
+  const ownHost = /^(lab:\/\/run|https:\/\/lms\.lab\.invalid)\/__lab\//.test(location.href)   // Package Lab's own pages: lab://run/ in Electron, https://lms.lab.invalid/ in every run
   const QUIET = /GetLastError|GetErrorString|GetDiagnostic/
   const wrap = (name, v) => {
     if (ownHost || !v || typeof v !== 'object' || v.__labWrapped) return v
@@ -170,7 +170,7 @@
   // Blocked storage (P2.2): with window.__labStorage = 'blocked' (the recorder sets it, as it does the pins), content frames get
   // what Safari gives a third-party frame: localStorage and sessionStorage throw SecurityError when read, document.cookie
   // reads '' and ignores writes, and indexedDB.open fails with a SecurityError error event. Every access is reported
-  // (throttled like lookups). SCORM Lab's own pages keep their storage.
+  // (throttled like lookups). Package Lab's own pages keep their storage.
   const blockStorage = window.__labStorage === 'blocked' && !ownHost
   try { delete window.__labStorage } catch (e) { /* kept */ }
   if (blockStorage) {

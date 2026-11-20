@@ -16,10 +16,10 @@ import { createLrs, maskTokens, MAX_BODY } from './lrs.js'
 const HOW = 'npm i -D playwright && npx playwright install webkit'
 // Only a source checkout can run WebKit: a packaged app (inside an .app bundle or app.asar, or with no package.json beside src/) has no Playwright.
 const packaged = () => /\.asar|\.app\/Contents\/Resources\//.test(decodeURIComponent(import.meta.url)) || !existsSync(new URL('../package.json', import.meta.url))
-const INSTALL = () => packaged() ? 'WebKit runs need the SCORM Lab source checkout with Playwright installed; the packaged app can’t run them.' : `WebKit runs need Playwright, which isn’t installed here. Install it with: ${HOW}`
-// SCORM_LAB_NO_PLAYWRIGHT=1 makes it fail to load, as it does where it isn't installed: for tests.
+const INSTALL = () => packaged() ? 'WebKit runs need the Package Lab source checkout with Playwright installed; the packaged app can’t run them.' : `WebKit runs need Playwright, which isn’t installed here. Install it with: ${HOW}`
+// PACKAGE_LAB_NO_PLAYWRIGHT=1 makes it fail to load, as it does where it isn't installed: for tests.
 export async function loadPlaywright() {
-  if (process.env.SCORM_LAB_NO_PLAYWRIGHT) throw new Error(INSTALL())
+  if (process.env.PACKAGE_LAB_NO_PLAYWRIGHT) throw new Error(INSTALL())
   try { return await import('playwright') } catch (e) {
     // Only the package 'playwright' itself being absent is "not installed"; a module it needs that is missing is a different problem.
     if (e?.code !== 'ERR_MODULE_NOT_FOUND' || !/['"]playwright['"]/.test(String(e.message).split('\n')[0])) throw e

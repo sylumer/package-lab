@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
-<title>SCORM Lab</title>
+<title>Package Lab</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -44,7 +44,7 @@
     <div class="row"><label>Launch parameters <input id="launch-params" type="text" placeholder="a=1&amp;b=2" spellcheck="false" title="Extra query parameters added to the launch address"></label>
       <label>Storage <select id="storage" title="Storage in the content’s frames. Blocked: what Safari does for content inside another site’s page. Partitioned: empty at the start of the run. Normal: the profile’s Cookies field decides.">
         <option value="normal">Normal</option><option value="blocked">Blocked (Safari-like)</option><option value="partitioned">Partitioned (empty)</option></select></label>
-      <label>Authoring tool <select id="tool" title="Apply the rules for this tool even if SCORM Lab doesn’t recognise it in the package. Auto uses what it recognises.">
+      <label>Authoring tool <select id="tool" title="Apply the rules for this tool even if Package Lab doesn’t recognise it in the package. Auto uses what it recognises.">
         <option value="">Auto</option><option value="xyleme">Xyleme</option><option value="storyline">Articulate Storyline</option><option value="rise">Articulate Rise</option><option value="captivate">Adobe Captivate</option><option value="ispring">iSpring</option><option value="lectora">Lectora</option><option value="adapt">Adapt</option><option value="dominknow">dominKnow</option><option value="evolve">Evolve</option><option value="scormdriver">SCORM Driver</option><option value="pipwerks">pipwerks wrapper</option></select></label>
       <label>Browser <select id="browser" title="Chromium is the app’s own browser. WebKit is Safari’s engine, run through Playwright (it needs npm i -D playwright). A WebKit run has no live view, coverage, caught errors or code trace.">
         <option value="chromium">Chromium</option><option value="webkit">WebKit (Safari’s engine)</option></select></label>
@@ -80,7 +80,7 @@
     <div id="view"></div>
   </section>
 </div>
-<dialog id="saved"><h2>Saved runs</h2><p class="muted small">Runs saved on the Mac running SCORM Lab, newest first.</p><ul id="saved-list"></ul><form method="dialog"><button class="secondary">Close</button></form></dialog>
+<dialog id="saved"><h2>Saved runs</h2><p class="muted small">Runs saved on the Mac running Package Lab, newest first.</p><ul id="saved-list"></ul><form method="dialog"><button class="secondary">Close</button></form></dialog>
 <script src="bridge.js"></script>
 <script src="codeview.js"></script>
 <script src="app.js"></script>

@@ -5,7 +5,7 @@ Progress on [plan.md](plan.md). The orchestrator updates this file with each wor
 
 ## Summary
 
-**Finished on 2026-11-15.** Every work package is done and none was skipped. SCORM Lab is at 0.2.0 on `main`, and the Concierge module is at 1.1.0 on Concierge's `main`. Nothing is pushed or installed.
+**Finished on 2026-11-15.** Every work package is done and none was skipped. Package Lab is at 0.2.0 on `main`, and the Concierge module is at 1.1.0 on Concierge's `main`. Nothing is pushed or installed.
 
 **What was built.** All the additions agreed on 2026-11-13:
 - change files and rerun;
@@ -35,12 +35,12 @@ Progress on [plan.md](plan.md). The orchestrator updates this file with each wor
 - **Unfinished edges.** Saved discoveries can't be reopened in the UI. Behaviour comparison of two packages is CLI only (`diff --run`). Macros and the cycle are Chromium only. WebKit runs have no live view and no tracing.
 
 **What to try first.**
-1. Install: `cd ~/github/scorm-lab && npm run install-app`, `npm link`, `npm run alfred`, and in Concierge `make modules` (or rsync just `modules/scorm-lab`).
-2. `scorm-lab doctor` to see what this Mac can do.
+1. Install: `cd ~/github/package-lab && npm run install-app`, `npm link`, `npm run alfred`, and in Concierge `make modules` (or rsync just `modules/package-lab`).
+2. `package-lab doctor` to see what this Mac can do.
 3. On the Xyleme package, follow the first recipe in [recipes.md](recipes.md):
-   - `scorm-lab analyze <zip> --tool xyleme`;
-   - then `scorm-lab discover <zip>` to see what it wants from Xyleme's servers;
-   - then `scorm-lab drill <zip>` for why it stops;
+   - `package-lab analyze <zip> --tool xyleme`;
+   - then `package-lab discover <zip>` to see what it wants from Xyleme's servers;
+   - then `package-lab drill <zip>` for why it stops;
    - then `experiment --preset lms`.
 
 **Phase 4 (everyday use), done.** Code views (formatting in a worker, source maps, coverage and trace markers, links from every file:line), a Timeline tab, folder batch checks (`batch`, desktop and Alfred), a redacted report (`report --redact`, reworked by sonnet after a privacy review) and cmi5/xAPI support with a local LRS. `npm test` ~2:29; `--slow` ~14:30.
@@ -80,7 +80,7 @@ Each commit column is filled in by the following work package's commit, since a 
 | P4.3 | Batch checks | haiku | done | 90ab8c8 | One review round (desktop-only guard for the folder dialog, worker pool hardening). Desktop check is static only |
 | P4.4 | Redacted report | haiku | done | 1b7da04 | Escalated to sonnet after the first privacy review found leaks (deny-list design). Reworked to redact by field and rebuild findings; second marker-planting review fixed curly quotes and free-text elements. Error messages keep only their known shape; other sites keep host and path |
 | P4.5 | cmi5 and xAPI | sonnet | done | 7d374e8 | One review round (LRS limits, CORS, SCORM results kept unchanged, token masking, redaction). No cycle for these formats; no LMS satisfied/abandoned statements |
-| P5.1 | Concierge module catch-up | sonnet | done | 321839b | Concierge commit 5f8ea71 on scorm-lab-next. One review round (limits, no work on GET, options via file). Adds a minimal `doctor` |
+| P5.1 | Concierge module catch-up | sonnet | done | 321839b | Concierge commit 5f8ea71 on package-lab-next. One review round (limits, no work on GET, options via file). Adds a minimal `doctor` |
 | P5.2 | Alfred and CLI polish | haiku | done | 85183e6 | One review round (Alfred temp files and no-overwrite, doctor's checks list kept for Concierge) |
 | P5.3 | Documentation pass | haiku + sonnet review | done | 5f3a2e7 | Sonnet review fixed about 29 mismatches against the code; adds docs/recipes.md |
 | P5.4 | Final check and release build | sonnet | done | b37060b | --slow passed (18 min); packaged app ran `good` to committed; Alfred builds; version 0.2.0, module 1.1.0 |

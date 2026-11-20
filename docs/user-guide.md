@@ -1,8 +1,8 @@
-# SCORM Lab user guide
+# Package Lab user guide
 
 This guide covers the desktop app. The [web interface](web.md) is the same app in a browser, with an extra **Live** tab.
 
-- [Opening SCORM Lab](#opening-scorm-lab)
+- [Opening Package Lab](#opening-package-lab)
 - [The window](#the-window)
 - [Opening a package](#opening-a-package)
 - [Before running: Findings and Boot path](#before-running-findings-and-boot-path)
@@ -23,10 +23,10 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 - [Privacy](#privacy)
 - [Troubleshooting](#troubleshooting)
 
-## Opening SCORM Lab
+## Opening Package Lab
 
-- **Installed app** (`npm run install-app`): open **SCORM Lab** from Applications, Launchpad or Alfred. To open a
-  package with it, right-click the `.zip` in Finder and choose **Open With › SCORM Lab**, or drag the `.zip` onto its
+- **Installed app** (`npm run install-app`): open **Package Lab** from Applications, Launchpad or Alfred. To open a
+  package with it, right-click the `.zip` in Finder and choose **Open With › Package Lab**, or drag the `.zip` onto its
   Dock icon.
 - **From the repo:**
   ```bash
@@ -38,11 +38,11 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
   ```
 - **From the command line:**
   ```bash
-  scorm-lab open course.zip
+  package-lab open course.zip
   ```
   This uses the installed app if there is one.
 
-Only one SCORM Lab window runs at a time. Opening another package sends it to the window that's already open.
+Only one Package Lab window runs at a time. Opening another package sends it to the window that's already open.
 
 ## The window
 
@@ -130,11 +130,11 @@ Each tab below says what it shows and what its buttons do. Where a feature has a
 | **R** and **F** (in Runs), **Compare** | Chooses a reference and a failing run and compares them | [Comparing with a working copy](#comparing-with-a-working-copy-optional) |
 | **Open saved…** | Opens a saved run | [Saved runs](#saved-runs) |
 | **More options** | Every launch option, the profile fields, pins, answers and macro | [Testing a theory](#testing-a-theory-launch-settings) |
-| **Copy as CLI command** (under More options) | Copies the `scorm-lab run` line for this launch | [cli.md](cli.md#copy-as-cli-command) |
+| **Copy as CLI command** (under More options) | Copies the `package-lab run` line for this launch | [cli.md](cli.md#copy-as-cli-command) |
 
 ## Opening a package
 
-Choose **Open package…** and pick the `.zip`. SCORM Lab reads it in memory; it isn't unpacked anywhere. The
+Choose **Open package…** and pick the `.zip`. Package Lab reads it in memory; it isn't unpacked anywhere. The
 **Findings** tab fills straight away with what can be told from the files. The status line counts the errors and
 warnings.
 
@@ -182,14 +182,14 @@ Pick another item in the toolbar to see its boot path.
 2. Choose the launch settings. For a first run, leave them as they are.
 3. Choose **Stop after**:
    - **I stop it:** you use the course yourself.
-   - **A time:** SCORM Lab stops and analyses by itself.
-4. Choose **Launch**. The course opens in its own window, with SCORM Lab as the LMS. The **API** tab fills live with
+   - **A time:** Package Lab stops and analyses by itself.
+4. Choose **Launch**. The course opens in its own window, with Package Lab as the LMS. The **API** tab fills live with
    the API calls.
 5. Use the course as a learner would: go through a few pages and answer a question. To test saving, leave it the
    normal way (its exit or close button).
 6. Choose **Stop and analyse**, or close the course window.
 
-SCORM Lab then collects code coverage and scripts, works out the findings, saves the run and selects it.
+Package Lab then collects code coverage and scripts, works out the findings, saves the run and selects it.
 
 ## Reading a run
 
@@ -277,7 +277,7 @@ timeline as a picture.
 
 ## cmi5 and Tin Can packages
 
-SCORM Lab diagnoses two more kinds of package, found by their course file:
+Package Lab diagnoses two more kinds of package, found by their course file:
 
 - **cmi5**: a ZIP with `cmi5.xml` at the top (a course made of blocks and AUs, the assignable units).
 - **Tin Can (xAPI)**: a ZIP with `tincan.xml` and no `imsmanifest.xml`.
@@ -343,17 +343,17 @@ profile's, and a new window puts the API on the opener.
 
 Under the toolbar, **More options** shows every option the next launch will use, as JSON, and the profile's fields,
 which you can change (see below).
-**Copy as CLI command** copies the `scorm-lab run …` line that repeats the launch from the command line. Options that
+**Copy as CLI command** copies the `package-lab run …` line that repeats the launch from the command line. Options that
 have no flag are left out of the line; it adds `--options options.json` to say a file is needed. [The CLI guide](cli.md#copy-as-cli-command) lists the other file names it uses.
 
 ## Running it the way an LMS does: profiles
 
 LMSs host content differently: some serve it from another domain, frame it several levels deep or in a sandbox,
 open it in a new window, put the API somewhere other than the top window, or only after a moment. A package that works
-in SCORM Lab can fail in one of them for those reasons. A **profile** reproduces one LMS's way of hosting.
+in Package Lab can fail in one of them for those reasons. A **profile** reproduces one LMS's way of hosting.
 
 Choose it in the toolbar's **Profile** list:
-- **generic** is SCORM Lab's own test LMS, as it always was: the default.
+- **generic** is Package Lab's own test LMS, as it always was: the default.
 - **moodle**, **scorm-cloud**, **cornerstone**, **successfactors**, **docebo**, **totara**, **blackboard** and
   **canvas** are approximations of what each LMS does by default, from its public documentation. Under **More
   options** each shows its notes and the documents used. Where the documents don't say, a preset keeps the generic
@@ -389,15 +389,15 @@ To try every preset at once, run the **lms** experiment (see below).
 
 A course that works in Chrome can fail in Safari or on an iPad. Those browsers refuse storage to content that sits
 inside another site's page, which is how most LMSs show a course. If the content keeps something in the browser (the
-learner's place, a flag saying it has started), the refusal can stop it. SCORM Lab can reproduce this.
+learner's place, a flag saying it has started), the refusal can stop it. Package Lab can reproduce this.
 
 Under **More options**, **Storage** sets what the content's frames get:
 
 | Storage | What happens |
 |---|---|
-| **Normal** | The storage of SCORM Lab's run window, as it is. It lasts from one run to the next while the app is open, and all packages share it. The profile's **Cookies** field can still block it |
-| **Blocked (Safari-like)** | Reading `localStorage` or `sessionStorage` throws a `SecurityError`. `document.cookie` reads as empty and ignores writes. `indexedDB.open` fails with an error. Only the content's frames: SCORM Lab's own pages keep their storage |
-| **Partitioned (empty)** | Nothing is refused, but the storage is emptied before the run starts, so nothing left by an earlier run or another package is there. Use it to see how the content behaves on a learner's first visit. (A browser's partitioned storage also keeps one site's data apart from another's. SCORM Lab's run window already does that; the difference you can see is the empty start) |
+| **Normal** | The storage of Package Lab's run window, as it is. It lasts from one run to the next while the app is open, and all packages share it. The profile's **Cookies** field can still block it |
+| **Blocked (Safari-like)** | Reading `localStorage` or `sessionStorage` throws a `SecurityError`. `document.cookie` reads as empty and ignores writes. `indexedDB.open` fails with an error. Only the content's frames: Package Lab's own pages keep their storage |
+| **Partitioned (empty)** | Nothing is refused, but the storage is emptied before the run starts, so nothing left by an earlier run or another package is there. Use it to see how the content behaves on a learner's first visit. (A browser's partitioned storage also keeps one site's data apart from another's. Package Lab's run window already does that; the difference you can see is the empty start) |
 
 If the content used what was blocked, the Findings tab says "The content needs storage the browser can block", with the
 line of code for each use. If it also stopped, the run's other findings show where (often "The content never looked
@@ -417,11 +417,11 @@ settings let you try both.
 
 | Browser | What it is |
 |---|---|
-| **Chromium** | The browser inside SCORM Lab. Everything in this guide works. |
+| **Chromium** | The browser inside Package Lab. Everything in this guide works. |
 | **WebKit (Safari's engine)** | The engine Safari uses, run through Playwright. The content runs on the same test LMS, with the same files, changed files, pins, answers, profile and storage setting. |
 
-WebKit needs Playwright, which is optional. If it isn't installed, SCORM Lab says so and doesn't start the run. To
-install it, run `npm i -D playwright && npx playwright install webkit` in the SCORM Lab folder.
+WebKit needs Playwright, which is optional. If it isn't installed, Package Lab says so and doesn't start the run. To
+install it, run `npm i -D playwright && npx playwright install webkit` in the Package Lab folder.
 
 A WebKit run records what the page does: requests, console messages, errors that stop a script, and the probe's reports
 of API calls, lookups and what the page shows. It can't see everything Chromium can. It has no live view, no script
@@ -467,7 +467,7 @@ computer. Saving a file back to exactly what it was removes the override. **Save
 session; they go in a saved run's options, so opening that run (or the CLI's `--options-from`) repeats them. Changed
 files are used by experiments too, as part of the default launch.
 
-SCORM Lab works out the boot path again for the changed files, but the checks on the manifest and scripts under
+Package Lab works out the boot path again for the changed files, but the checks on the manifest and scripts under
 **Package** still describe the original package.
 
 ## Exporting a corrected package
@@ -475,7 +475,7 @@ SCORM Lab works out the boot path again for the changed files, but the checks on
 **Export corrected package…** (next to **Test saving**) first shows a checklist of the fixes that apply to this package, all ticked: untick any you don't want, then choose **Export…**. It saves a new `.zip` with two kinds of change:
 
 - the files you changed in the **Files** tab (see above), and
-- the mechanical fixes below, for the problems SCORM Lab can correct without guessing.
+- the mechanical fixes below, for the problems Package Lab can correct without guessing.
 
 | Fix | What it does |
 |---|---|
@@ -486,16 +486,16 @@ SCORM Lab works out the boot path again for the changed files, but the checks on
 | Match capitals | Changes references to match the file, or renames the file when everything spells it the same way |
 | Use https | Changes `http://` scripts, styles and frames to `https://` |
 
-If a fix can't do its job safely (a file that isn't plain UTF-8 text, a rename that would overwrite a file), it leaves that alone and says so under **Not done** in `SCORM-LAB-CHANGES.txt`. The original package is not changed. You choose where to save the new one (in the web interface, the browser
-downloads it). Inside it, `SCORM-LAB-CHANGES.txt` lists every change. The status line says how many findings the
-changes cleared: SCORM Lab checks the new package again, without running it. If nothing needs changing, it says so and
+If a fix can't do its job safely (a file that isn't plain UTF-8 text, a rename that would overwrite a file), it leaves that alone and says so under **Not done** in `PACKAGE-LAB-CHANGES.txt`. The original package is not changed. You choose where to save the new one (in the web interface, the browser
+downloads it). Inside it, `PACKAGE-LAB-CHANGES.txt` lists every change. The status line says how many findings the
+changes cleared: Package Lab checks the new package again, without running it. If nothing needs changing, it says so and
 writes nothing.
 
 A fix is a mechanical guess at what you meant. Run the new package (open it and **Launch**), and check it in your LMS
 before you rely on it. Findings that need a decision (a missing script, a server the content needs) are left alone.
 The findings that have a fix say so in [findings](findings.md).
 
-From the command line, use [`scorm-lab fix`](cli.md#fix).
+From the command line, use [`package-lab fix`](cli.md#fix).
 
 ## Forcing values and answering requests
 
@@ -533,7 +533,7 @@ Pins and answers are saved in a run's options, so the CLI's `--options-from` rep
 
 ## Trying every setting at once: experiments
 
-Instead of changing one setting at a time, let SCORM Lab do it. Open the **Experiments** tab, choose a set of variants,
+Instead of changing one setting at a time, let Package Lab do it. Open the **Experiments** tab, choose a set of variants,
 and click **Run all**. It runs the item with the settings in the toolbar (the default), then again with each variant,
 one after another. Each run lasts as long as **Stop after** (10 seconds if that says **I stop it**).
 
@@ -563,7 +563,7 @@ needs to know what to put in the answer. **Discover** works it out.
    root or another site.
 2. Choose **Discover** on a request, or **Discover all server requests**. **Rounds** limits how many times it tries
    (5 by default).
-3. SCORM Lab runs the item without an answer, then answers the requests with a stand-in and watches every field the
+3. Package Lab runs the item without an answer, then answers the requests with a stand-in and watches every field the
    content reads from it, and how it uses each one. Then it runs again, answering with those fields filled in (`""`,
    `false`, `0`, `[]`), and again, until a round finds no new field. Each round is a run as long as **Stop after**
    (10 seconds if that says **I stop it**), with the settings in the toolbar.
@@ -583,7 +583,7 @@ What it can't see:
   Calling a missing field throws, as it would with a real answer, unless it is named like a list or text method
   (`map`, `trim`).
 - Types come from how the code used a value. A comparison with `===` or a truthiness test leaves no trace in the
-  value itself, so SCORM Lab reads the code next to it. In minified code on one long line this still works; code built
+  value itself, so Package Lab reads the code next to it. In minified code on one long line this still works; code built
   at run time (`eval`) or reading the answer in a worker isn't followed. A field it read but did nothing visible with
   is shown as true or false.
 - Lists found in a real answer are given as they are and not looked into.
@@ -602,7 +602,7 @@ and **View code** under a file in the Files tab. The view appears above the tab;
   line and column are carried across. *Original* is the file as it is. *Source map* shows the code the file was built
   from, when the file points to a source map that holds it (inline, or a file in the package): the view lands on the
   original line, and a map with several sources has a menu. A source map with no sources in it (`sourcesContent`) shows
-  nothing, and SCORM Lab never fetches one from another site.
+  nothing, and Package Lab never fetches one from another site.
 - **Coverage.** With a run chosen, each line is shaded: green ran (with `×N`, how many times), red didn't run, amber
   only part of the line ran. A page's inline scripts aren't shaded (their positions aren't kept); for those, trace markers
   are the best guide. The run must have recorded the file.
@@ -614,14 +614,14 @@ A very large minified file opens as it is at once and the formatted view arrives
 half a second, done in the background, and a file over 5 MB isn't formatted). The view closes when you choose another run. A file over 5,000 lines draws only the lines in view, so it scrolls smoothly. Lines over 600 characters are cut
 in the display (the search still looks in all of the line).
 
-In an HTML report (`scorm-lab report`), every `file:line` in a finding's evidence is a link to a read-only excerpt of
+In an HTML report (`package-lab report`), every `file:line` in a finding's evidence is a link to a read-only excerpt of
 that file, 20 lines either side, shown under the finding. It is made from the package (or, for a saved run, from the
 sources the run recorded). A minified file's excerpt is formatted, or is the original source when a source map holds it.
 
 ## Tracing the code
 
 Findings say what the content did. To see why, turn on **Trace the code** under **More options** and launch again.
-SCORM Lab then records, in order, every function of the package's scripts that ran and which way each decision went,
+Package Lab then records, in order, every function of the package's scripts that ran and which way each decision went,
 with the values it tested. The content doesn't pause, and behaves as it does without tracing.
 
 The **Execution** tab shows the last 500 events before the run went quiet, newest last:
@@ -636,7 +636,7 @@ The filter box narrows the list, for example to one file or function. **Code** o
 
 What tracing covers, and what it doesn't:
 - Scripts and inline scripts in the package's pages, up to 2 MB each. Larger files, files that aren't UTF-8 text, and
-  scripts SCORM Lab can't read run as they are; a finding lists them.
+  scripts Package Lab can't read run as they are; a finding lists them.
 - Not code from other sites, code built at run time (`eval`, `new Function`), event handlers written in HTML attributes,
   or code inside a `with` block. Code in workers runs but isn't recorded.
 - At most 200,000 events are kept, the newest. A finding says when older ones were dropped.
@@ -644,12 +644,12 @@ What tracing covers, and what it doesn't:
 - Looking at an object's names runs the content's code only for a `Proxy` object (its traps).
 
 The saved run keeps the trace: `trace.exec`, `trace.sites` and the original files in `trace.sources` (see the
-[developer guide](developer-guide.md#saved-run-scorm-lab-run-version-1)). From the command line: `scorm-lab run --trace`.
+[developer guide](developer-guide.md#saved-run-package-lab-run-version-1)). From the command line: `package-lab run --trace`.
 
 ## Why it stopped: drill-down
 
 The **Drill-down** tab explains, without your help, why a run stopped where it did. Choose a run and click
-**Drill down**. If the run wasn't traced, SCORM Lab runs the item again with tracing; then, if it needs to know where a
+**Drill down**. If the run wasn't traced, Package Lab runs the item again with tracing; then, if it needs to know where a
 value came from, it runs it once more watching that value. Each run takes as long as **Stop after** (10 s if that is
 **I stop it**), uses the run's own settings, and appears in the runs list. **Stop** stops it.
 
@@ -669,13 +669,13 @@ How it gets there:
   decisions made within 1 s of that milestone.
 - **Key decisions.** Decisions there whose other branch is code that never ran (from the trace and the browser's
   coverage). The chain starts from the last one whose values explain it: an `undefined` or `null`, or a false value
-  from somewhere SCORM Lab can name. The others are listed under the chain.
-- **Where a value came from.** SCORM Lab looks for every place in the package that sets it (assignments, declarations,
+  from somewhere Package Lab can name. The others are listed under the chain.
+- **Where a value came from.** Package Lab looks for every place in the package that sets it (assignments, declarations,
   keys in object literals, `Object.defineProperty`) and, in the watch run, which of them ran, when, and with what value.
   When none ran, it says why: the file never loaded, or a decision kept it from running, and it follows that
   decision's own `undefined` values, up to three levels. A value can also come from a response (a request's callback
   or `JSON.parse`), the launch address's query, the LMS (`GetValue`), or a script that defines it.
-- **The finding** is an error when the chain ends at a cause SCORM Lab can name: a failed request, a script that failed
+- **The finding** is an error when the chain ends at a cause Package Lab can name: a failed request, a script that failed
   or that nothing loads, a JSON file without the field, or an API version the LMS didn't offer. Otherwise it's a
   warning, and the last step says where to look.
 
@@ -686,11 +686,11 @@ What it can't follow:
 - In inline scripts of a page, whether code ran is judged from the trace only.
 - A watched name that didn't exist before is seen by `name in window` as there (with the value `undefined`).
 
-From the command line: [`scorm-lab drill`](cli.md#drill).
+From the command line: [`package-lab drill`](cli.md#drill).
 
 ## Why it stalled: what the content was waiting for
 
-When a run stops short of **Wrote data** and nothing failed outright, the content is usually waiting. SCORM Lab
+When a run stops short of **Wrote data** and nothing failed outright, the content is usually waiting. Package Lab
 records, in every frame, the timers, `message` listeners and `postMessage` calls the content makes (and counts
 animation frames), and the finding **The content was waiting for: …** lists what was still open at the end:
 
@@ -699,7 +699,7 @@ animation frames), and the finding **The content was waiting for: …** lists wh
   message's type is named (`{ type: 'player-ready' }` is “player-ready”); only short values are recorded, never long ones.
   A message to a window on another site can't be judged and is left out.
 - **Pollers.** A timer still firing at the end: an interval, or a chain of timeouts from one place in the code (at
-  least three runs). With **Trace the code** on, SCORM Lab also names the test the callback made and its last value:
+  least three runs). With **Trace the code** on, Package Lab also names the test the callback made and its last value:
   “polls every 250 ms; tests `window.API` → undefined, 120 times”.
 - **Messages that never came.** A `message` listener in the content that never ran.
 - **Requests** still open at the end.
@@ -732,7 +732,7 @@ moves, not at start-up.
 1. Click through the course once and make a macro of it (below), or write one (see [Macros](cli.md#macros)).
 2. Choose **Test saving**. It runs the course and plays the macro. Then it leaves the way a learner closing the window
    does: the course is sent to a blank page, which makes it run its `beforeunload`, `pagehide` and `unload`
-   handlers, and the window is closed. SCORM Lab keeps the data model the LMS held at that point.
+   handlers, and the window is closed. Package Lab keeps the data model the LMS held at that point.
 3. It runs the course again with that data, as a resume, and checks that the first run saved something and ended the
    session, that the LMS offered a resume, that the course read its saved place and used it, and that suspend data
    carried on from where it was.
@@ -765,28 +765,28 @@ at the start of every launch from then on, and is saved in each run's launch opt
 
 ## Checks for particular authoring tools
 
-If SCORM Lab recognises the tool that made a package, it adds findings that know that tool. They start with its name
+If Package Lab recognises the tool that made a package, it adds findings that know that tool. They start with its name
 ("Adapt: …", "SCORM Driver (Rustici): …") and appear with the other findings, before and after a run. Tools covered:
 Xyleme, Articulate Storyline and Rise, Adobe Captivate, iSpring, Lectora, Adapt, dominKnow, Evolve, the SCORM Driver
 and the pipwerks wrapper.
 
 Each says how sure it is:
 - **Matches a known pattern**: it comes from forum reports and the like. It is only information, and worth checking.
-- **Confirmed in the package's files**: SCORM Lab read the setting itself, such as Adapt's `_isEnabled` or the SCORM
+- **Confirmed in the package's files**: Package Lab read the setting itself, such as Adapt's `_isEnabled` or the SCORM
   Driver's `strLMSStandard`.
 - **Confirmed in this run**: the recording shows it.
 
 Public information about some tools is thin, so these checks are cautious: they stay information until a run or the
-files confirm them. For Xyleme, they rest on what SCORM Lab records for any package: requests to the platform's
+files confirm them. For Xyleme, they rest on what Package Lab records for any package: requests to the platform's
 server, another site, or content that builds its own API. Their advice points to **Discover**, pins and answers. A
-package that carries no tool name is treated like any other, unless you set **Authoring tool** (under More options, or `--tool` on the command line) to the tool: its rules then run whether or not SCORM Lab recognises it, and say you chose it. [Findings](findings.md#from-authoring-tool-packs) lists them all.
+package that carries no tool name is treated like any other, unless you set **Authoring tool** (under More options, or `--tool` on the command line) to the tool: its rules then run whether or not Package Lab recognises it, and say you chose it. [Findings](findings.md#from-authoring-tool-packs) lists them all.
 
 ## Comparing with a working copy (optional)
 
 If the course does work somewhere, such as the authoring tool's hosted preview, another LMS or SCORM Cloud, you can
 record that too:
 
-1. Enter its address in **Working copy** and choose **Record reference**. It opens in SCORM Lab's own browser, where
+1. Enter its address in **Working copy** and choose **Record reference**. It opens in Package Lab's own browser, where
    you can sign in; sign-ins are kept between sessions. Use it the same way, then **Stop and analyse**. API calls on
    the real LMS are recorded too.
 2. In **Runs**, mark the working run **R** and the failing run **F**, then choose **Compare**.
@@ -812,7 +812,7 @@ result appears in the **Package diff** tab. It is worked out from the files alon
 
 Minified files are compared as they are, so a changed minified script shows as one long changed line.
 
-To see how they behave too, use [`scorm-lab diff --run`](cli.md#diff): it runs the same item with the same options on
+To see how they behave too, use [`package-lab diff --run`](cli.md#diff): it runs the same item with the same options on
 both and says how far each got ("A reached Wrote data; B reached Launch page loaded").
 
 ## Checking a folder of packages
@@ -830,14 +830,14 @@ Click a row to open that package in the window, as if you had opened it. Only th
 opened this way. The button is in the desktop app only.
 
 To check a folder from the command line, or to get a file you can open in a browser or a spreadsheet, use
-[`scorm-lab batch`](cli.md#batch). It can also run each package (`--run`) and writes a CSV and an HTML report. In Alfred,
+[`package-lab batch`](cli.md#batch). It can also run each package (`--run`) and writes a CSV and an HTML report. In Alfred,
 the File Action **Check SCORM packages in folder** does the same for a folder and opens the report ([Alfred](alfred.md)).
 
 ## Saved runs
 
-Every run is saved as JSON in `~/Library/Application Support/SCORM Lab/runs/`. **Open saved…** brings runs back, for
+Every run is saved as JSON in `~/Library/Application Support/Package Lab/runs/`. **Open saved…** brings runs back, for
 reading or comparing. They hold the content's script sources and the data it stored, so treat them like the package.
-Runs made by the CLI (`scorm-lab run --out`) and the Concierge module (**Download the run**) open the same way.
+Runs made by the CLI (`package-lab run --out`) and the Concierge module (**Download the run**) open the same way.
 
 ## A method for a package that doesn't work
 
@@ -860,7 +860,7 @@ Runs made by the CLI (`scorm-lab run --out`) and the Concierge module (**Downloa
 
 A report can show a vendor what went wrong without the course itself. In the desktop app, select a run, tick **Take
 the course content out** on the Findings tab, and choose **Save report…**. The web interface does the same and
-downloads the file. The CLI does it with `scorm-lab report run.json --redact` ([CLI](cli.md#report)).
+downloads the file. The CLI does it with `package-lab report run.json --redact` ([CLI](cli.md#report)).
 
 What goes: the text the pages show, console messages, the values the course stored (its answers, names and
 bookmarks), suspend data, request and response bodies and headers, anything you typed or recorded as a macro, changed
@@ -875,8 +875,8 @@ the only way to match a hash back to its file.
 
 ## Privacy
 
-SCORM Lab never sends package content anywhere:
-- the package is served from memory to SCORM Lab's own browser;
+Package Lab never sends package content anywhere:
+- the package is served from memory to Package Lab's own browser;
 - requests the content makes to other sites go out as they would in any browser, which the Network tab shows;
 - saved runs stay in your Library folder;
 - reports say they were made on this computer.
@@ -890,4 +890,4 @@ SCORM Lab never sends package content anywhere:
 - **A course needs a sign-in or licence server.** Its requests show in **Network**. If they fail, that is a finding in
   itself: the package depends on a server.
 - **Electron couldn't be found.** Run `npm install` in the repo.
-- **WebKit says Playwright isn't installed.** Run `npm i -D playwright && npx playwright install webkit` in the SCORM Lab folder.
+- **WebKit says Playwright isn't installed.** Run `npm i -D playwright && npx playwright install webkit` in the Package Lab folder.

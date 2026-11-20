@@ -34,7 +34,7 @@ export function createLrs(config) {
   const statements = [], byId = new Map(), calls = [], docs = new Map(), fetches = []
   let tokenIssued = false
   const iso = () => new Date(wall()).toISOString()
-  const authority = { objectType: 'Agent', account: { homePage: endpoint.replace(/\/__lrs\/$/, '') || 'https://lms.lab.invalid', name: 'scorm-lab' } }
+  const authority = { objectType: 'Agent', account: { homePage: endpoint.replace(/\/__lrs\/$/, '') || 'https://lms.lab.invalid', name: 'package-lab' } }
   const out = (status, body = '', headers = {}) => ({ status, headers: { 'Content-Type': JSON_TYPE, ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) })
   const fail = (status, text, extra) => ({ ...out(status, text, { 'Content-Type': 'text/plain; charset=utf-8' }), ...extra })
 
@@ -190,7 +190,7 @@ export function createLrs(config) {
   }
 
   // ---- Requests ----
-  const about = () => out(200, { version: [VERSION, '1.0.2', '1.0.1', '1.0.0'], extensions: { 'https://scorm-lab.invalid/extensions/lrs': 'SCORM Lab’s local LRS' } })
+  const about = () => out(200, { version: [VERSION, '1.0.2', '1.0.1', '1.0.0'], extensions: { 'https://package-lab.invalid/extensions/lrs': 'Package Lab’s local LRS' } })
   const CORS = { 'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Experience-API-Version, If-Match, If-None-Match, Accept, Accept-Language',
     'Access-Control-Expose-Headers': 'ETag, X-Experience-API-Version, X-Experience-API-Consistent-Through', 'Access-Control-Max-Age': '600' }
 

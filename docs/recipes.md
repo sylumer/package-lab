@@ -1,6 +1,6 @@
 # Recipes: diagnosing a package step by step
 
-Each recipe is one problem you might bring to SCORM Lab, with the steps to take, in order. Every step uses a feature
+Each recipe is one problem you might bring to Package Lab, with the steps to take, in order. Every step uses a feature
 that is described in full elsewhere: the [user guide](user-guide.md) for the desktop app, the [CLI](cli.md) for the
 commands, and [Findings](findings.md) for what each message means.
 
@@ -11,7 +11,7 @@ Three rules run through all of them:
 
 - **Change one thing at a time.** Each run should differ from the last by one setting or one file.
 - **Keep what you find.** Use `--out` so every run is kept; you will want to compare them.
-- **A local run is a hint, not a verdict.** It runs in SCORM Lab's test LMS. Confirm each fix in the real LMS.
+- **A local run is a hint, not a verdict.** It runs in Package Lab's test LMS. Confirm each fix in the real LMS.
 
 - [Works on the authoring platform, not in an LMS](#works-on-the-authoring-platform-not-in-an-lms)
 - [Shows a blank page](#shows-a-blank-page)
@@ -29,7 +29,7 @@ This recipe uses a Xyleme export as the example. Use the same steps for any tool
 **1. Check the package from its files, with the tool named.** If the package doesn't name its tool, say so with `--tool`:
 
 ```bash
-scorm-lab analyze course.zip --tool xyleme
+package-lab analyze course.zip --tool xyleme
 ```
 
 Read the **Made with** line and the findings from the files. Public information about Xyleme is thin, so the Xyleme
@@ -40,14 +40,14 @@ findings that matter most are the general ones about the launch and paths at the
 
 One Xyleme finding is firm: "built for Xyleme's server-side player: it will hang in any other LMS". A static export
 (for example "Static SCORM 1.2" for SuccessFactors) that sets `PLAYER_TYPE = 'Server-side'` waits forever for Xyleme's
-content server, so the page stays blank and shows no error. It carries the Autofix `xyleme-player-type`: `scorm-lab fix
+content server, so the page stays blank and shows no error. It carries the Autofix `xyleme-player-type`: `package-lab fix
 course.zip --out fixed.zip`, or Export corrected package, removes that line. A "Scripts set document.domain" warning
 often sits beside it; browsers now ignore that line, and the fix leaves it alone.
 
 **2. Run it and find the step it stopped at.**
 
 ```bash
-scorm-lab run course.zip --tool xyleme --wait 20 --out run.json
+package-lab run course.zip --tool xyleme --wait 20 --out run.json
 ```
 
 Read the **Milestones** line. If the run didn't reach **Looked for the API**, the content never started its LMS code.
@@ -57,7 +57,7 @@ Look at **Got as far as** and **Didn't reach**. In the user guide, the Findings 
 listed, and each field the content reads from the answer is named.
 
 ```bash
-scorm-lab discover course.zip --tool xyleme --wait 20 --out disc
+package-lab discover course.zip --tool xyleme --wait 20 --out disc
 ```
 
 Open `disc/discovery.json`, or the text output. The findings say what the content needs, and whether a stand-in answer
@@ -67,7 +67,7 @@ got it further. In the desktop app, use the **Server needs** tab and **Discover 
 
 ```bash
 jq '{responses: [.requests[].response]}' disc/discovery.json > answers.json
-scorm-lab run course.zip --tool xyleme --options answers.json --wait 20 --out run2.json
+package-lab run course.zip --tool xyleme --options answers.json --wait 20 --out run2.json
 ```
 
 (`jq` is optional: copy each `response` from `discovery.json` into the file by hand, in a list under `responses`.)
@@ -79,16 +79,16 @@ response** does the same and **Run with these** runs it.
 **5. Find the decision that stopped it (Drill-down).** Drill-down follows the decision back to its cause:
 
 ```bash
-scorm-lab drill course.zip --tool xyleme --options answers.json --wait 20 --out drill
+package-lab drill course.zip --tool xyleme --options answers.json --wait 20 --out drill
 ```
 
-The chain ends at a cause SCORM Lab can name, such as a request that failed or a JSON file missing a field. If the
+The chain ends at a cause Package Lab can name, such as a request that failed or a JSON file missing a field. If the
 chain ends at a server response, go back to step 3 and look at which field it read.
 
 **6. Test the LMS hosting settings.** Run every LMS profile in turn and see which ones get further:
 
 ```bash
-scorm-lab experiment course.zip --tool xyleme --options answers.json --preset lms --wait 20 --out lms
+package-lab experiment course.zip --tool xyleme --options answers.json --preset lms --wait 20 --out lms
 ```
 
 The table shows the furthest step for each profile. A profile that gets further shows that the LMS's hosting matters.
@@ -98,14 +98,14 @@ Open its run to see the findings for it (for example, "The content can't reach t
 manifest version, missing file entries and `http://` links. Check the result before using it:
 
 ```bash
-scorm-lab fix course.zip --out fixed.zip
-scorm-lab analyze fixed.zip
+package-lab fix course.zip --out fixed.zip
+package-lab analyze fixed.zip
 ```
 
 The fix can't add a server or change what the content asks for. If the content still needs its platform's server
 (step 3 still lists requests), the real fix is in the authoring tool's export: a standalone or LMS export setting, or
 an LMS feature that serves the same files. Ask the author or the LMS administrator for that, and send them
-`scorm-lab report course.zip --run --redact` as the evidence.
+`package-lab report course.zip --run --redact` as the evidence.
 
 ## Shows a blank page
 
@@ -115,18 +115,18 @@ The content loads and shows nothing, or stops on a loading screen.
 its evidence is in loading order. Fix the first item: later ones often follow from it.
 
 ```bash
-scorm-lab run course.zip --wait 20 --out run.json
+package-lab run course.zip --wait 20 --out run.json
 ```
 
 **2. Check the loading path.** In the desktop app, the **Boot path** tab's **In the run** column shows when each file
 was asked for and its status. The first file marked *never asked for* is where loading stopped. From the files alone:
 
 ```bash
-scorm-lab analyze course.zip
+package-lab analyze course.zip
 ```
 
 Errors here (a missing file, wrong capitals, a path at the root of the server, a file that climbs out of the package)
-are almost always the cause. Run `scorm-lab fix course.zip --out fixed.zip` for capitals and the manifest.
+are almost always the cause. Run `package-lab fix course.zip --out fixed.zip` for capitals and the manifest.
 
 **3. Read the first error.** The **Errors** tab lists uncaught errors in time order. The first one usually explains the
 rest. Look at the file and line it names (the link opens the code).
@@ -138,7 +138,7 @@ in the real LMS, then give the content the same, with a pin or an answer (see th
 **5. If it still isn't clear, trace the decisions.**
 
 ```bash
-scorm-lab drill course.zip --wait 20 --out drill
+package-lab drill course.zip --wait 20 --out drill
 ```
 
 Drill-down runs the content with tracing and gives the chain of decisions that led to the dead end. The Execution tab
@@ -163,7 +163,7 @@ The content loads, but the LMS never gets a call. The **Lookups** tab is the fir
 **2. Try the API versions the LMS might offer.**
 
 ```bash
-scorm-lab experiment course.zip --preset api --wait 20 --out api
+package-lab experiment course.zip --preset api --wait 20 --out api
 ```
 
 If "both" or "1.2" gets further than the manifest's version, the manifest and the scripts disagree. Fix the manifest
@@ -172,7 +172,7 @@ version (the `manifest-version` fix) or republish.
 **3. Try frame depth and a new window.** Many LMSs put the content two or three frames deep, or in a new window:
 
 ```bash
-scorm-lab experiment course.zip --preset frames --wait 20 --out frames
+package-lab experiment course.zip --preset frames --wait 20 --out frames
 ```
 
 If a deeper frame or a new window gets further, the content searches too few parents to find the API.
@@ -182,7 +182,7 @@ domains. The finding "The content can't reach the LMS from another origin" names
 on the same domain, or a cross-domain wrapper that uses `postMessage`:
 
 ```bash
-scorm-lab experiment course.zip --preset lms --wait 20 --out lms
+package-lab experiment course.zip --preset lms --wait 20 --out lms
 ```
 
 **5. Check the storage the content uses.** Run with storage blocked. If the content uses `localStorage`,
@@ -205,7 +205,7 @@ clicked through part of the course, or the live view's **Record clicks** in the 
 **2. Run the save-and-resume test.**
 
 ```bash
-scorm-lab cycle course.zip --macro macro.json --wait 15 --out cycle
+package-lab cycle course.zip --macro macro.json --wait 15 --out cycle
 ```
 
 The first run plays the macro, then leaves the way a learner closing the window does. The second run resumes from what
@@ -240,7 +240,7 @@ run Safari's engine too, and they also have a touch screen and a smaller window.
 **1. Check the tools are there.**
 
 ```bash
-scorm-lab doctor
+package-lab doctor
 ```
 
 WebKit needs Playwright. If `doctor` says it's missing, the **To do** list gives the command.
@@ -248,7 +248,7 @@ WebKit needs Playwright. If `doctor` says it's missing, the **To do** list gives
 **2. Run the same item in WebKit, at an iPad size.**
 
 ```bash
-scorm-lab run course.zip --browser webkit --viewport ipad --wait 20 --out webkit.json
+package-lab run course.zip --browser webkit --viewport ipad --wait 20 --out webkit.json
 ```
 
 A WebKit run records requests, console messages, errors that stop a script, and the probe's reports. It has no
@@ -258,7 +258,7 @@ coverage and no code trace. If it fails here and not in Chromium, the errors nam
 **3. Test storage blocked, as Safari does for content in another site's frame.**
 
 ```bash
-scorm-lab run course.zip --storage blocked --wait 20 --out blocked.json
+package-lab run course.zip --storage blocked --wait 20 --out blocked.json
 ```
 
 If the finding "The content needs storage the browser can block" appears, the lines it lists are where the content
@@ -268,8 +268,8 @@ with a fallback in memory.
 **4. Compare the settings in one go.**
 
 ```bash
-scorm-lab experiment course.zip --preset browsers --wait 20 --out browsers
-scorm-lab experiment course.zip --preset storage --wait 20 --out storage
+package-lab experiment course.zip --preset browsers --wait 20 --out browsers
+package-lab experiment course.zip --preset storage --wait 20 --out storage
 ```
 
 The tables show how far each got. A variant that gets less far (for example, storage blocked) points at what breaks it.
@@ -278,7 +278,7 @@ The tables show how far each got. A variant that gets less far (for example, sto
 decision that breaks, run in Chromium with the same storage and device settings and trace it:
 
 ```bash
-scorm-lab drill course.zip --storage blocked --viewport ipad --wait 20 --out drill
+package-lab drill course.zip --storage blocked --viewport ipad --wait 20 --out drill
 ```
 
 **6. Check the device.** A phone or tablet has a smaller window and touch. Use the iPhone, iPad or Android presets, or a
@@ -293,7 +293,7 @@ settings from the LMS's administrator.
 **1. Compare the LMSs you have.** Run every profile and see which gets further:
 
 ```bash
-scorm-lab experiment course.zip --preset lms --wait 20 --out lms
+package-lab experiment course.zip --preset lms --wait 20 --out lms
 ```
 
 The table's furthest step is the first place the content breaks in each LMS. A profile that fails, next to one that
@@ -302,7 +302,7 @@ works, shows the setting that matters.
 **2. Read the failing profile's findings.** Run the item with that profile and read its findings:
 
 ```bash
-scorm-lab run course.zip --profile moodle --wait 20 --out moodle.json
+package-lab run course.zip --profile moodle --wait 20 --out moodle.json
 ```
 
 Typical findings for each setting:
@@ -326,7 +326,7 @@ variants file and run them as an experiment:
 ```
 
 ```bash
-scorm-lab experiment course.zip --profile moodle --variants variants.json --wait 20 --out fields
+package-lab experiment course.zip --profile moodle --variants variants.json --wait 20 --out fields
 ```
 
 The run options give the default: here, the failing profile (`--profile moodle`). Each variant changes one field from
@@ -336,7 +336,7 @@ default" says which one.
 **4. Write the profile down.** Once you know the settings, save them as a profile file and run it any time:
 
 ```bash
-scorm-lab run course.zip --profile-file moodle-site.json --wait 20
+package-lab run course.zip --profile-file moodle-site.json --wait 20
 ```
 
 **5. Fix the content for the setting that breaks it.** Common fixes: keep the course state in the LMS rather than in
@@ -351,7 +351,7 @@ requests it fails on. Use the Discover recipe for what the content reads from it
 When you have a diagnosis, send the author or the vendor a report without the course content:
 
 ```bash
-scorm-lab report course.zip --run --wait 20 --redact --out report.html
+package-lab report course.zip --run --wait 20 --redact --out report.html
 ```
 
 The redaction rules and what they keep are in the [user guide](user-guide.md#sending-a-report-without-the-course-content).

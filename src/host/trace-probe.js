@@ -10,7 +10,7 @@
 //
 // A preview never runs the content's code: no getters, no toString or valueOf. Objects give their constructor's name
 // and up to five own keys (arrays, typed arrays, windows and DOM objects give only the name). A Proxy's traps do run
-// when it is previewed (getPrototypeOf, ownKeys), except for SCORM Lab's own (shape-probe.js).
+// when it is previewed (getPrototypeOf, ownKeys), except for Package Lab's own (shape-probe.js).
 (() => {
   if (typeof globalThis.__labT === 'function') return
   // Taken now, before the content can replace them.
