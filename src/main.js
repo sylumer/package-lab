@@ -8,7 +8,7 @@
 //   --serve[=port]       start the web interface (default port 4880); --host=<address> (default 127.0.0.1)
 //   --no-window          no desktop window (with --serve: a server only)
 //   --show-runs          with --no-window: show the content windows anyway
-import { app, BrowserWindow, ipcMain, dialog, net, protocol, session } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, net, protocol, session, Menu, shell } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { basename, extname, join } from 'node:path'
@@ -22,6 +22,7 @@ import { staticFindings, compareFindings, sortFindings, runFindings, launchFindi
 import { bootGraph, bootRun } from './bootpath.js'
 import { runCounts } from './milestones.js'
 import { startWeb } from './web.js'
+import { DOCS } from './docs.js'
 import { normaliseOptions, cliCommand, packagePath } from './options.js'
 import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
@@ -318,7 +319,7 @@ const macro = { recording: false, events: [], text: 0 }
 const MACRO_MAX = 2000, MACRO_TEXT_MAX = 100 * 1024   // as options.js
 
 // ---- Packages ----
-function loadPackage(path) { return loadPackageData(basename(path), readFileSync(path), path) }
+function loadPackage(path) { const info = loadPackageData(basename(path), readFileSync(path), path); app.addRecentDocument(path); return info }
 function loadPackageData(name, buf, path = '') {
   const files = unzip(buf), analysis = analyze(files)
   served = null
@@ -601,6 +602,11 @@ function runReport({ run, redact }) {
 }
 
 const handlers = {
+  docs: () => DOCS,
+  doc: ({ name }) => {   // name comes from a browser in the web interface: only the bundled docs
+    if (!DOCS.some(d => d.name === name)) throw new Error('No such document.')
+    return readFileSync(join(import.meta.dirname, '..', 'docs', name), 'utf8')
+  },
   'open-package': async () => {
     const r = await dialog.showOpenDialog(ui, { title: 'Open a SCORM package', filters: [{ name: 'SCORM package', extensions: ['zip'] }], properties: ['openFile'] })
     return r.canceled ? null : loadPackage(r.filePaths[0])
@@ -766,11 +772,41 @@ if (WINDOW) {
 function createWindow() {
   ui = new BrowserWindow({ width: 1400, height: 900, title: 'Package Lab', webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, sandbox: true } })
   ui.loadFile(join(import.meta.dirname, 'ui', 'index.html'))
+  // Links in the docs panel open in the user's browser; the window never navigates away from the app page.
+  ui.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' } })
+  ui.webContents.on('will-navigate', (e, url) => { if (url === ui.webContents.getURL()) return; e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url) })
   ui.on('closed', () => { ui = null; if (!web && process.platform !== 'darwin') app.quit() })
   ui.webContents.once('did-finish-load', () => { if (pendingOpen) { openPath(pendingOpen); pendingOpen = null } })
 }
 
+function buildMenu() {
+  const send = action => () => { if (ui && !ui.isDestroyed()) ui.webContents.send('menu', { action }) }
+  const item = (label, accelerator, action) => ({ label, accelerator, click: send(action) })
+  const docs = (label, name, accelerator) => ({ label, accelerator, click: () => { if (ui && !ui.isDestroyed()) ui.webContents.send('menu', { action: 'docs', name }) } })
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: 'appMenu' },
+    { label: 'File', submenu: [
+      item('Open Package…', 'CmdOrCtrl+O', 'open'),
+      { role: 'recentDocuments', submenu: [{ role: 'clearRecentDocuments' }] },
+      item('Compare Packages…', undefined, 'compare-pkg'), item('Check a Folder…', undefined, 'check-folder'), item('Open Saved Run…', undefined, 'open-run'),
+      { type: 'separator' }, item('Export Corrected Package…', 'CmdOrCtrl+E', 'export'),
+      { type: 'separator' }, { role: 'close' } ] },
+    { role: 'editMenu' },
+    { label: 'View', submenu: [   // viewMenu's reload would take ⌘R from Launch
+      { role: 'reload', accelerator: 'Shift+CmdOrCtrl+Alt+R' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' },
+      { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' } ] },
+    { label: 'Run', submenu: [
+      item('Launch', 'CmdOrCtrl+R', 'launch'), item('Test Saving', 'Shift+CmdOrCtrl+R', 'cycle'),
+      item('Record Reference', undefined, 'ref'), item('Stop and Analyse', 'CmdOrCtrl+.', 'stop') ] },
+    { role: 'windowMenu' },
+    { role: 'help', submenu: [
+      docs('Show Docs', 'README.md', 'Shift+CmdOrCtrl+H'), docs('User Guide', 'user-guide.md'), docs('Recipes', 'recipes.md'), docs('Findings', 'findings.md'),
+      { type: 'separator' }, { label: 'Show Data Folder', click: () => shell.openPath(app.getPath('userData')) } ] },
+  ]))
+}
+
 app.whenReady().then(async () => {
+  if (WINDOW) buildMenu()
   const lab = session.fromPartition('lab')
   lab.protocol.handle('lab', serve)
   // The content sees https://lms.lab.invalid/ and https://cdn.content.invalid/ (WEBKIT_ORIGINS); they are served as lab://run and lab://content. Any other

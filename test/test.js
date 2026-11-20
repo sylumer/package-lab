@@ -23,6 +23,7 @@ import { timelineModel, timelineView } from '../src/timeline.js'
 import { normaliseOptions, cliCommand, VIEWPORTS, viewportName } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
+import { markdown } from '../src/ui/markdown.js'
 import { comparePackages, compareFiles, compareManifests, compareBoots, compareFindings, compareBehaviour } from '../src/pkgdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
 import { pinPathProblem, matcher, answerFor, buildAnswer, pinPrefix, userAgentPin, lexicalDeclaration, pinFindings, parsePinFlag, parseAnswerFlag } from '../src/pins.js'
@@ -1474,6 +1475,20 @@ console.log('redact: unit ok')
   assert.ok(!renderReport({ title: 'x', findings: [], redact: { package: 'pkg.zip' }, extra: experimentHtml([]) }).includes('Variants'), 'experiment report: a redacted report never shows extra HTML')
 }
 console.log('completion and experiment report: unit ok')
+{
+  const h = markdown('# Exporting a corrected package\n\n## From the manifest\n\n## From the manifest\n')
+  assert.ok(h.includes('<h2 id="from-the-manifest">') && h.includes('<h2 id="from-the-manifest-1">') && h.includes('id="exporting-a-corrected-package"'), 'markdown: heading ids, duplicates numbered')
+  const t = markdown('| A | B |\n|---|---|\n| x \\| y | **z** |')
+  assert.ok(t.includes('<thead><tr><th>A</th><th>B</th></tr></thead>') && t.includes('<td>x | y</td><td><strong>z</strong></td>'), 'markdown: table, escaped pipe, inline in cells')
+  const l = markdown('- a\n  - b\n- c\n\n1. one\n2. two')
+  assert.equal(l, '<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>\n<ol><li>one</li><li>two</li></ol>\n', 'markdown: nested and numbered lists')
+  const c = markdown('- step\n  ```js\n  <script>x()</script>\n  ```')
+  assert.ok(c.includes('<pre><code class="language-js">&lt;script&gt;x()&lt;/script&gt;</code></pre>') && !c.includes('<script>'), 'markdown: fenced code escaped, even inside a list item')
+  const k = markdown('[bad](javascript:alert(1)) [ok](user-guide.md#x) [web](https://a.test/?a=1&b=2)')
+  assert.ok(!k.includes('javascript:') && k.includes('<a href="user-guide.md#x">ok</a>') && k.includes('href="https://a.test/?a=1&amp;b=2"'), 'markdown: unsafe link dropped, safe kept')
+  assert.equal(markdown('a **b** *c* `<d>`\nnext'), '<p>a <strong>b</strong> <em>c</em> <code>&lt;d&gt;</code> next</p>\n', 'markdown: inline formatting, wrapped lines join')
+}
+console.log('markdown: unit ok')
 console.log('unit: ok')
 
 // ---- End to end ----
@@ -1600,7 +1615,7 @@ if (!process.argv.includes('--unit')) {
     assert.match(node(['doctor'], { env }).stdout, /Package Lab\.app, the installed desktop app/)
     const noApp = JSON.parse(node(['doctor', '--json'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout)
     if (!existsSync('/Applications/Package Lab.app')) assert.ok(noApp.app === null, 'doctor: no app is reported as null')
-    assert.match(node(['doctor'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout, /no +Package Lab\.app/, 'doctor: text shows the app as not installed')
+    assert.match(node(['doctor'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout, /(no|ok) +Package Lab\.app/, 'doctor: text reports the app (installed or not: it looks in /Applications, not HOME)')
     assert.match(node(['doctor']).stdout, /Ready:|To do:/, 'doctor: text summary with advice')
 
     // Alfred (P5.2): the build lints, the ⇧↩ action runs the standard experiment, the scripts are valid shell, and Fix never overwrites.

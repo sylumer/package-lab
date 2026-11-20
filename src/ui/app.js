@@ -1,4 +1,5 @@
 // Package Lab's window: toolbar, runs list and the tabs that show a run.
+import { markdown } from './markdown.js'
 const $ = id => document.getElementById(id)
 function h(tag, props = {}, ...kids) {
   const e = document.createElement(tag)
@@ -30,7 +31,8 @@ const link = text => CodeView.parts(text).map(p => p.path ? h('button', { type: 
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
   return fs.map(f => h('div', { class: 'finding ' + f.sev }, h('h3', {}, h('span', { class: 'sev' }, f.sev === 'warn' ? 'warning' : f.sev), f.title),
-    f.detail && h('p', {}, f.detail), f.evidence?.length && h('ul', {}, f.evidence.map(e => h('li', {}, link(e)))), f.fix && h('p', { class: 'fix' }, h('b', {}, 'Try: '), f.fix)))
+    f.detail && h('p', {}, f.detail), f.evidence?.length && h('ul', {}, f.evidence.map(e => h('li', {}, link(e)))), f.fix && h('p', { class: 'fix' }, h('b', {}, 'Try: '), f.fix),
+    h('p', { class: 'small' }, h('button', { type: 'button', class: 'link', title: 'Open what this finding means in the help panel', onclick: () => findingHelp(f.title) }, 'What this means'))))
 }
 function table(cols, rows) {
   const q = $('filter').value.trim().toLowerCase()
@@ -498,12 +500,100 @@ VIEWS.Timeline = () => {
 }
 VIEWS.Live = () => st.running ? livePanel : h('p', { class: 'muted' }, 'Launch an item to see it here. It runs on the Mac; this view lets you watch and use it from here.')
 
+// Tabs with nothing to show are left out of the tab bar (never the chosen one, and never the ones the user starts things from:
+// Lookups holds the pins, and Experiments, Test saving, Server needs, Drill-down, Folder check and Live are not listed here).
+const HIDE = {
+  Package: () => !st.pkg, Files: () => !st.pkg,
+  xAPI: () => !run()?.trace.lrs && !(st.pkg?.analysis.format && st.pkg.analysis.format !== 'scorm'),
+  Network: () => !run()?.trace.requests.length, Scripts: () => !run()?.trace.scripts.length, Console: () => !run()?.trace.console.length,
+  Errors: () => { const t = run()?.trace; return !t || !(t.exceptions.length || t.caught.length || t.log.some(l => l.level === 'error' || l.level === 'warning')) },
+  Frames: () => { const t = run()?.trace; return !t || !(t.navigations.length || t.targets.length) },
+  Execution: () => !run()?.trace.execTail, Timeline: () => !run(), Compare: () => !st.cmp, 'Package diff': () => !st.pdiff,
+}
+
+// ---- Start screen: shown until a package (or a run) is open ----
+const RECIPES = [['The page is blank', 'Launch, then read Findings, Boot path and Errors.', 'shows-a-blank-page'],
+  ['The content never talks to the LMS', 'Launch, then look at Lookups and API.', 'no-api-calls'],
+  ['It doesn’t save or resume', 'Test saving (set up a macro first).', 'doesnt-resume'],
+  ['Works in Chrome, not in Safari or on an iPad', 'More options: Storage “Blocked”, Browser “WebKit”, Device size; then Launch.', 'works-in-chrome-not-in-safari-or-on-an-ipad'],
+  ['Works in one LMS, not another', 'Experiments, or choose a Profile and Launch.', 'works-in-one-lms-not-another'],
+  ['Works in the authoring tool, not in an LMS', 'Launch, then Server needs: Discover all server requests.', 'works-on-the-authoring-platform-not-in-an-lms']]
+const startScreen = () => h('div', { class: 'welcome' },
+  h('p', {}, 'Package Lab runs a SCORM, cmi5 or Tin Can package the way an LMS would, records what happens, and says what stops it working.'),
+  h('p', {}, 'Open a package to start: choose Open package… above.'),
+  h('h2', {}, 'Something is wrong? Start here'),
+  h('table', {}, h('thead', {}, h('tr', {}, ['Symptom', 'What to press', ''].map(c => h('th', {}, c)))),
+    h('tbody', {}, RECIPES.map(([sym, what, id]) => h('tr', {}, h('td', {}, sym), h('td', {}, what), h('td', {}, h('button', { type: 'button', class: 'link', onclick: () => openDoc('recipes.md', id) }, 'Steps')))))))
+
+// ---- Docs panel: the Markdown docs beside the window (src/docs.js lists and reads them; markdown.js draws them) ----
+const store = { get: k => { try { return localStorage.getItem(k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(k, v) } catch { /* not remembered */ } } }
+const docs = { list: null, text: {}, cur: null, anchor: '', hist: [] }
+const docBody = $('doc-body')
+const saveDocs = () => store.set('pl.docs', JSON.stringify({ open: !$('docs').hidden, doc: docs.cur }))
+// back: going back, so the page left isn't added to the history again.
+const openDoc = (name, anchor = '', back) => act(async () => {
+  $('docs').hidden = false
+  if (!docs.list) { docs.list = await lab.invoke('docs'); $('doc-pick').replaceChildren(...docs.list.map(d => h('option', { value: d.name }, d.title))) }
+  if (!docs.list.some(d => d.name === name)) name = docs.cur ?? docs.list[0]?.name
+  if (!name) return
+  const text = docs.text[name] ??= await lab.invoke('doc', { name })
+  if (docs.cur && !back) docs.hist.push([docs.cur, docs.anchor])
+  Object.assign(docs, { cur: name, anchor })
+  docBody.innerHTML = markdown(text)
+  $('doc-pick').value = name; $('doc-back').disabled = !docs.hist.length
+  let target = null
+  try { target = anchor && docBody.querySelector('#' + CSS.escape(decodeURIComponent(anchor))) } catch { /* bad escape: top */ }
+  if (target) target.scrollIntoView(); else docBody.scrollTop = 0
+  saveDocs()
+})
+// The row of findings.md whose first cell is this finding's title: its *placeholders* match any text.
+const rowFor = (root, title) => [...root.querySelectorAll('tr')].find(tr => {
+  const c = tr.cells[0]; if (!c || c.tagName !== 'TD') return false
+  const k = c.cloneNode(true); k.querySelectorAll('em').forEach(m => m.replaceWith('\0'))
+  const rx = k.textContent.trim().split('\0').map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.+?')
+  return new RegExp(`^${rx}$`, 'i').test(title)
+})
+async function findingHelp(title) {
+  await openDoc('findings.md')
+  const row = docs.cur === 'findings.md' && rowFor(docBody, title)
+  if (!row) return
+  row.scrollIntoView({ block: 'center' }); row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 2600)
+}
+// x.md, x.md#a, packs/x.md, ../x.md, #a: from the folder of the open doc; null if it isn't one of the docs.
+function docLink(href) {
+  const [path, anchor = ''] = href.split('#')
+  if (!path) return [docs.cur, anchor]
+  const dir = docs.cur.split('/').slice(0, -1)
+  for (const seg of path.split('/')) if (seg === '..') dir.pop(); else if (seg !== '.') dir.push(seg)
+  const name = dir.join('/')
+  return docs.list.some(d => d.name === name) ? [name, anchor] : null
+}
+docBody.addEventListener('click', e => {
+  const a = e.target.closest('a[href]')
+  if (!a) return
+  e.preventDefault()
+  const href = a.getAttribute('href')
+  if (/^https?:/i.test(href)) return void (lab.web ? window.open(href, '_blank', 'noopener') : window.open(href))
+  const to = !/^[a-z][a-z0-9+.-]*:/i.test(href) && docLink(href)
+  if (to) openDoc(...to)
+})
+$('doc-pick').onchange = () => openDoc($('doc-pick').value)
+$('doc-back').onclick = () => { const [n, a] = docs.hist.pop(); openDoc(n, a, true) }
+$('doc-close').onclick = () => { $('docs').hidden = true; saveDocs() }
+$('help').onclick = () => $('docs').hidden ? openDoc(docs.cur ?? 'README.md', docs.anchor) : $('doc-close').click()
+lab.on?.('menu', ({ action, name }) => { if (action === 'docs') openDoc(name ?? docs.cur ?? 'README.md'); else { const b = $(action); if (b && !b.disabled) b.click() } })
+try { const d = JSON.parse(store.get('pl.docs')); if (d?.open) openDoc(typeof d.doc === 'string' ? d.doc : 'README.md') } catch { /* nothing remembered */ }
+
 function render() {
   if (!codePane.hidden && codePane.dataset.run !== '' && +codePane.dataset.run !== st.sel) { codePane.hidden = true; codePane.replaceChildren() }   // its run isn't the chosen one any more
   if (lab.web) liveWatch(st.tab === 'Live' && !!st.running)
-  $('tabs').replaceChildren(...TABS.map(t => h('button', { type: 'button', role: 'tab', 'aria-selected': String(t === st.tab), onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))
+  const welcome = !st.pkg && !st.runs.length && !st.live.length && !st.batch && !st.running
+  $('tabs').hidden = $('filter').parentElement.hidden = welcome
+  const tabs = TABS.filter(t => t === st.tab || !HIDE[t]?.())
+  const firstTool = tabs.find(t => t === 'Folder check' || t === 'Experiments')
+  $('tabs').replaceChildren(...tabs.map(t => h('button', { type: 'button', role: 'tab', class: t === firstTool ? 'gap' : null, 'aria-selected': String(t === st.tab), onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))
   // Not while the file editor has focus: a redraw (a run or state event) would lose the cursor and scroll position.
-  if (!(st.tab === 'Files' && document.activeElement?.classList.contains('code')) && !document.activeElement?.matches?.('#view .pins-form input, #view .answer-form input, #view .answer-form textarea')) $('view').replaceChildren(...[VIEWS[st.tab]()].flat(Infinity).filter(x => x != null && x !== false))
+  if (!(st.tab === 'Files' && document.activeElement?.classList.contains('code')) && !document.activeElement?.matches?.('#view .pins-form input, #view .answer-form input, #view .answer-form textarea')) $('view').replaceChildren(...[welcome ? startScreen() : VIEWS[st.tab]()].flat(Infinity).filter(x => x != null && x !== false))
   $('runs').replaceChildren(...st.runs.map(r => h('li', { class: r.id === st.sel ? 'sel' : null, onclick: () => { st.sel = r.id; render() } },
     h('label', { title: 'Reference: the run that works' }, h('input', { type: 'radio', name: 'ref', checked: st.ref === r.id, onclick: e => { e.stopPropagation(); st.ref = r.id; render() } }), h('span', { class: 'tag' }, 'R')),
     h('label', { title: 'The run that fails' }, h('input', { type: 'radio', name: 'fail', checked: st.fail === r.id, onclick: e => { e.stopPropagation(); st.fail = r.id; render() } }), h('span', { class: 'tag' }, 'F')),
@@ -614,9 +704,25 @@ function showProfile() {
 lab.invoke('profiles').then(p => {
   st.profiles = p
   $('profile').replaceChildren(...Object.entries(p).map(([n, x]) => h('option', { value: n }, n + (x.approximation ? ' (approximation)' : ''))))
-  showProfile()
+  showProfile(); restore('profile'); showProfile()
 }).catch(() => {})
 $('profile').addEventListener('change', () => { st.profileEdits = {}; showProfile() })
+// ---- Remembered launch options: the ones that aren't about this package (localStorage 'pl.launch'; a stale value is ignored) ----
+const REMEMBER = ['expose', 'profile', 'depth', 'opener', 'auto', 'caught', 'storage', 'browser', 'viewport', 'viewport-w', 'viewport-h', 'trace']
+const saved = () => { try { return JSON.parse(store.get('pl.launch')) ?? {} } catch { return {} } }
+function restore(...ids) {
+  const o = saved()
+  for (const id of ids) {
+    const el = $(id), v = o[id]
+    if (v === undefined) continue
+    if (el.type === 'checkbox') el.checked = v === true
+    else if (el.tagName !== 'SELECT' || [...el.options].some(x => x.value === String(v))) el.value = String(v)
+  }
+  $('viewport-custom').hidden = $('viewport').value !== 'custom'
+}
+restore(...REMEMBER.filter(id => id !== 'profile'))   // the profile list arrives later
+const remember = () => store.set('pl.launch', JSON.stringify({ ...saved(), ...Object.fromEntries(REMEMBER.filter(id => id !== 'profile' || st.profiles).map(id => [id, $(id).type === 'checkbox' ? $(id).checked : $(id).value])) }))
+for (const id of REMEMBER) $(id).addEventListener('change', remember)
 const launchOptions = () => ({ macro: st.macro, recordInput: $('record-input').checked, expose: $('expose').value, profile: profileOption(), depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
   pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim(), trace: $('trace').checked, storage: $('storage').value, tool: $('tool').value || null,
   browser: $('browser').value, viewport: $('viewport').value === 'custom' ? `${+$('viewport-w').value}x${+$('viewport-h').value}` : $('viewport').value || null })

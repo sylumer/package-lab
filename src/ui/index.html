@@ -29,6 +29,7 @@
     <button id="check-folder" type="button" class="secondary" title="Check every SCORM package in a folder, from the files alone: one row each, with its verdict. Click a row to open that package.">Check a folder…</button>
     <input id="file2" type="file" accept=".zip,application/zip" hidden>
     <button id="export" type="button" class="secondary" disabled title="Save a corrected copy of the package: your changed files and the mechanical fixes (capitals, manifest version, missing files, http, layout), with a list of every change inside.">Export corrected package…</button>
+    <button id="help" type="button" class="secondary" title="Show or hide the documentation beside the window.">Help</button>
   </div>
   <div class="bar">
     <label class="grow">Working copy (reference) <input id="ref-url" type="url" placeholder="https://… where the course works (hosted preview, LMS, SCORM Cloud)" spellcheck="false"></label>
@@ -79,10 +80,14 @@
     <div id="code-pane" hidden></div>
     <div id="view"></div>
   </section>
+  <div id="docs" hidden>
+    <div class="docs-head"><select id="doc-pick" aria-label="Document"></select><button id="doc-back" type="button" class="secondary" disabled>Back</button><button id="doc-close" type="button" class="secondary" aria-label="Close the documentation">Close</button></div>
+    <div id="doc-body" class="doc"></div>
+  </div>
 </div>
 <dialog id="saved"><h2>Saved runs</h2><p class="muted small">Runs saved on the Mac running Package Lab, newest first.</p><ul id="saved-list"></ul><form method="dialog"><button class="secondary">Close</button></form></dialog>
 <script src="bridge.js"></script>
 <script src="codeview.js"></script>
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

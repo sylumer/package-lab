@@ -107,6 +107,8 @@ Everything works as in the [user guide](user-guide.md), except:
 - The **xAPI** tab works as in the desktop app, for a cmi5 or Tin Can run: the statements with their validation, the documents and the requests to the LRS. The LRS runs on the Mac (at `lab://run/__lrs/` inside the run's browser); the page only reads the run's record.
 - A **Live** tab shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** tab selected.
+- **Help** opens the docs in the same panel as the desktop app. The app menu is desktop only.
+- Launch options are remembered in each browser, not on the Mac (see [Testing a theory](user-guide.md#testing-a-theory-launch-settings)).
 
 ## Live view
 

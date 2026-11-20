@@ -1,0 +1,23 @@
+// The user-facing docs bundled with the app and shown in its docs panel; names are paths relative to docs/.
+export const DOCS = [
+  { name: 'README.md', title: 'Contents' },
+  { name: 'user-guide.md', title: 'User guide' },
+  { name: 'recipes.md', title: 'Recipes' },
+  { name: 'findings.md', title: 'Findings' },
+  { name: 'web.md', title: 'Web interface' },
+  { name: 'cli.md', title: 'Command line' },
+  { name: 'alfred.md', title: 'Alfred' },
+  { name: 'concierge.md', title: 'Concierge' },
+  { name: 'packs/README.md', title: 'Authoring tools' },
+  { name: 'packs/adapt.md', title: 'Adapt' },
+  { name: 'packs/captivate.md', title: 'Captivate' },
+  { name: 'packs/dominknow.md', title: 'dominKnow' },
+  { name: 'packs/evolve.md', title: 'Evolve' },
+  { name: 'packs/ispring.md', title: 'iSpring' },
+  { name: 'packs/lectora.md', title: 'Lectora' },
+  { name: 'packs/pipwerks.md', title: 'pipwerks' },
+  { name: 'packs/rise.md', title: 'Rise' },
+  { name: 'packs/scormdriver.md', title: 'SCORM Driver' },
+  { name: 'packs/storyline.md', title: 'Storyline' },
+  { name: 'packs/xyleme.md', title: 'Xyleme' },
+]

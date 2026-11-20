@@ -103,3 +103,26 @@ ol.chain li { margin: .35em 0; }
 .tl-init { fill: #1e7d32; } .tl-get { fill: #1565c0; } .tl-set { fill: #7b1fa2; } .tl-commit { fill: #00838f; } .tl-finish { fill: #5d4037; }
 .tl-other, .tl-script { fill: var(--muted); } .tl-ms { fill: #1e7d32; } .tl-bad { fill: var(--err); } .tl-dom { fill: #ff9800; }
 .tl-mlabel { fill: var(--fg); font-size: 11px; }
+
+/* Docs panel, start screen, tab gap */
+[hidden] { display: none !important; }
+#help { margin-left: auto; }
+#docs { width: 450px; flex: none; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.docs-head { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.docs-head select { flex: 1; min-width: 0; }
+.doc { flex: 1; overflow: auto; padding: 4px 14px 24px; font-size: 13px; line-height: 1.55; }
+.doc h1 { font-size: 20px; margin: 12px 0 8px; } .doc h2 { font-size: 16px; margin: 18px 0 6px; border-bottom: 1px solid var(--line); padding-bottom: 3px; } .doc h3 { font-size: 14px; margin: 14px 0 4px; } .doc h4 { font-size: 13px; margin: 12px 0 4px; }
+.doc a { color: var(--accent); }
+.doc pre { white-space: pre; overflow-x: auto; }
+.doc :not(pre) > code { background: var(--code); padding: 0 3px; border-radius: 3px; }
+.doc table { display: block; overflow-x: auto; width: max-content; max-width: 100%; margin: 8px 0; }
+.doc th { position: static; }
+.doc blockquote { margin: 8px 0; padding: 0 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.doc img { max-width: 100%; }
+.doc tr.flash { animation: flash 2.5s ease-out; }
+@keyframes flash { from { background: color-mix(in srgb, var(--warn) 40%, transparent); } to { background: transparent; } }
+.welcome { max-width: 760px; padding: 16px 8px; }
+.welcome h2 { font-size: 15px; margin: 16px 0 6px; }
+nav button.gap { margin-left: 16px; }
+@media (max-width: 800px) { #docs { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } }
+.welcome td:last-child { white-space: nowrap; }

@@ -47,8 +47,9 @@ How Package Lab is built, the formats it reads and writes, and how to change it.
 ```
 bin/package-lab.js        CLI
 src/
-  main.js               Electron main process: windows, lab:// server, runs, IPC and web handlers, headless runs
+  main.js               Electron main process: windows, the app menu (buildMenu), lab:// server, runs, IPC and web handlers, headless runs
   preload.cjs           window.lab for the desktop window (IPC)
+  docs.js               The bundled docs: DOCS (name, title, file). scripts/package.js copies exactly these into the app; the docs and doc handlers serve only these names
   web.js                HTTP server for the web interface (API, events, live frames, auth)
   recorder.js           CDP recorder: one per run window or popup; probeSource (the script put into every frame)
   launch.js             What every browser's run shares, in plain Node: serveRequest, launchPlan, the findings of a finished run, savedRun (P2.3)
@@ -99,16 +100,17 @@ src/
   cycle.js              Save and resume: macros (readMacro, macroFile), resumeOptions, cycleFindings, cycleRows (P2.4)
   timeline.js           The Timeline: timelineModel (lanes in ms) and timelineView (fractions of the window shown), for the tab and the report (P4.2)
   ui/                   The interface (desktop window and web)
-    index.html, style.css, app.js
+    index.html, style.css, app.js (an ES module)
     codeview.js         The shared code view (classic script, window.CodeView; P4.1)
     bridge.js           window.lab over HTTP when there is no preload (web)
+    markdown.js         The docs panel's Markdown renderer: escapes everything, drops non-http and relative link schemes, GitHub-style heading ids; no dependencies
 scripts/
-  package.js            Builds Package Lab.app (and --install)
+  package.js            Builds Package Lab.app (and --install); includes the DOCS from src/docs.js
   icon.cjs              Renders build/icon.svg to build/icon.png
   alfred.js             Builds the Alfred workflow
   alfred-scripts.js     The shell the workflow's script actions run; exported so the tests run it (P5.2)
 build/icon.svg          The app icon
-test/test.js            Tests; test/fixtures/base is the sample package
+test/test.js            Tests (including the Markdown renderer); test/fixtures/base is the sample package
 test/packs.js           Rule pack tests (imported by test.js): synthetic packages and hand-made traces
 test/batch.js            Batch check tests (imported by test.js): CSV cells and the formula guard, summary, runs merged into rows, HTML escaping, folders
 test/xapi.js            cmi5 and xAPI tests (imported by test.js): the cmi5 and Tin Can fixtures, validation, the LRS, cmi5 rules, findings, milestones, redaction; pure
@@ -162,6 +164,7 @@ The rest of the file, in order:
   (a web client on `/api/live`, or a headless run with a live folder), and sends a frame only when it changed. Input
   goes to the newest window through `sendInputEvent` and `insertText`. Hidden windows render and take input.
 - **`handlers`:** the interfaces' API. They are registered with `ipcMain.handle` and passed to the web server.
+- **App menu:** `buildMenu()` builds the menu bar (desktop only). Each item sends a `menu` event to the window: `{ action }` for a toolbar button id, or `{ action: 'docs', name }` to open a doc in the docs panel.
 - **Start-up:** handles `open-file` (Finder, `open -a`, Alfred), the single-instance lock, and window creation.
 - **`headless()`:** the `--run` mode. It reads input files from the live folder while it waits.
 
@@ -181,6 +184,8 @@ and a line in the guides. The shape:
   macro: [{ t (ms), type: 'click'|'move'|'wheel'|'key'|'text', x, y, dy, key, text }] (see Save and resume) }
 ```
 
+The UI keeps the remembered launch options (the ones listed in the [user guide](user-guide.md#testing-a-theory-launch-settings)) in localStorage under `pl.launch`; in the web interface that is per browser. The docs panel's state is under `pl.docs`.
+
 `launchItem` takes `{ item, cmi?, ...options }`, normalises the options and saves them in `launch.options` (the older
 `launch` fields stay for version 1 readers). The CLI merges the `--options` file and then the flags, normalises, and
 writes the result to the job file as `options`; the headless run normalises it again. `cliCommand(options, { zip, item })`
@@ -197,6 +202,8 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `boot` | `{ item }` | The boot graph for a manifest item index |
 | `launch` | `{ item, cmi?, …launch options }` (flat; unknown options throw) | `true` |
 | `options` | `{ item?, …launch options }` | `{ options, command }`: the normalised options and the equivalent `package-lab run` line |
+| `docs` | — | The bundled docs (the entries of `DOCS`) |
+| `doc` | `{ name }` | The Markdown of one bundled doc. Only names in `DOCS` are served; others are refused |
 | `reference` | `{ url, caught, auto }` | `true` |
 | `files` | — | Every file of the package (and added override paths): `[{ path, size, text, overridden }]` |
 | `file` | `{ path }` | `{ path, size, text, tooBig, overridden, content, original }`. `content` is the text (the override if there is one), `null` for binary or over 1 MB; `original` the unchanged text when overridden |

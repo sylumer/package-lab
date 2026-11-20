@@ -3,7 +3,10 @@
 This guide covers the desktop app. The [web interface](web.md) is the same app in a browser, with an extra **Live** tab.
 
 - [Opening Package Lab](#opening-package-lab)
+- [The start screen](#the-start-screen)
+- [The app menu](#the-app-menu)
 - [The window](#the-window)
+- [The docs panel](#the-docs-panel)
 - [Opening a package](#opening-a-package)
 - [Before running: Findings and Boot path](#before-running-findings-and-boot-path)
 - [Launching an item](#launching-an-item)
@@ -44,6 +47,31 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 
 Only one Package Lab window runs at a time. Opening another package sends it to the window that's already open.
 
+## The start screen
+
+Before a package is open, the window shows what Package Lab does and a table of symptoms. Find the one that matches,
+press what it says, and choose **Steps** to read the recipe for it.
+
+| Symptom | What to press | Steps |
+|---|---|---|
+| The page is blank | **Launch**, then read **Findings**, **Boot path** and **Errors** | [Steps](recipes.md#shows-a-blank-page) |
+| The content never talks to the LMS | **Launch**, then look at **Lookups** and **API** | [Steps](recipes.md#no-api-calls) |
+| It doesn't save or resume | **Test saving** (set up a macro first) | [Steps](recipes.md#doesnt-resume) |
+| Works in Chrome, not in Safari or on an iPad | **More options**: Storage "Blocked", Browser "WebKit", Device size; then **Launch** | [Steps](recipes.md#works-in-chrome-not-in-safari-or-on-an-ipad) |
+| Works in one LMS, not another | **Experiments**, or choose a **Profile** and **Launch** | [Steps](recipes.md#works-in-one-lms-not-another) |
+| Works in the authoring tool, not in an LMS | **Launch**, then **Server needs**: Discover all server requests | [Steps](recipes.md#works-on-the-authoring-platform-not-in-an-lms) |
+
+## The app menu
+
+On the desktop, the menu bar has the toolbar's actions and a few more. Reload is ⇧⌥⌘R, so ⌘R is **Launch**.
+
+| Menu | Items |
+|---|---|
+| **File** | **Open Package…** ⌘O, **Open Recent**, **Compare Packages…**, **Check a Folder…**, **Open Saved Run…**, **Export Corrected Package…** ⌘E |
+| **Run** | **Launch** ⌘R, **Test Saving** ⇧⌘R, **Record Reference**, **Stop and Analyse** ⌘. |
+| **View** | **Reload** ⇧⌥⌘R |
+| **Help** | **Show Docs** ⇧⌘H, **User Guide**, **Recipes**, **Findings**, **Show Data Folder** (opens `~/Library/Application Support/Package Lab`) |
+
 ## The window
 
 - **Toolbar, first row:**
@@ -58,12 +86,25 @@ Only one Package Lab window runs at a time. Opening another package sends it to 
   - the status line
 - **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the tabs.
   The **R** and **F** buttons are for comparing.
-- **Tabs:** Findings, Boot path, Package, Files, API, xAPI, Lookups, Network, Scripts, Execution, Drill-down, Timeline,
-  Errors, Console, Frames, Compare, Package diff, Folder check, Experiments, Test saving and Server needs. (The web
-  interface has a **Live** tab instead of Folder check.) The **Filter** box filters whichever table is showing.
+- **Tabs:** Findings, Boot path, API and Lookups always show, and so do the tabs you start things from: Experiments,
+  Test saving, Server needs, Drill-down, Folder check and, in the web interface, Live. (The web interface has a
+  **Live** tab instead of Folder check.) The result tabs (Package, Files, xAPI, Network, Scripts, Console, Errors,
+  Frames, Execution, Timeline, Compare, Package diff) show only when the selected run has something for them. A small
+  gap separates the tool tabs from the result tabs. The **Filter** box filters whichever table is showing.
+- **Help** at the right end of the toolbar opens the docs; see [The docs panel](#the-docs-panel).
 
 When no run is selected, the tabs show the package as read from its files. When a run is selected, they show that run.
 [The tabs and buttons, one by one](#the-tabs-and-buttons-one-by-one) says what each one is for.
+
+## The docs panel
+
+**Help** (at the right end of the toolbar, or **Show Docs** in the Help menu) opens the docs in a panel on the right of
+the window. Choose a doc from the list. **Back** returns to the doc you were reading, and **Close** shuts the panel.
+Links to other docs open in the panel; web links open in your browser. The panel remembers whether it was open and
+which doc it showed.
+
+The docs are bundled in the app: this guide, the recipes, the findings, the web interface, the command line, Alfred,
+Concierge and the authoring-tool notes. The web interface has the panel too.
 
 ## The tabs and buttons, one by one
 
@@ -131,12 +172,13 @@ Each tab below says what it shows and what its buttons do. Where a feature has a
 | **Open saved…** | Opens a saved run | [Saved runs](#saved-runs) |
 | **More options** | Every launch option, the profile fields, pins, answers and macro | [Testing a theory](#testing-a-theory-launch-settings) |
 | **Copy as CLI command** (under More options) | Copies the `package-lab run` line for this launch | [cli.md](cli.md#copy-as-cli-command) |
+| **Help** | Opens the docs in a panel on the right | [The docs panel](#the-docs-panel) |
 
 ## Opening a package
 
 Choose **Open package…** and pick the `.zip`. Package Lab reads it in memory; it isn't unpacked anywhere. The
 **Findings** tab fills straight away with what can be told from the files. The status line counts the errors and
-warnings.
+warnings. **File › Open Recent** lists packages you opened before.
 
 The package is checked like this:
 - The manifest must be called `imsmanifest.xml`, in lower case, at the top of the ZIP.
@@ -151,7 +193,8 @@ The package is checked like this:
 - **info** is context.
 
 Each finding has an explanation, the evidence (file and line, or what happened), and **Try:** with what to do.
-[Findings](findings.md) explains every one.
+[Findings](findings.md) explains every one. **What this means** opens that finding's row in [Findings](findings.md) in the
+docs panel, where the row is briefly highlighted.
 
 **Boot path** is how the selected item's launch page should load, worked out from the files:
 
@@ -345,6 +388,11 @@ Under the toolbar, **More options** shows every option the next launch will use,
 which you can change (see below).
 **Copy as CLI command** copies the `package-lab run …` line that repeats the launch from the command line. Options that
 have no flag are left out of the line; it adds `--options options.json` to say a file is needed. [The CLI guide](cli.md#copy-as-cli-command) lists the other file names it uses.
+
+The desktop app remembers these launch options between sessions: **API**, **Profile**, **Frame depth**, **In a new
+window**, **Stop after**, **Record caught errors**, **Storage**, **Browser**, **Device size** and **Trace the code**. The
+web interface remembers them in each browser. **Item**, **Resume last run's data**, pins, answers and the macro are not
+remembered.
 
 ## Running it the way an LMS does: profiles
 
