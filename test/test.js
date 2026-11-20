@@ -403,17 +403,17 @@ assert.equal(experimentFindings([exRes('default', normaliseOptions({ storage: 'b
 // The browsers preset (P2.3): Chromium against WebKit; the one the default already is is left out.
 assert.deepEqual(planVariants({ base: {}, variants: PRESETS.browsers }).map(p => p.name), ['default', 'browser webkit'], 'experiments: browsers preset')
 assert.deepEqual(planVariants({ base: { browser: 'webkit' }, variants: PRESETS.browsers }).map(p => p.name), ['default', 'browser chromium'], 'experiments: browsers preset from a webkit base')
-// WebKit's launch plan and files (P2.3): the same plan as Electron's with the addresses on lab.invalid, and the same served files.
+// WebKit's launch plan and files (P2.3): the same plan as Electron's with the addresses on lms.lab.invalid, and the same served files.
 {
   const pk = { name: 'good.zip', files: unzip(readFileSync(good)) }; pk.analysis = analyze(pk.files)
   const e = launchPlan({ pkg: pk, item: 0, options: {} }), w = launchPlan({ pkg: pk, item: 0, options: { browser: 'webkit', viewport: 'iphone' }, origins: WEBKIT_ORIGINS })
-  assert.equal(e.config.launch, 'lab://run/pkg/lesson.html', 'plan: Electron’s address'); assert.equal(w.config.launch, 'https://lab.invalid/pkg/lesson.html', 'plan: WebKit’s address')
+  assert.equal(e.config.launch, 'lab://run/pkg/lesson.html', 'plan: Electron’s address'); assert.equal(w.config.launch, 'https://lms.lab.invalid/pkg/lesson.html', 'plan: WebKit’s address')
   assert.equal(w.launch.url, 'lab://run/pkg/lesson.html', 'plan: the launch keeps the lab:// address in every browser')
   assert.equal(w.label, 'good.zip · Lesson and quiz · SCORM 1.2 · webkit · iphone', 'plan: label names the browser and device size'); assert.ok(!/webkit|iphone/.test(e.label), 'plan: Chromium at the window’s size adds nothing')
   assert.deepEqual({ ...w.config, launch: 0 }, { ...e.config, launch: 0 }, 'plan: the test LMS’s configuration is the same'); assert.deepEqual(w.headers, e.headers)
   const other = launchPlan({ pkg: pk, item: 0, options: { browser: 'webkit', profile: { contentOrigin: 'other' } }, origins: WEBKIT_ORIGINS })
-  assert.equal(other.config.launch, 'https://content.invalid/pkg/lesson.html', 'plan: content on another origin'); assert.equal(other.launch.url, 'lab://content/pkg/lesson.html')
-  assert.equal(launchPlan({ pkg: pk, item: 0, options: { launchParams: 'a=1' }, origins: WEBKIT_ORIGINS }).config.launch, 'https://lab.invalid/pkg/lesson.html?a=1')
+  assert.equal(other.config.launch, 'https://cdn.content.invalid/pkg/lesson.html', 'plan: content on another origin'); assert.equal(other.launch.url, 'lab://content/pkg/lesson.html')
+  assert.equal(launchPlan({ pkg: pk, item: 0, options: { launchParams: 'a=1' }, origins: WEBKIT_ORIGINS }).config.launch, 'https://lms.lab.invalid/pkg/lesson.html?a=1')
   assert.throws(() => launchPlan({ pkg: pk, item: 99, options: {} }), /nothing to launch/)
   const rq = (path, extra = {}) => serveRequest({ path, lms: true, config: { a: 1 }, files: new Map([['a.js', Buffer.from('0123456789')]]), headers: { 'X-Test': '1' }, ...extra })
   assert.deepEqual([rq('/__lab/config.json').status, rq('/__lab/config.json').body], [200, '{"a":1}'], 'serve: config'); assert.equal(rq('/__lab/host.html').headers['Content-Type'], 'text/html; charset=utf-8')
@@ -424,7 +424,7 @@ assert.deepEqual(planVariants({ base: { browser: 'webkit' }, variants: PRESETS.b
 {
   const wk = { label: 'x', browser: 'webkit', started: '', ended: '', duration: 900, cmi: null, truncated: {}, requests: [{ t: 5, sid: '', id: '1', url: 'lab://run/pkg/lesson.html', method: 'GET', type: 'Document', status: 200, from: [] }],
     exceptions: [{ t: 40, sid: '', text: 'TypeError: undefined is not an object (evaluating \'navigator.userAgentData.brands\')', url: 'lab://run/pkg/lesson.js', line: 1, at: [{ fn: '', url: 'lab://run/pkg/lesson.js', line: 1, col: 5 }] }],
-    probe: [{ type: 'frame', frame: 'lab://run/pkg/lesson.html', depth: 1, topReachable: true, origin: 'https://lab.invalid', t: 20, sid: '' }, { type: 'dom', frame: 'lab://run/pkg/lesson.html', readyState: 'complete', text: 100, media: 0, visible: 5, hidden: false, t: 30, sid: '' }] }
+    probe: [{ type: 'frame', frame: 'lab://run/pkg/lesson.html', depth: 1, topReachable: true, origin: 'https://lms.lab.invalid', t: 20, sid: '' }, { type: 'dom', frame: 'lab://run/pkg/lesson.html', readyState: 'complete', text: 100, media: 0, visible: 5, hidden: false, t: 30, sid: '' }] }
   const launch = { kind: 'package', version: '1.2', expose: '1.2', depth: 0, opener: false, itemType: 'sco', profile: PROFILES.generic, options: normaliseOptions({ browser: 'webkit' }) }
   assert.ok(runFindings(wk, launch).some(f => /error/i.test(f.title) && f.evidence.some(x => /brands/.test(x)) || /brands/.test(JSON.stringify(f))), 'webkit trace: runFindings reports the error')
   assert.ok(Array.isArray(launchFindings(wk, null)), 'webkit trace: launchFindings')
@@ -1835,6 +1835,19 @@ if (!process.argv.includes('--unit')) {
     assert.ok(titles(cspRun).some(t => /refused to load or run something/.test(t) && /script-src 'none'/.test(t)), 'profile: the CSP header applies: ' + titles(cspRun))
     const lx = JSON.parse(node(['experiment', good, '--preset', 'lms', '--wait', '2', '--json']).stdout)
     assert.deepEqual(lx.variants.map(v => v.name), ['default', ...PROFILE_NAMES.slice(1).map(n => 'lms ' + n)], 'experiment: the lms preset')
+  }
+  // What the content sees of its own address: https, a secure context (SCORM Lab serves https://lms.lab.invalid/ and https://cdn.content.invalid/),
+  // while the trace keeps the lab:// form. A course that reads location.href with a regex must not get lab:// (that once hid a hang).
+  const seen = fixture('seen', d => sub(d, 'lesson.html', '<script src="scorm.js"></script>', `<script>
+var m = location.href.match(/https?:\\/\\/[^\\/]*\\.([^\\/:\\.]*\\.[^\\/:\\.]*).[^\\/:]*\\//)
+console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: location.hostname, secure: isSecureContext, https: location.href.startsWith('https://'), regex: m && m[1] }))
+</script><script src="scorm.js"></script>`))
+  for (const [name, args, host, origin] of [['same', [], 'lms.lab.invalid', 'lab://run'], ['other', ['--profile-file', profFile('seen-other', { contentOrigin: 'other' })], 'cdn.content.invalid', 'lab://content']]) {
+    const out = join(work, `seen-${name}.json`), r = run(seen, ...args, '--out', out), sv = JSON.parse(readFileSync(out, 'utf8'))
+    const line = sv.trace.console.map(c => c.text).find(t => /^SEEN /.test(t)); assert.ok(line, `origin ${name}: the content logged: ` + JSON.stringify(sv.trace.console))
+    assert.deepEqual(JSON.parse(line.slice(5)), { protocol: 'https:', host, secure: true, https: true, regex: host.split('.').slice(1).join('.') }, `origin ${name}: the content sees https, and the tenant-host regex finds its domain without throwing`)
+    assert.ok(sv.trace.requests.some(q => q.url.startsWith(origin + '/pkg/lesson.html') && q.status === 200) && !JSON.stringify(sv.trace).includes('.invalid/'), `origin ${name}: the trace keeps lab:// addresses`)
+    if (name === 'same') assert.ok(calls(r).includes('LMSInitialize '), 'origin: SCORM still works')   // on another origin the API is out of reach
   }
   console.log('profiles: ok')
 

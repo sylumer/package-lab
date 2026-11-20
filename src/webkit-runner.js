@@ -1,7 +1,7 @@
 // WebKit runs (P2.3): the same launch as an Electron run, in Safari's engine through Playwright. It runs in plain Node
 // (the CLI's process, or a child the apps start), not in Electron. The package and the test LMS's files are served from
-// memory through the browser's request routing at https://lab.invalid/ (the LMS, as lab://run/ is) and
-// https://content.invalid/ (lab://content/), the probe goes in ahead of every page's own scripts, and what the browser
+// memory through the browser's request routing at https://lms.lab.invalid/ (the LMS, as lab://run/ is) and
+// https://cdn.content.invalid/ (lab://content/), the probe goes in ahead of every page's own scripts, and what the browser
 // reports is written as the same trace as a run in Electron, with trace.browser = 'webkit'. There is no coverage, no
 // caught errors, no script sources and no script list: Playwright can't see them. Findings that use them say nothing.
 // Playwright is an optional devDependency, loaded when a WebKit run starts. See docs/developer-guide.md.
@@ -10,7 +10,7 @@ import { unzip } from './zip.js'
 import { analyze } from './analyze.js'
 import { answerFor, buildAnswer, userAgentPin } from './pins.js'
 import { probeSource, FLUSH, CAP } from './recorder.js'
-import { serveRequest, launchPlan, WEBKIT_ORIGINS } from './launch.js'
+import { serveRequest, launchPlan, toLab, WEBKIT_ORIGINS } from './launch.js'
 import { createLrs, maskTokens, MAX_BODY } from './lrs.js'
 
 const HOW = 'npm i -D playwright && npx playwright install webkit'
@@ -28,10 +28,8 @@ export async function loadPlaywright() {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
-// The addresses the browser sees, as the trace keeps them (lab://run/…), so every finding reads the same in every browser.
-const toLab = s => String(s ?? '').replaceAll(WEBKIT_ORIGINS.lms, 'lab://run').replaceAll(WEBKIT_ORIGINS.content, 'lab://content')   // origins too (the probe's origin field)
 const withTimeout = (p, ms = 3000) => Promise.race([p, sleep(ms).then(() => { throw new Error('timed out') })])
-const labHost = u => { try { return /^(lab|content)\.invalid$/.test(new URL(u).hostname) } catch { return false } }
+const labHost = u => { try { return /^(lms\.lab|cdn\.content)\.invalid$/.test(new URL(u).hostname) } catch { return false } }
 const TYPES = { document: 'Document', script: 'Script', xhr: 'XHR', fetch: 'Fetch', stylesheet: 'Stylesheet', image: 'Image', media: 'Media', font: 'Font', websocket: 'WebSocket', manifest: 'Manifest', other: 'Other' }
 // A stack as Playwright gives it for a page error (V8's format, "at fn (url:line:col)", in every browser) as the trace's frames.
 const frames = stack => String(stack ?? '').split('\n').map(l => /^\s*at (?:(.*?) \()?(.+?):(\d+):(\d+)\)?$/.exec(l)).filter(Boolean).slice(0, 8)

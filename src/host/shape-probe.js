@@ -17,7 +17,8 @@
     if (!url) return false
     let u
     try { u = new URL(url, location.href) } catch (e) { return false }
-    return res.some(re => re.test(u.href) || re.test(u.pathname + u.search) || re.test(u.pathname))
+    const lab = u.href.replace(/^https:\/\/lms\.lab\.invalid\//, 'lab://run/').replace(/^https:\/\/cdn\.content\.invalid\//, 'lab://content/')   // patterns are written against the trace's form
+    return res.some(re => re.test(u.href) || re.test(lab) || re.test(u.pathname + u.search) || re.test(u.pathname))
   }
   const send = d => { try { __labReport(JSON.stringify({ frame: location.href, ...d })) } catch (e) { /* binding missing */ } }
   // Frames of the content only: the probe's own have no address.

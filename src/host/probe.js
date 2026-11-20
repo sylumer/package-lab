@@ -17,7 +17,7 @@
   const seen = new Map()
   // On a real LMS or hosted platform (anything but SCORM Lab's own host page, which logs its own calls), the API
   // object's methods are wrapped so that its calls are recorded too.
-  const ownHost = /^(lab:\/\/run|https:\/\/lab\.invalid)\/__lab\//.test(location.href)   // SCORM Lab's own pages: lab://run/ in Electron, https://lab.invalid/ in WebKit
+  const ownHost = /^(lab:\/\/run|https:\/\/lms\.lab\.invalid)\/__lab\//.test(location.href)   // SCORM Lab's own pages: lab://run/ in Electron, https://lms.lab.invalid/ in every run
   const QUIET = /GetLastError|GetErrorString|GetDiagnostic/
   const wrap = (name, v) => {
     if (ownHost || !v || typeof v !== 'object' || v.__labWrapped) return v

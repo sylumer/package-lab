@@ -365,7 +365,7 @@ Choosing another profile clears your changes.
 
 | Field | What it does |
 |---|---|
-| **Content origin** | **same**: the content is served from the LMS's origin (`lab://run/`). **other**: from another origin (`lab://content/`), as when an LMS serves packages from a separate domain or CDN. The content then can't read anything on the LMS's windows, the API included |
+| **Content origin** | **same**: the content is served from the LMS's origin (`https://lms.lab.invalid/`; shown as `lab://run/` in findings and traces). **other**: from another origin (`https://cdn.content.invalid/`, shown as `lab://content/`), as when an LMS serves packages from a separate domain or CDN. The content then can't read anything on the LMS's windows, the API included |
 | **Frames**, **Frame kind** | How many empty LMS frames are between the LMS page and the content (0–5), and whether they are `iframe`s or a `frameset` with `frame`s |
 | **Sandbox**, **Allow** | The `sandbox` and `allow` attributes of the content's own frame (iframes only). An empty sandbox means none. A sandbox without `allow-same-origin` gives the content an opaque origin |
 | **Launch**, **Popup delay** | **frame**, or **popup**: the LMS opens the content with `window.open`, after the delay |

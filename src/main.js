@@ -8,7 +8,7 @@
 //   --serve[=port]       start the web interface (default port 4880); --host=<address> (default 127.0.0.1)
 //   --no-window          no desktop window (with --serve: a server only)
 //   --show-runs          with --no-window: show the content windows anyway
-import { app, BrowserWindow, ipcMain, dialog, protocol, session } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, net, protocol, session } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { basename, extname, join } from 'node:path'
@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { unzip } from './zip.js'
 import { analyze } from './analyze.js'
-import { Recorder, shiftTimes } from './recorder.js'
+import { Recorder, shiftTimes, markAnswers } from './recorder.js'
 import { compare } from './diff.js'
 import { staticFindings, compareFindings, sortFindings, runFindings, launchFindings } from './rules.js'
 import { bootGraph, bootRun } from './bootpath.js'
@@ -33,7 +33,8 @@ import { cycleFindings, cycleRows, macroFromTrace, resumeOptions } from './cycle
 import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
 import { PROFILES, launchProfile } from './profiles.js'
-import { serveRequest, WEBKIT_ORIGINS, launchPlan, withProgress, runAnalysis, savedRun } from './launch.js'
+import { answerFor, buildAnswer } from './pins.js'
+import { serveRequest, toLab, WEBKIT_ORIGINS, launchPlan, withProgress, runAnalysis, savedRun } from './launch.js'
 import { renderReport } from './report.js'
 import { codeViewAsync } from './codeview.js'
 import { timelineView } from './timeline.js'
@@ -63,6 +64,7 @@ let ui = null, web = null, pkg = null, config = {}, active = null, nextId = 1
 let served = null   // the files the running content is served from: the package's, with any overrides on top
 let pkgHeaders = {} // the run's LMS profile's headers on package files: its own, and its CSP
 let lrs = null      // a cmi5 or Tin Can run's LRS (src/lrs.js): served at lab://run/__lrs/, and recorded in the trace
+let answers = { responses: [], log: [] }   // the run's answers (pins.js) and the requests the https handler answered with them
 let tracing = null  // a traced run (options.trace): { files: path → instrumented entry served in this run, untraced: path → why, sites }
 const runs = new Map()
 const runsDir = () => { const d = join(app.getPath('userData'), 'runs'); mkdirSync(d, { recursive: true }); return d }
@@ -74,8 +76,9 @@ function emit(channel, data) {
 }
 
 // ---- The package server ----
-async function serve(req) {
-  const u = new URL(req.url)
+// href: the lab:// address the request is served as (an https://lms.lab.invalid/ request is handled under its lab:// name).
+async function serve(req, href = req.url) {
+  const u = new URL(href)
   let path
   try { path = decodeURIComponent(u.pathname) } catch { path = u.pathname }
   // lab://run/ is the LMS's origin; lab://content/ serves the same package from another origin (a profile's contentOrigin: other).
@@ -163,6 +166,7 @@ async function begin({ kind, label, url, launch, partition, lrs: lrsConfig, caug
   served = files ?? null   // only now: the previous run may have been using the old set
   pkgHeaders = headers ?? {}
   lrs = null
+  answers = { responses: responses ?? [], log: [] }
   tracing = trace ? { files: new Map(), untraced: new Map(), sites: pkg.sites } : null
   const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
@@ -173,7 +177,7 @@ async function begin({ kind, label, url, launch, partition, lrs: lrsConfig, caug
   if (lrsConfig) lrs = createLrs({ ...lrsConfig, now: () => rec.t() })   // its times are on the run's clock, like the probe's
   win.webContents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { show: SHOW_RUNS, webPreferences: { partition, sandbox: true, backgroundThrottling: false } } }))
   watchPopups(win.webContents, extra, ropts, wins)
-  active = { win, wins, rec, extra, kind, label, launch, boot, tracing, lrs, started: Date.now(), leave }
+  active = { win, wins, rec, extra, answers: answers.log, kind, label, launch, boot, tracing, lrs, started: Date.now(), leave }
   win.on('close', e => { if (active?.win === win) { e.preventDefault(); finish() } })
   if (auto > 0) { const a = active; a.timer = setTimeout(() => { if (active === a) finish() }, auto * 1000) }
   // The debugger needs a renderer: start one on a blank page, attach, then go to the content.
@@ -213,6 +217,7 @@ async function finishActive(a) {
     trace.untraced = [...a.tracing.untraced].map(([file, why]) => ({ file, why }))
     restoreTrace(trace, a.tracing.files)
   }
+  markAnswers(trace, a.answers)
   trace.cmi = cmi
   if (a.lrs) { trace.lrs = a.lrs.snapshot(); maskTokens(trace) }
   if (a.kind === 'package' && cmi && pkg) pkg.lastCmi = cmi
@@ -352,11 +357,11 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, leave = false, ...re
   if ((norm.tool ?? null) !== (pkg.analysis.tool ?? null)) pkg.analysis = analyze(pkg.files, { tool: norm.tool })   // the Authoring tool setting changes the pack findings
   const cmi = givenCmi ?? (norm.resume && pkg.lastCmi ? pkg.lastCmi : null)
   const plan = launchPlan({ pkg, item: itemIndex, cmi, options: { ...norm, ...(process.env.SCORM_LAB_FORCE_TRACE === '1' && norm.browser === 'chromium' ? { trace: true } : {}) },   // tests: every Electron run traced
-    origins: norm.browser === 'webkit' ? WEBKIT_ORIGINS : undefined })
+    origins: WEBKIT_ORIGINS })   // https in Electron too: content that reads its own address must see a real one (lab:// hid a hang)
   const { o, res, files, config: cfg, launch, headers, label } = plan
   if (o.browser === 'webkit') { if (o.macro.length || leave) throw webkitMacro(); return beginWebkit({ plan, itemIndex, cmi }) }
   config = { ...cfg, snapshots: leave }   // the test LMS page reports its data model as it changes only for a run that will leave (host.js)
-  await begin({ kind: 'package', label, url: 'lab://run/__lab/host.html', launch, partition: 'lab', lrs: plan.lrs, caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers, storage: launch.storage, viewport: o.viewport, leave, recordInput: o.recordInput })
+  await begin({ kind: 'package', label, url: WEBKIT_ORIGINS.lms + '/__lab/host.html', launch, partition: 'lab', lrs: plan.lrs, caught: o.caught, boot: res.path ? bootFor(res.path, files) : null, auto: o.auto, files, pins: o.pins, responses: o.responses, trace: o.trace, headers, storage: launch.storage, viewport: o.viewport, leave, recordInput: o.recordInput })
   // The macro's events at their times into the run, through the same input as the live view; they stop if the run ends first.
   // A click in a frame of another origin was only placed approximately (approx): it is skipped, and the trace says so.
   const a = active, skipped = o.macro.filter(e => e.approx).length
@@ -766,7 +771,20 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  session.fromPartition('lab').protocol.handle('lab', serve)
+  const lab = session.fromPartition('lab')
+  lab.protocol.handle('lab', serve)
+  // The content sees https://lms.lab.invalid/ and https://cdn.content.invalid/ (WEBKIT_ORIGINS); they are served as lab://run and lab://content. Any other
+  // https address goes to the network. Both are answered here when a response of the run matches (the Fetch domain never sees these requests).
+  lab.protocol.handle('https', req => {
+    const u = new URL(req.url), to = u.origin === WEBKIT_ORIGINS.lms ? 'lab://run' : u.origin === WEBKIT_ORIGINS.content ? 'lab://content' : null
+    const hit = answerFor(answers.responses, toLab(req.url), req.method), entry = hit && { method: req.method, url: toLab(req.url), index: hit.index }
+    if (hit) try {
+      const a = buildAnswer(hit.response)
+      answers.log.push(entry)
+      return new Response([101, 204, 205, 304].includes(a.status) ? null : Buffer.from(a.body, 'base64'), { status: a.status, headers: a.headers.map(h => [h.name, h.value]) })
+    } catch (e) { answers.log.push({ ...entry, failed: String(e?.message ?? e).slice(0, 200), match: hit.response.match }) }   // the request goes on to the server, as unanswered
+    return to ? serve(req, to + u.pathname + u.search) : net.fetch(req, { bypassCustomProtocolHandlers: true })
+  })
   if (!WINDOW) app.dock?.hide()
   if (JOB) return headless(JOB).catch(e => { console.error(e); app.exit(1) })
   if (SERVE) {

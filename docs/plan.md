@@ -660,7 +660,7 @@ explained.
 - Add `playwright` as an optional devDependency, loaded with dynamic import. When it's missing, say how to install it
   (`npm i -D playwright && npx playwright install webkit`) and refuse the run.
 - New `src/webkit-runner.js`, run from the CLI's Node process, not Electron. It does the following:
-  - Launch WebKit and serve the package and host files from memory through `page.route('https://lab.invalid/**')`.
+  - Launch WebKit and serve the package and host files from memory through `page.route('https://lms.lab.invalid/**')`.
     This is the same layout as `lab://run/`, with `run/` → `/`, so host files work unchanged.
   - Add the probe with `addInitScript`, and expose `__labReport` with `exposeBinding`. Apply pins, responses and
     overlays the same way.

@@ -231,6 +231,14 @@ the run without script sources and raw coverage, with `boot.nodes` already match
 
 ## Serving the package: lab://
 
+**What the content sees is https.** In every browser the content loads `https://lms.lab.invalid/…` (the LMS) and
+`https://cdn.content.invalid/…` (another origin), so `location.href`, `location.protocol` and `isSecureContext` are those of
+a real https LMS. In Electron the `lab` partition handles `https` (`main.js`): those two hosts are served as `lab://run` and
+`lab://content` by the code below, any other https address goes to the network (`net.fetch` with
+`bypassCustomProtocolHandlers`). The trace, the findings and the UI keep the `lab://` form (`toLab` in `launch.js`, applied by
+`Recorder.onEvent` to each CDP event, to the coverage and sources, and to the blocked-lookup frame), so saved runs from before
+the change still load. The paths below are the `lab://` names.
+
 `lab://` is registered as privileged (standard, secure, fetch, CORS, stream) and handled on the `lab` session
 partition only.
 
@@ -483,8 +491,8 @@ read from its `trace.cmi`. Checks run in this order: nothing saved (error; stops
 (what the test LMS and the package serve for a path: config, host files, package files with ranges and the profile's
 headers), `launchPlan` (the item, options and resume data → the test LMS's configuration, the content's address, the
 headers, the label and the `launch` object), `withProgress` and `runAnalysis` (a finished run's findings and milestones),
-and `savedRun`. `launchPlan` takes `origins`: `lab://run` and `lab://content` in Electron, `https://lab.invalid` and
-`https://content.invalid` in WebKit (`WEBKIT_ORIGINS`). Only `config.launch`, the address the browser loads, differs:
+and `savedRun`. `launchPlan` takes `origins`: `WEBKIT_ORIGINS` (`https://lms.lab.invalid`, `https://cdn.content.invalid`) for Electron and WebKit alike;
+`LAB_ORIGINS` (`lab://run`, `lab://content`) is the default and only the form the trace keeps. Only `config.launch`, the address the browser loads, differs:
 `launch.url` stays `lab://…` so a saved run reads the same in every browser. `recorder.js`'s `probeSource` builds the
 script put into every frame (storage mode, pins, shape and trace probes, then `probe.js`), for both browsers.
 
@@ -495,11 +503,11 @@ install webkit". Playwright is an optional devDependency; nothing else imports i
 
 - Launches WebKit with one context: the viewport (`options.viewport`, else 1100 × 800, the Electron window), device scale
   factor, `isMobile`, `hasTouch`, and a user agent (a pinned `navigator.userAgent`, else the device's).
-- `ctx.route('**/*')` serves `https://lab.invalid/` and `https://content.invalid/` from memory with `serveRequest`
+- `ctx.route('**/*')` serves `https://lms.lab.invalid/` and `https://cdn.content.invalid/` from memory with `serveRequest`
   (`/pkg/` is the package with its overrides, `/__lab/` the test LMS), answers a request a response matches
   (`answerFor`, `buildAnswer`, marking the request `answered`), and lets anything else go to the network.
 - `ctx.exposeBinding('__labReport')` and `ctx.addInitScript(probeSource(…))` give the probe the same channel as in
-  Electron. The probe's own pages are recognised by `https://lab.invalid/__lab/` as well as `lab://run/__lab/`; its
+  Electron. The probe's own pages are recognised by `https://lms.lab.invalid/__lab/` as well as `lab://run/__lab/`; its
   `stack()` skips one frame fewer in WebKit, whose stack has no message line. The first blank page of a window is left out of
   the probe's reports (Electron's recorder attaches after it).
 - Requests come from the context's `request`, `response` and `requestfailed` events; console, uncaught page errors,
@@ -637,7 +645,7 @@ about SCORM check `analysis.format`. `formatName(analysis)` is the words for it.
 
 **Launching.** `launchPlan` sets `expose: 'none'` (no SCORM API), `launch.format`, and adds the LRS parameters to the URL (`cmi5Query`,
 `tincanQuery`). It returns `plan.lrs`, the LRS's configuration: `{ format, endpoint, token, fetchId, registration, sessionId, activityId, au,
-launchUrl, actor }`. The endpoint is `<lms origin>/__lrs/`: `lab://run/__lrs/` in Electron, `https://lab.invalid/__lrs/` in WebKit (the saved
+launchUrl, actor }`. The endpoint is `<lms origin>/__lrs/`: `https://lms.lab.invalid/__lrs/` in Electron and WebKit (the saved
 `launch.url` stays in `lab://` form). The learner is `learner-1`; the actor is an Agent with an `account` whose `homePage` is the LMS origin. A cmi5
 AU whose `launchMethod` is OwnWindow is opened in a window, as the window-opener profile does.
 
@@ -792,7 +800,7 @@ in `main.js` (in the experiment slot; traces the run again first if it wasn't tr
 
 `src/pins.js` is pure. A **pin** is `{ path, value, frames, mode }` in `options.pins` (checked in `options.js`; `mode` is `'force'` or `'watch'`, `PIN_MODES` in `pins.js`). A **watch** pin (`{ path, frames, mode: 'watch' }`, no value; the drill-down adds them) records reads and writes without forcing anything: its leaf is an accessor that passes the value through (or the original accessor's getter and setter), non-enumerable if the name didn't exist until it is written. Intermediate names of dotted paths share one accessor per object and name (`hooks` in `probe.js`), so `config.a` and `config.b` both follow a new `config`, and a watch on `config` itself reports through that shared accessor; pins are installed longest path first for that. `pinFindings` ignores watch pins. The recorder puts `globalThis.__labPins = [...]` ahead of `probe.js` (`pinPrefix`, applied through `Page.addScriptToEvaluateOnNewDocument` in every page and iframe); the probe reads and deletes it, drops the pins whose `frames` doesn't cover this frame (`'content'` excludes SCORM Lab's own `lab://run/__lab/` pages) and installs each one. A top-level name becomes an accessor on `window`: the getter returns the value and reports `pin-read`, the setter ignores the assignment and reports `pin-write`, so `var x = …` at the top of a classic script assigns through it. A dotted path is an accessor on the root that, when given an object, installs the next segment on that object, and so on; a frozen object makes `defineProperty` throw, which is reported as `pin-failed`. The accessors are `configurable: true` (the plan said `false`) so that a top-level `let` or `const` in the content creates its own binding instead of a SyntaxError that would stop the whole script; `pinFindings` then recognises that case (the pin was never read or written, and `lexicalDeclaration` finds a column-0 `let`/`const` of the root name in `trace.sources`) and says so. Inline scripts count only if the browser recorded them under their page's URL; a `let` inside a function or an indented block isn't a global and isn't matched. `navigator.userAgent` is the exception: `userAgentPin` gives the value, and the recorder sends `Emulation.setUserAgentOverride` to every session. `location` and the other `navigator` names are refused; `launchParams` goes on the launch URL instead.
 
-An **answer** is `{ match, method?, status, headers, body }` in `options.responses`. With responses set, `Recorder.setup` calls `Fetch.enable` (all URLs, request stage) on every session. `Fetch.requestPaused` runs `answerFor(responses, url, method)`: the first response that matches (glob or `/regex/flags`, tried on the whole URL, the path with query, and the path) and isn't for `lab://run/__lab/` is sent with `Fetch.fulfillRequest` (`buildAnswer`: base64 body, a content type guessed from the body if none, CORS opened if not set; a body starting `@probe` is a [probing answer](#discovery-what-the-content-wants-from-its-server)); everything else gets `Fetch.continueRequest`. The matching request in `trace.requests` gets `answered: true` and `answeredBy` (the response's index in the list). `networkId` links the paused request to the Network event, which can arrive on either side of it. Responses apply to package runs only, in every frame and popup. `bodyFile` isn't an option: only the CLI reads files (`--answer pattern=@file`, or a response's `bodyFile` in an `--options` file, relative to that file) and it puts the text in `body`; `normaliseOptions` refuses `bodyFile`, so the web handlers can't be made to read a path.
+An **answer** is `{ match, method?, status, headers, body }` in `options.responses`. With responses set, `Recorder.setup` calls `Fetch.enable` (all URLs, request stage) on every session. In Electron the content's https requests are served by `main.js`'s `https` handler, and the Fetch domain never pauses them, so the handler runs `answerFor` itself (on the `lab://` form of the URL), fulfils with `buildAnswer`, and logs `{ method, url, index }`; `markAnswers` (`recorder.js`) marks the matching `trace.requests` entries when the run ends. `Fetch.requestPaused` still answers other schemes: it runs `answerFor(responses, url, method)`: the first response that matches (glob or `/regex/flags`, tried on the whole URL, the path with query, and the path) and isn't for `lab://run/__lab/` is sent with `Fetch.fulfillRequest` (`buildAnswer`: base64 body, a content type guessed from the body if none, CORS opened if not set; a body starting `@probe` is a [probing answer](#discovery-what-the-content-wants-from-its-server)); everything else gets `Fetch.continueRequest`. The matching request in `trace.requests` gets `answered: true` and `answeredBy` (the response's index in the list). `networkId` links the paused request to the Network event, which can arrive on either side of it. Responses apply to package runs only, in every frame and popup. `bodyFile` isn't an option: only the CLI reads files (`--answer pattern=@file`, or a response's `bodyFile` in an `--options` file, relative to that file) and it puts the text in `body`; `normaliseOptions` refuses `bodyFile`, so the web handlers can't be made to read a path.
 
 `pinFindings(trace, options)` (called from `runFindings` for package runs) gives the findings in [findings.md](findings.md); it works from `launch.options`, so saved runs get them again when reopened. `parsePinFlag` and `parseAnswerFlag` are the CLI's spellings. In the UI, pins and answers are in `st.pins` and `st.responses` and go with every `launchOptions()`.
 
