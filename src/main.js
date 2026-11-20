@@ -5,12 +5,13 @@
 // Command-line flags (all optional):
 //   <file.zip>           open this package in the window
 //   --run=<job.json>     headless: launch one item, wait, write the run to job.out, quit (used by bin/package-lab.js)
-//   --serve[=port]       start the web interface (default port 4880); --host=<address> (default 127.0.0.1)
+//   --serve[=port]       start the web interface (default: the port in Settings, 4880 unless changed); --host=<address> (default 127.0.0.1)
 //   --no-window          no desktop window (with --serve: a server only)
 //   --show-runs          with --no-window: show the content windows anyway
 import { app, BrowserWindow, ipcMain, dialog, net, protocol, session, Menu, shell } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
+import { createServer } from 'node:net'
 import { basename, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
@@ -22,6 +23,7 @@ import { staticFindings, compareFindings, sortFindings, runFindings, launchFindi
 import { bootGraph, bootRun } from './bootpath.js'
 import { runCounts } from './milestones.js'
 import { startWeb } from './web.js'
+import { DEFAULT_PORT, readSettings, writeSettings } from './settings.js'
 import { DOCS } from './docs.js'
 import { normaliseOptions, cliCommand, packagePath } from './options.js'
 import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
@@ -54,7 +56,6 @@ const JOB = flagValue('run', '')
 const SERVE = flag('serve') !== undefined
 const WINDOW = !JOB && flag('no-window') === undefined
 const SHOW_RUNS = WINDOW || flag('show-runs') !== undefined
-const DEFAULT_PORT = 4880
 
 // Headless runs use a throwaway profile, so they never touch the desktop app's saved runs or its lock.
 if (JOB) app.setPath('userData', join(tmpdir(), `package-lab-run-${process.pid}`))
@@ -601,7 +602,12 @@ function runReport({ run, redact }) {
     ...(redact && pkg && r.package === pkg.name && { analysis: pkg.analysis, files: pkg.files }) }) }   // the open package's analysis lets the static findings be redacted at the source too
 }
 
+// Can this port be listened on right now? The web interface of this process counts as free (it is the one using it).
+const portFree = port => web?.server.address()?.port === port ? Promise.resolve(true) : new Promise(r => { const s = createServer().once('error', e => r(e.code !== 'EADDRINUSE')).listen(port, '127.0.0.1', () => s.close(() => r(true))) })
+
 const handlers = {
+  settings: () => ({ ...readSettings(app.getPath('userData')), defaults: { port: DEFAULT_PORT }, path: join(app.getPath('userData'), 'settings.json') }),
+  'settings-set': async ({ port }) => { const settings = writeSettings(app.getPath('userData'), { port: +port }); return { settings, free: await portFree(settings.port) } },
   docs: () => DOCS,
   doc: ({ name }) => {   // name comes from a browser in the web interface: only the bundled docs
     if (!DOCS.some(d => d.name === name)) throw new Error('No such document.')
@@ -784,7 +790,9 @@ function buildMenu() {
   const item = (label, accelerator, action) => ({ label, accelerator, click: send(action) })
   const docs = (label, name, accelerator) => ({ label, accelerator, click: () => { if (ui && !ui.isDestroyed()) ui.webContents.send('menu', { action: 'docs', name }) } })
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { role: 'appMenu' },
+    { label: app.name, submenu: [
+      { role: 'about' }, { type: 'separator' }, item('Settings…', 'CmdOrCtrl+,', 'settings'), { type: 'separator' },
+      { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' } ] },
     { label: 'File', submenu: [
       item('Open Package…', 'CmdOrCtrl+O', 'open'),
       { role: 'recentDocuments', submenu: [{ role: 'clearRecentDocuments' }] },
@@ -824,7 +832,7 @@ app.whenReady().then(async () => {
   if (!WINDOW) app.dock?.hide()
   if (JOB) return headless(JOB).catch(e => { console.error(e); app.exit(1) })
   if (SERVE) {
-    const port = flagValue('serve', '') === '0' ? 0 : +flagValue('serve', DEFAULT_PORT) || DEFAULT_PORT, host = flagValue('host', '127.0.0.1')
+    const port = flagValue('serve', '') === '0' ? 0 : +flagValue('serve', '') || readSettings(app.getPath('userData')).port, host = flagValue('host', '127.0.0.1')
     web = await startWeb({ host, port, uiDir: join(import.meta.dirname, 'ui'), dataDir: app.getPath('userData'), handlers, accept: role => { if (role === 'compare') { if (!pkg) throw new Error('Open a package first, then choose the one to compare it with.'); if (active || experiment) throw new Error('Stop the run first.') } },
       upload: (name, buf, role) => role === 'compare' ? comparePackageData(name, buf) : loadPackageData(name, buf),
       download: o => { const { zip, file, summary } = buildExport(o); if (!zip) throw new Error('Nothing to change: no autofix found anything to correct, and no file has been changed.'); return { name: file, buf: zip, summary } }, onLive: n => { live.watchers = n; live.restart() } })

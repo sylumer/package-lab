@@ -23,7 +23,7 @@ Preferences › Workflows › Package Lab › [x]. Its shell is in `scripts/alfr
 |---|---|
 | `packagelab` | Opens Package Lab |
 | `scorm <name>` | Finds `.zip` files by name (Spotlight). **↩** opens the package in Package Lab. **⌘↩** checks it from its files and opens the report in your browser. **⇧↩** runs the standard experiment (the [`standard` preset](cli.md#experiment): 9 runs: the default and 8 variants) and opens its report. **⌥↩** runs it, then opens the report |
-| `packageweb` | Starts the [web interface](web.md) on this Mac if it isn't running, and opens it in your browser |
+| `packageweb` | Starts the [web interface](web.md) on this Mac if it isn't running, and opens it in your browser. It uses the port in Settings (4880 unless changed) |
 
 File Actions: select a `.zip` in Alfred, or in Finder with Alfred's File Actions hotkey, then choose one of:
 
@@ -49,7 +49,7 @@ of the variants and their findings.
   folder holds its runs, `experiment.json` and `report.html`.
 - Each action keeps the CLI's error output in a log file that `mktemp` makes in `$TMPDIR` (`package-lab-alfred.XXXXXX`). If a
   run fails, the notification shows its last line. A failure to open a report is reported on its own.
-- `packageweb` listens on this Mac only (port 4880). Its log is a `package-lab-web.XXXXXX` file in `$TMPDIR`. To stop it, run
+- `packageweb` listens on this Mac only, on the port in Settings (4880 unless changed). It asks the CLI for that port, so changing it in Settings is enough. Its log is a `package-lab-web.XXXXXX` file in `$TMPDIR`. To stop it, run
   `pkill -f "package-lab.js serve"`.
 - Without the installed app, **Open in Package Lab** starts the repo's Electron, and a second package opens in the same
   window.

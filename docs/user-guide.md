@@ -7,6 +7,7 @@ This guide covers the desktop app. The [web interface](web.md) is the same app i
 - [The app menu](#the-app-menu)
 - [The window](#the-window)
 - [The docs panel](#the-docs-panel)
+- [Settings](#settings)
 - [Opening a package](#opening-a-package)
 - [Before running: Findings and Boot path](#before-running-findings-and-boot-path)
 - [Launching an item](#launching-an-item)
@@ -67,6 +68,7 @@ On the desktop, the menu bar has the toolbar's actions and a few more. Reload is
 
 | Menu | Items |
 |---|---|
+| **Package Lab** | **Settings…** ⌘, (see [Settings](#settings)) |
 | **File** | **Open Package…** ⌘O, **Open Recent**, **Compare Packages…**, **Check a Folder…**, **Open Saved Run…**, **Export Corrected Package…** ⌘E |
 | **Run** | **Launch** ⌘R, **Test Saving** ⇧⌘R, **Record Reference**, **Stop and Analyse** ⌘. |
 | **View** | **Reload** ⇧⌥⌘R |
@@ -105,6 +107,18 @@ which doc it showed.
 
 The docs are bundled in the app: this guide, the recipes, the findings, the web interface, the command line, Alfred,
 Concierge and the authoring-tool notes. The web interface has the panel too.
+
+## Settings
+
+**Package Lab › Settings…** (⌘,) sets the port the [web interface](web.md) listens on. The default is 4880. The dialog
+has **Web interface port** (1024 to 65535), **Reset to default**, **Cancel** and **Save**.
+
+Save checks the port. A value outside the range is refused with a message. If something is already listening on the
+port, the setting is saved anyway, with a warning. A new port takes effect the next time the web interface starts. The
+web interface itself has no Settings dialog.
+
+The settings are kept in `settings.json` in the data folder (`~/Library/Application Support/Package Lab`). The command
+line shows and sets them too: see [cli.md](cli.md#settings).
 
 ## The tabs and buttons, one by one
 

@@ -35,7 +35,7 @@ const F = {
   live: { help: 'A folder to write frames to and read input from', kind: 'dir' },
   'no-caught': { help: 'Don’t record errors the content catches' },
   show: { help: 'Show the content window while it runs' },
-  port: { help: 'The port (default 4880)', kind: 'text' },
+  port: { help: 'The port (default: the port in Settings, 4880 unless changed)', kind: 'text' },
   only: { help: 'Only these fixes, comma-separated', kind: 'text' },
   variants: { help: 'Your own variants, from a JSON file', kind: 'json' },
   preset: { help: 'The built-in variants', kind: Object.keys(PRESETS) },
@@ -76,6 +76,7 @@ export const COMMANDS = [
   { name: 'report', summary: 'Write an HTML report of a package or a run', pos: 'zipjson', flags: ['item', 'open', 'fragment', 'run', 'redact', 'redact-names', 'key-out', 'key', 'json', ...RUN] },
   { name: 'open', summary: 'Open the desktop app, optionally with a package', pos: 'zip', flags: ['json'] },
   { name: 'serve', summary: 'Start the web interface', flags: ['port', 'host', 'window', 'show-runs', 'url', 'json'] },
+  { name: 'settings', summary: 'Show or change the settings (the web interface port)', pos: 'settings', flags: ['json'] },
   { name: 'completion', summary: 'Print a shell completion script (zsh)', pos: 'shell', flags: ['json'] },
   { name: 'help', summary: 'Show the help', flags: ['json'] },
   { name: 'version', summary: 'Show the version', flags: ['json'] },
@@ -89,6 +90,7 @@ const POS = {
   zipjson: ['1:package or saved run:_files'],
   zipdir: ['*:package or folder:_files'],
   shell: ['1:shell:(zsh)'],
+  settings: ['1:setting:(port)'],
 }
 // The zsh script keeps descriptions simple: no brackets or quotes inside the _arguments specs.
 const clean = s => String(s).replace(/[[\]'\\]/g, '')

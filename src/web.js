@@ -10,9 +10,10 @@ import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { join, extname } from 'node:path'
 import { networkInterfaces } from 'node:os'
+import { DEFAULT_PORT } from './settings.js'
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' }
-const DESKTOP_ONLY = new Set(['open-package', 'open-run', 'export-fixed', 'export-report', 'compare-packages', 'check-folder', 'open-batch-row']) // they open file dialogs or open packages on the Mac
+const DESKTOP_ONLY = new Set(['open-package', 'open-run', 'export-fixed', 'export-report', 'compare-packages', 'check-folder', 'open-batch-row', 'settings', 'settings-set']) // they open file dialogs or open packages on the Mac
 const MAX_UPLOAD = 1024 ** 3, MAX_JSON = 20 * 1024 ** 2
 
 export function token(dataDir) {
@@ -25,7 +26,7 @@ export function token(dataDir) {
 
 const lanAddress = () => Object.values(networkInterfaces()).flat().find(i => i?.family === 'IPv4' && !i.internal)?.address
 
-export function startWeb({ host = '127.0.0.1', port = 4880, uiDir, dataDir, handlers, upload, accept = () => {}, download, onLive = () => {} }) {
+export function startWeb({ host = '127.0.0.1', port = DEFAULT_PORT, uiDir, dataDir, handlers, upload, accept = () => {}, download, onLive = () => {} }) {
   const secret = token(dataDir), files = new Set(readdirSync(uiDir))
   const events = new Set(), liveClients = new Set()
   const same = (a, b) => typeof a === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b))

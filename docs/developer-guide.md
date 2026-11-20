@@ -51,6 +51,7 @@ src/
   preload.cjs           window.lab for the desktop window (IPC)
   docs.js               The bundled docs: DOCS (name, title, file). scripts/package.js copies exactly these into the app; the docs and doc handlers serve only these names
   web.js                HTTP server for the web interface (API, events, live frames, auth)
+  settings.js           Settings: DEFAULT_PORT (4880), validPort, readSettings, writeSettings (settings.json in the data folder; readSettings never throws)
   recorder.js           CDP recorder: one per run window or popup; probeSource (the script put into every frame)
   launch.js             What every browser's run shares, in plain Node: serveRequest, launchPlan, the findings of a finished run, savedRun (P2.3)
   webkit-runner.js      WebKit runs through Playwright, in plain Node, not Electron (P2.3)
@@ -150,6 +151,9 @@ The Concierge module is in the Concierge repo at `modules/package-lab/run`.
 `PACKAGE_LAB_DATA` replaces the data folder (`app.getPath('userData')`, by default
 `~/Library/Application Support/Package Lab`) for the first two modes.
 
+The web port is `--serve=N` if given, else the port in the settings (`src/settings.js`), else 4880. The desktop app's
+`--serve` and `package-lab serve --port` follow the same order.
+
 The rest of the file, in order:
 
 - **State:** one package (`pkg`: name, files Map, analysis, cached boot graphs, `lastCmi`) and at most one active run
@@ -164,7 +168,7 @@ The rest of the file, in order:
   (a web client on `/api/live`, or a headless run with a live folder), and sends a frame only when it changed. Input
   goes to the newest window through `sendInputEvent` and `insertText`. Hidden windows render and take input.
 - **`handlers`:** the interfaces' API. They are registered with `ipcMain.handle` and passed to the web server.
-- **App menu:** `buildMenu()` builds the menu bar (desktop only). Each item sends a `menu` event to the window: `{ action }` for a toolbar button id, or `{ action: 'docs', name }` to open a doc in the docs panel.
+- **App menu:** `buildMenu()` builds the menu bar (desktop only). It has an explicit Package Lab menu, whose **Settings…** (⌘,) sends `{ action: 'settings' }` to the window. Each item sends a `menu` event to the window: `{ action }` for a toolbar button id, or `{ action: 'docs', name }` to open a doc in the docs panel.
 - **Start-up:** handles `open-file` (Finder, `open -a`, Alfred), the single-instance lock, and window creation.
 - **`headless()`:** the `--run` mode. It reads input files from the live folder while it waits.
 
@@ -232,6 +236,8 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `macro-from-run` | `{ run }` | The macro made from the `input` reports the probe saw in that run |
 | `cycle-start` | `{ item, …launch options (the macro too) }` | `true`, at once; progress comes as `cycle` events (see [Save and resume](#save-and-resume-p24)). Throws in WebKit, or if a run, experiment, discovery or drill-down is under way |
 | `cycle-stop` | — | `true`: stops the run in progress and the rest of the cycle |
+| `settings` | — | The settings, as `readSettings` returns them (desktop only, in `DESKTOP_ONLY`) |
+| `settings-set` | `{ port }` | `{ settings, free }`: the saved settings and whether the port was free. A bad port is refused (desktop only) |
 
 Package info is `{ name, loaded, analysis, overrides: [{ path, size, binary, added }], findings, items: [{ index, title, type, depth, href }] }`. A run summary is
 the run without script sources and raw coverage, with `boot.nodes` already matched against the run (`bootRun`).

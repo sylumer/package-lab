@@ -8,7 +8,7 @@ header { border-bottom: 1px solid var(--line); background: var(--panel); padding
 label { display: inline-flex; align-items: center; gap: 5px; }
 label.grow { flex: 1; min-width: 260px; } label.grow input { flex: 1; }
 input, select, button { font: inherit; color: inherit; }
-input[type=url], input[type=search], select { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
+input[type=url], input[type=search], input[type=number], select { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
 button { background: var(--accent); color: #fff; border: 0; border-radius: 5px; padding: 4px 10px; cursor: pointer; }
 button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--line); }
 button:disabled { opacity: .45; cursor: default; }
@@ -126,3 +126,4 @@ ol.chain li { margin: .35em 0; }
 nav button.gap { margin-left: 16px; }
 @media (max-width: 800px) { #docs { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } }
 .welcome td:last-child { white-space: nowrap; }
+#set-port { width: 10ch; }

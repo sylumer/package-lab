@@ -21,6 +21,7 @@ Concierge module use it too.
 - [doctor](#doctor)
 - [open](#open)
 - [serve](#serve)
+- [settings](#settings)
 - [completion](#completion)
 - [help and version](#help-and-version)
 - [Exit statuses](#exit-statuses)
@@ -61,10 +62,11 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `cycle <package.zip>` | Tests saving: runs, leaves the way a learner does, then resumes from what it left, and checks the content saved and read its place |
 | `diff <a.zip> <b.zip>` | What changed between two packages: files with text diffs, manifest, loading path and findings; with `--run`, how far each got |
 | `batch <folder \| zips…>` | Checks every package in a folder (or the zips named): one row each, with its verdict. `--run` runs each one too. [Details](#batch) |
-| `doctor` | Checks this Mac can run Package Lab (Node, Electron, Playwright and WebKit, the data folder, port 4880, the installed app) and lists the names the options accept. Says what to do next |
+| `doctor` | Checks this Mac can run Package Lab (Node, Electron, Playwright and WebKit, the data folder, the web interface port in [Settings](#settings), the installed app) and lists the names the options accept. Says what to do next |
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run. Each `file:line` in a finding's evidence links to a read-only excerpt (±20 lines) of that file, from the package or the saved run's sources |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
+| `settings [port [n]]` | Shows the settings and their file, or prints or sets the web interface port. [Details](#settings) |
 | `completion zsh` | Prints a zsh completion script. [Details](#completion) |
 | `help`, `version` | Help and the version. `package-lab <command> --help` shows the help too. All take `--json` ([JSON output](#json-output)) |
 
@@ -768,7 +770,7 @@ itself fails. The checks:
 | `electron` | Electron is installed in this repo, or Package Lab.app is installed: packages can be run |
 | `webkit` | Playwright is installed with its WebKit: `--browser webkit` works |
 | `data` | Package Lab's data folder (`PACKAGE_LAB_DATA`, or the default) exists |
-| `port` | The port (default 4880, or `--port`, a whole number from 1 to 65535: anything else is an error, status 2) is free for `serve`, both on this Mac only (127.0.0.1) and on every address (0.0.0.0) |
+| `port` | The port (the one in Settings, 4880 unless changed, or `--port`, a whole number from 1 to 65535: anything else is an error, status 2) is free for `serve`, both on this Mac only (127.0.0.1) and on every address (0.0.0.0) |
 | *(not a check)* | The installed app is reported as the top-level `app`, not in `checks`, so the list stays as the Concierge module reads it. The text output shows it on its own line |
 
 `doctor --json`:
@@ -799,20 +801,33 @@ otherwise it starts this repo's Electron.
 ## serve
 
 ```bash
-package-lab serve [--port 4880] [--host 127.0.0.1] [--window] [--show-runs]
-package-lab serve --url [--port 4880]
+package-lab serve [--port n] [--host 127.0.0.1] [--window] [--show-runs]
+package-lab serve --url [--port n]
 ```
 
 Starts the [web interface](web.md) and prints its address with the access token. It stays running until Ctrl-C.
 
 | Option | Meaning |
 |---|---|
-| `--port` | Default 4880 |
+| `--port` | Default: the port in [Settings](#settings), 4880 unless changed. Overrides it for this start |
 | `--host` | `127.0.0.1` (default): this Mac only. `0.0.0.0`: every network interface, so other devices on your network can reach it |
 | `--window` | Also opens the desktop window, sharing the same session |
 | `--show-runs` | Shows content windows on this Mac while they run (they're hidden otherwise) |
 | `--url` | Prints the address (from the saved token) and exits |
 | `--json` | With `--url`: prints `{ url }`. Without `--url` it is refused (status 2): a running server has no JSON output |
+
+## settings
+
+```bash
+package-lab settings [--json]
+package-lab settings port [--json]
+package-lab settings port <n>
+```
+
+`settings` shows the settings and the path of the file they are kept in: `settings.json` in the data folder (see
+[Environment](#environment)). `settings port` prints just the port, for scripts. `settings port <n>` saves it. The port
+must be 1024 to 65535; any other value exits with status 1 and a message. The desktop app's **Package Lab › Settings…**
+does the same ([Settings](user-guide.md#settings)). The web interface uses this port unless `--port` is given.
 
 ## completion
 
@@ -941,7 +956,7 @@ Input goes to the newest open window of the run: a popup the content opened, or 
 | Variable | Effect |
 |---|---|
 | `PACKAGE_LAB_ELECTRON` | The Electron or Package Lab binary to use. A path ending in `electron` is given the repo as its app; anything else (such as `/Applications/Package Lab.app/Contents/MacOS/Package Lab`) runs on its own |
-| `PACKAGE_LAB_DATA` | Moves Package Lab's data folder (saved runs, web token, reference sign-ins) for `serve` and `open`. Default `~/Library/Application Support/Package Lab` |
+| `PACKAGE_LAB_DATA` | Moves Package Lab's data folder (saved runs, web token, reference sign-ins, settings) for `serve`, `open` and `settings`. Default `~/Library/Application Support/Package Lab` |
 | `NO_COLOR` | Plain text output |
 | `PACKAGE_LAB_NO_PLAYWRIGHT` | `1` makes Playwright fail to load, as it does where it isn't installed, so `--browser webkit` refuses with its how-to-install message. For Package Lab's own tests |
 | `PACKAGE_LAB_FORCE_TRACE` | `1` traces every package run, as `--trace` does. For Package Lab's own tests |

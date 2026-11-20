@@ -539,10 +539,10 @@ const openDoc = (name, anchor = '', back) => act(async () => {
   const text = docs.text[name] ??= await lab.invoke('doc', { name })
   if (docs.cur && !back) docs.hist.push([docs.cur, docs.anchor])
   Object.assign(docs, { cur: name, anchor })
-  docBody.innerHTML = markdown(text)
+  docBody.innerHTML = markdown(text, 'doc-')
   $('doc-pick').value = name; $('doc-back').disabled = !docs.hist.length
   let target = null
-  try { target = anchor && docBody.querySelector('#' + CSS.escape(decodeURIComponent(anchor))) } catch { /* bad escape: top */ }
+  try { target = anchor && docBody.querySelector('#' + CSS.escape('doc-' + decodeURIComponent(anchor))) } catch { /* bad escape: top */ }
   if (target) target.scrollIntoView(); else docBody.scrollTop = 0
   saveDocs()
 })
@@ -581,7 +581,21 @@ $('doc-pick').onchange = () => openDoc($('doc-pick').value)
 $('doc-back').onclick = () => { const [n, a] = docs.hist.pop(); openDoc(n, a, true) }
 $('doc-close').onclick = () => { $('docs').hidden = true; saveDocs() }
 $('help').onclick = () => $('docs').hidden ? openDoc(docs.cur ?? 'README.md', docs.anchor) : $('doc-close').click()
-lab.on?.('menu', ({ action, name }) => { if (action === 'docs') openDoc(name ?? docs.cur ?? 'README.md'); else { const b = $(action); if (b && !b.disabled) b.click() } })
+// Settings (desktop only: the menu sends it, and the handlers refuse the web interface).
+let settingsDefault = 4880
+const setNote = t => { $('set-status').textContent = t }
+function openSettings() {
+  act(async () => { const s = await lab.invoke('settings'); settingsDefault = s.defaults.port; $('set-port').value = s.port; setNote(`Kept in ${s.path}`); $('settings').showModal() })
+}
+$('set-reset').onclick = () => { $('set-port').value = settingsDefault }
+$('set-save').onclick = async () => {
+  try {
+    const { settings, free } = await lab.invoke('settings-set', { port: +$('set-port').value })
+    if (!free) return setNote(`Something is already listening on port ${settings.port}; saved anyway — pick another if the web interface won’t start.`)
+    $('settings').close(); say(`Saved: the web interface will use port ${settings.port}.`)
+  } catch (e) { setNote(e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')) }
+}
+lab.on?.('menu', ({ action, name }) => { if (action === 'docs') openDoc(name ?? docs.cur ?? 'README.md'); else if (action === 'settings') openSettings(); else { const b = $(action); if (b && !b.disabled) b.click() } })
 try { const d = JSON.parse(store.get('pl.docs')); if (d?.open) openDoc(typeof d.doc === 'string' ? d.doc : 'README.md') } catch { /* nothing remembered */ }
 
 function render() {

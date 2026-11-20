@@ -17,6 +17,7 @@ import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
 import { bootGraph, resolveRef } from '../src/bootpath.js'
 import { renderReport, verdict, timelineHtml, experimentHtml } from '../src/report.js'
 import { COMMANDS, zshCompletion } from '../src/completion.js'
+import { DEFAULT_PORT, validPort, readSettings, writeSettings } from '../src/settings.js'
 import { OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB } from '../scripts/alfred-scripts.js'
 import { redactRun, kept } from '../src/redact.js'
 import { timelineModel, timelineView } from '../src/timeline.js'
@@ -1476,6 +1477,16 @@ console.log('redact: unit ok')
 }
 console.log('completion and experiment report: unit ok')
 {
+  const d = mkdtempSync(join(tmpdir(), 'pl-settings-'))
+  assert.deepEqual(readSettings(join(d, 'none')), { port: DEFAULT_PORT }, 'settings: defaults with no file')
+  writeFileSync(join(d, 'settings.json'), '{nope'); assert.equal(readSettings(d).port, 4880, 'settings: corrupt JSON falls back')
+  writeFileSync(join(d, 'settings.json'), '{"port":80}'); assert.equal(readSettings(d).port, 4880, 'settings: an invalid saved port falls back')
+  for (const bad of [80, 70000, 'abc', 4880.5]) { assert.ok(!validPort(bad)); assert.throws(() => writeSettings(d, { port: bad }), /1024 to 65535/, 'settings: rejects ' + bad) }
+  assert.deepEqual(writeSettings(join(d, 'sub'), { port: 5123 }), { port: 5123 }); assert.deepEqual(readSettings(join(d, 'sub')), { port: 5123 }, 'settings: round trip')
+  rmSync(d, { recursive: true })
+}
+console.log('settings: unit ok')
+{
   const h = markdown('# Exporting a corrected package\n\n## From the manifest\n\n## From the manifest\n')
   assert.ok(h.includes('<h2 id="from-the-manifest">') && h.includes('<h2 id="from-the-manifest-1">') && h.includes('id="exporting-a-corrected-package"'), 'markdown: heading ids, duplicates numbered')
   const t = markdown('| A | B |\n|---|---|\n| x \\| y | **z** |')
@@ -1488,6 +1499,7 @@ console.log('completion and experiment report: unit ok')
   assert.ok(!k.includes('javascript:') && k.includes('<a href="user-guide.md#x">ok</a>') && k.includes('href="https://a.test/?a=1&amp;b=2"'), 'markdown: unsafe link dropped, safe kept')
   assert.equal(markdown('a **b** *c* `<d>`\nnext'), '<p>a <strong>b</strong> <em>c</em> <code>&lt;d&gt;</code> next</p>\n', 'markdown: inline formatting, wrapped lines join')
 }
+  assert.ok(markdown('## settings', 'doc-').includes('id="doc-settings"'), 'markdown: heading ids take the prefix')
 console.log('markdown: unit ok')
 console.log('unit: ok')
 
@@ -1531,6 +1543,22 @@ if (!process.argv.includes('--unit')) {
     assert.ok(!wj.checks[4].ok, 'doctor: a server bound on every address is reported')
     for (const bad of ['0', '65536', 'abc', '80x', '-1', '']) { const r = node(['doctor', '--port', bad]); assert.equal(r.status, 2, 'doctor: --port ' + bad + ' is refused'); assert.match(r.stderr, /--port needs a whole number from 1 to 65535/) }
     assert.match(node(['doctor']).stdout, /doctor[\s\S]*Node\.js 20 or later/, 'doctor: text')
+  }
+
+  {
+    // settings: the web interface's port, kept in the data folder; serve --url uses it.
+    {
+      const data = mkdtempSync(join(tmpdir(), 'pl-settings-cli-')), env = { ...process.env, PACKAGE_LAB_DATA: data }, st = (...a) => node(['settings', ...a], { env })
+      assert.equal(st('port').stdout.trim(), '4880', 'settings: the default port')
+      assert.equal(st('port', '5123').stdout.trim(), '5123', 'settings: port <n> saves')
+      assert.equal(st('port').stdout.trim(), '5123', 'settings: port prints the saved value')
+      assert.equal(JSON.parse(st('--json').stdout).port, 5123, 'settings: --json')
+      const bad = st('port', '80'); assert.equal(bad.status, 1, 'settings: a bad port exits 1'); assert.match(bad.stderr, /1024 to 65535/); assert.equal(st('port').stdout.trim(), '5123')
+      writeFileSync(join(data, 'web-token'), 'a'.repeat(32))
+      assert.match(node(['serve', '--url'], { env }).stdout, /:5123\/\?token=/, 'serve --url uses the saved port')
+      assert.match(node(['serve', '--url', '--port', '5999'], { env }).stdout, /:5999\//, 'serve --url: --port wins')
+      rmSync(data, { recursive: true })
+    }
   }
   assert.equal(node(['analyze', join(work, 'nope.zip')]).status, 2, 'cli: missing file is status 2')
   assert.match(node(['items', good]).stdout, /1 {2}Lesson and quiz/)

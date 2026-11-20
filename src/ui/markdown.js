@@ -16,7 +16,8 @@ const cells = l => l.trim().replace(/\\\|/g, '\u0000').replace(/^\||\|$/g, '').s
 const LIST = /^(\s*)([-*]|\d+\.)\s+(.*)$/
 const indent = l => l.match(/^ */)[0].length
 
-export function markdown(text) {
+// prefix goes before every heading id, so a doc heading can never take the id of an element in the page around it.
+export function markdown(text, prefix = '') {
   const seen = {}
   const slug = t => {
     const base = t.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[`*]/g, '').toLowerCase()
@@ -38,7 +39,7 @@ export function markdown(text) {
         i++
         out += `<pre><code${m[1] ? ` class="language-${m[1]}"` : ''}>${esc(body.join('\n'))}</code></pre>\n`
       } else if ((m = l.match(/^(#{1,6})\s+(.*?)\s*#*$/))) {
-        out += `<h${m[1].length} id="${slug(m[2])}">${inline(m[2])}</h${m[1].length}>\n`; i++
+        out += `<h${m[1].length} id="${prefix}${slug(m[2])}">${inline(m[2])}</h${m[1].length}>\n`; i++
       } else if (/^\|/.test(l) && /^\|?\s*:?-+/.test(lines[i + 1] || '')) {
         const head = cells(l), rows = []
         for (i += 2; i < lines.length && /^\|/.test(lines[i]); i++) rows.push(cells(lines[i]))

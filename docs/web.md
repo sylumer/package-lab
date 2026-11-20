@@ -37,7 +37,10 @@ running course.
 
 In Alfred, the `packageweb` keyword starts it if it isn't running and opens it (see [Alfred](alfred.md)).
 
-The port is 4880 unless you pass `--port`. It is recorded in `~/github/PORTS.md`.
+The port is the one in **Package Lab › Settings…** (⌘,), 4880 unless you change it. To change it, enter a port from
+1024 to 65535 there and save; it takes effect the next time the web interface starts. On the command line,
+`package-lab settings port <n>` does the same. `--port` overrides the setting for one start. The default port is
+recorded in `~/github/PORTS.md`.
 
 ## Signing in
 
@@ -143,7 +146,7 @@ popup are shown in the popup, since input goes to the newest window of the run.
 ## Troubleshooting
 
 - **"401" page:** open the address with `?token=…` (see [Signing in](#signing-in)).
-- **"address already in use":** something else is on 4880. Use `--port`, check `lsof -nP -iTCP:4880 -sTCP:LISTEN`, and
-  update PORTS.md if you change it for good.
+- **"address already in use":** something else is on the port. Use `--port` for one start, or change the port in Settings. Check with
+  `lsof -nP -iTCP:<port> -sTCP:LISTEN`, and update PORTS.md if you change it for good.
 - **"Lost the connection":** the server stopped or the network dropped; the page reconnects by itself when it's back.
 - **The live picture doesn't change:** the course may be static; it is only sent when it changes. Click something.

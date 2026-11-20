@@ -49,7 +49,8 @@ if "$node" "$cli" batch "$1" --out "$out" >/dev/null 2>"$log"; then
 else echo "Couldn’t check the folder: $(tail -1 "$log")"; fi`
 
 // packageweb: the server's log is a temporary file too; it is read only to see that the server has started.
-export const WEB = `port=4880
+export const WEB = `port="$("$node" "$cli" settings port 2>/dev/null)" || port=4880
+[ -n "$port" ] || port=4880
 log="$(mktemp "\${TMPDIR:-/tmp}/package-lab-web.XXXXXX")"
 if ! /usr/sbin/lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
   nohup "$node" "$cli" serve --port "$port" >"$log" 2>&1 &

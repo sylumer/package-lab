@@ -17,6 +17,7 @@ import { PROFILE_NAMES } from '../src/profiles.js'
 import { PACKS } from '../src/packs/index.js'
 import { loadPlaywright } from '../src/webkit-runner.js'
 import { createServer } from 'node:net'
+import { readSettings, writeSettings } from '../src/settings.js'
 import { parsePinFlag, parseAnswerFlag } from '../src/pins.js'
 import { entryFor } from '../src/overlay.js'
 import { furthest, strip } from '../src/milestones.js'
@@ -39,6 +40,7 @@ const APP_DIR = new URL('..', import.meta.url).pathname
 const VERSION = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')).version
 const INSTALLED = '/Applications/Package Lab.app'
 const DATA_DIR = join(homedir(), 'Library', 'Application Support', 'Package Lab')
+const dataDir = () => process.env.PACKAGE_LAB_DATA ?? DATA_DIR
 
 const HELP = `Package Lab ${VERSION}: find out why an e-learning package (SCORM, cmi5, xAPI) doesn't work.
 
@@ -46,7 +48,7 @@ Usage: package-lab <command> [options]
 
 Commands
   analyze <package.zip>     Check the package without running it: manifest, scripts, launch path.
-  doctor                    Check this Mac can run Package Lab: Node, Electron, Playwright and WebKit, the data folder, port 4880.
+  doctor                    Check this Mac can run Package Lab: Node, Electron, Playwright and WebKit, the data folder, the web interface's port.
   fix <package.zip>         Write a corrected copy of the package: the mechanical fixes, plus any --override files.
   items <package.zip>       List the items that can be launched, with their numbers.
   run <package.zip>         Launch an item in a hidden browser, record it, and report what went wrong.
@@ -60,6 +62,7 @@ Commands
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
   serve                     Start the web interface, to use Package Lab from another device.
+  settings [port [n]]       Show the settings and where they are kept; settings port prints the web interface's port, settings port <n> changes it.
   completion zsh            A zsh completion script: package-lab completion zsh > ~/.zfunc/_package-lab.
   help                      This help. Also: package-lab <command> --help.
   version                   The version.
@@ -102,7 +105,7 @@ Options for run (and report --run)
   --show                    Show the content window while it runs.
 
 Options for doctor
-  --port <n>                The port to check is free. Default 4880.
+  --port <n>                The port to check is free. Default: the port in Settings (4880 unless changed).
   --json                    Print JSON instead of text: the checks, what this Mac can do, and the names the options accept.
 
 Options for completion, help, version, open
@@ -167,7 +170,7 @@ Options for report
                             --open). With --redact the JSON has no findings or verdict title.
 
 Options for serve
-  --port <n>                Default 4880.
+  --port <n>                Default: the port in Settings (4880 unless changed).
   --host <address>          Default 127.0.0.1 (this Mac only). 0.0.0.0 makes it reachable on your network.
   --window                  Open the desktop window as well.
   --show-runs               Show content windows on this Mac while they run.
@@ -520,7 +523,7 @@ const commands = {
   // P5.2 extends it. Exit status is 0 unless the command fails: a missing optional part is a finding, not a failure.
   async doctor(o) {
     if (o.port !== undefined && !(typeof o.port === 'string' && /^[0-9]+$/.test(o.port) && +o.port >= 1 && +o.port <= 65535)) fail(`--port needs a whole number from 1 to 65535, not “${o.port}”.`)
-    const port = +(o.port ?? 4880), data = process.env.PACKAGE_LAB_DATA ?? DATA_DIR, checks = [], add = (id, label, ok, detail) => checks.push({ id, label, ok, detail })
+    const data = dataDir(), port = +(o.port ?? readSettings(data).port), checks = [], add = (id, label, ok, detail) => checks.push({ id, label, ok, detail })
     const major = +process.versions.node.split('.')[0]
     add('node', 'Node.js 20 or later', major >= 20, `Node ${process.versions.node}`)
     let app = null; try { app = electron()[0] } catch { /* shown below */ }
@@ -825,19 +828,33 @@ const commands = {
   serve(o) {
     if (o.json && !o.url) fail('serve --json needs --url: a running server has no JSON output (it runs until stopped). For the address as JSON, use serve --url --json.')
     if (o.url) {
-      const t = join(DATA_DIR, 'web-token')
+      const t = join(dataDir(), 'web-token')
       if (!existsSync(t)) fail('The web interface hasn’t been started yet, so there is no address. Run package-lab serve.')
-      const url = `http://${o.host && o.host !== '0.0.0.0' ? o.host : o.host ? 'localhost' : '127.0.0.1'}:${o.port ?? 4880}/?token=${readFileSync(t, 'utf8').trim()}`
+      const url = `http://${o.host && o.host !== '0.0.0.0' ? o.host : o.host ? 'localhost' : '127.0.0.1'}:${o.port ?? readSettings(dataDir()).port}/?token=${readFileSync(t, 'utf8').trim()}`
       console.log(o.json ? JSON.stringify({ url }, null, 1) : url)
       return 0
     }
     const [bin, pre] = electron()
-    const args = [...pre, `--serve=${+(o.port ?? 4880) || 4880}`, `--host=${o.host ?? '127.0.0.1'}`, ...(o.window ? [] : ['--no-window']), ...(o['show-runs'] ? ['--show-runs'] : [])]
+    const args = [...pre, `--serve=${+(o.port ?? readSettings(dataDir()).port) || readSettings(dataDir()).port}`, `--host=${o.host ?? '127.0.0.1'}`, ...(o.window ? [] : ['--no-window']), ...(o['show-runs'] ? ['--show-runs'] : [])]
     const child = spawn(bin, args, { stdio: ['ignore', 'inherit', 'inherit'] })
     if (!o.host || o.host === '127.0.0.1') console.error('Only this Mac can reach it. To reach it from another device: --host 0.0.0.0 (anyone on your network with the address can use it), or an SSH tunnel. Stop with Ctrl-C.')
     for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => child.kill())
     child.on('exit', code => process.exit(code ?? 0))
     return null
+  },
+  // The settings kept in the data folder (src/settings.js): the web interface's port.
+  settings(o) {
+    const dir = dataDir(), [key, val] = o._
+    if (key !== undefined && key !== 'port') fail(`No such setting “${key}”. The settings are: port.`)
+    if (key && val !== undefined) {
+      try { if (!/^[0-9]+$/.test(val)) throw new Error('The port must be a whole number from 1024 to 65535.'); writeSettings(dir, { port: +val }) }
+      catch (e) { console.error(e.message); return 1 }
+    }
+    const s = readSettings(dir), path = join(dir, 'settings.json')
+    if (key) console.log(o.json ? JSON.stringify({ port: s.port }, null, 1) : s.port)
+    else if (o.json) console.log(JSON.stringify({ ...s, path }, null, 1))
+    else console.log(`port: ${s.port}\n(kept in ${path})`)
+    return 0
   },
   version(o) { console.log(o.json ? JSON.stringify({ version: VERSION }, null, 1) : VERSION); return 0 },
   help(o) {
