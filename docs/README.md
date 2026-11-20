@@ -16,3 +16,4 @@ For people changing it:
 - [Developer guide](developer-guide.md): architecture, each part in turn, data formats, adding findings, tests, packaging.
 - [Design](../DESIGN.md): the approach and the roadmap.
 - [Build plan](plan.md): the next stage, written to be run by an orchestrating session and subagents; progress in [plan-status.md](plan-status.md).
+- [Evolution plan](evolution-plan.md): a friendlier Mac-style UI, app-first docs in shorter pages, and macros with on-screen coordinates, recording and an editor; written to be run like the build plan, with progress in [evolution-status.md](evolution-status.md).
