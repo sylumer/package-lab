@@ -2541,5 +2541,11 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     assert.equal(all.status, 0, 'forced trace pass:\n' + all.stdout.slice(-2000) + all.stderr.slice(-4000))
     console.log(`forced trace pass: ok (${Math.round((Date.now() - t0) / 1000)} s)`)
   }
+  // The desktop window (E0.1): test/ui.js opens the app, clicks through it and fails if a visible behaviour breaks.
+  if (slow && !forced) {
+    const ui = spawnSync(process.execPath, [join(root, 'test', 'ui.js')], { encoding: 'utf8', timeout: 120000 })
+    assert.equal(ui.status, 0, 'ui smoke test:\n' + ui.stdout.slice(-2000) + ui.stderr.slice(-4000))
+    console.log(ui.stdout.trim().split('\n').at(-1))
+  }
   console.log('end to end: ok')
 }

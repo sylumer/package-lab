@@ -5,7 +5,7 @@ commit. The states are `todo`, `in progress`, `done` and `skipped` (with the rea
 
 ## Summary
 
-Not started.
+Phase 0 in progress.
 
 Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
 
@@ -13,7 +13,7 @@ Each commit column is filled in by the following work package's commit, since a 
 
 | # | Work package | Model | State | Commit | Notes |
 |---|---|---|---|---|---|
-| E0.1 | UI smoke test harness | sonnet | todo | | |
+| E0.1 | UI smoke test harness | sonnet | done | | Playwright `_electron` works with Electron 45; no fallback needed. One review round. |
 | E1.1 | Macro format 2: window size and wait steps | sonnet | todo | | |
 | E1.2 | Clicks tied to the element clicked | sonnet | todo | | |
 | E1.3 | Record from the desktop app | haiku | todo | | |
