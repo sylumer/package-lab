@@ -67,6 +67,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 | `report <package.zip \| run.json>` | Writes an HTML report of the package, of a run (`--run`), or of a saved run. Each `file:line` in a finding's evidence links to a read-only excerpt (±20 lines) of that file, from the package or the saved run's sources |
 | `open [package.zip]` | Opens the desktop app, optionally with a package |
 | `serve` | Starts the [web interface](web.md) |
+| `macro show <file.json>` | Prints a macro's steps as the editor's table. [Details](#macros) |
 | `settings [port [n]]` | Shows the settings and their file, or prints or sets the web interface port. [Details](#settings) |
 | `completion zsh` | Prints a zsh completion script. [Details](#completion) |
 | `help`, `version` | Help and the version. `package-lab <command> --help` shows the help too. All take `--json` ([JSON output](#json-output)) |
@@ -633,6 +634,21 @@ view, to the newest window of the run. `--macro` works on `run` as well, and the
 (the clicks, keys and typing the probe saw are in the run's `probe` list with `type: "input"`). Macros are not supported in
 WebKit.
 
+**Showing a macro.** `package-lab macro show macro.json` prints the steps as the macro editor's table, with the size the
+macro was recorded at above it. With a size, the Where column is in pixels; without one (a version 1 file or a bare list)
+it is percentages. `--json` prints `{ file, viewport, steps }`, where `viewport` is `{ width, height }` or `null` and each
+step is `{ n, when, action, where, wait }`. `--macro` prints the size it plays at (`Playing the macro at 1100x800, the size
+it was recorded at.`) on standard error, unless `--json` is given.
+
+```
+Recorded at 1100x800; 2 steps
+
+Step  When                    Action  Where
+────  ──────────────────────  ──────  ─────────────────────
+1     wait for “Next” (10 s)  Wait
+2     +0.1 s                  Click   550, 200 #next “Next”
+```
+
 ## fix
 
 ```bash
@@ -955,6 +971,7 @@ command has no section of its own, its shape is here:
 | `serve --url` | `{ url }` | [serve](#serve) |
 | `help` | `{ version, commands: [{ name, summary }] }` | [help and version](#help-and-version) |
 | `version` | `{ version }` | [help and version](#help-and-version) |
+| `macro show` | `{ file, viewport, steps }` | [Macros](#macros) |
 | `completion zsh` | `{ shell, script }` | [completion](#completion) |
 
 `analyze --json`:

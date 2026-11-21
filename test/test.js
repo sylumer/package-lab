@@ -38,7 +38,7 @@ import { Recorder, shiftTimes, isBlocked, nameAt } from '../src/recorder.js'
 import { launchPlan, serveRequest, WEBKIT_ORIGINS, runAnalysis } from '../src/launch.js'
 import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams, storageMode } from '../src/profiles.js'
 import { originFindings, storageFindings } from '../src/rules.js'
-import { setDelay, move, remove, insertWait, setFields, edit as editMacro, macroRows, macroName } from '../src/macros.js'
+import { setDelay, move, remove, insertWait, setFields, edit as editMacro, macroRows, macroTable, macroName } from '../src/macros.js'
 import { cycleFindings, cycleRows, readMacro, macroFile as macroFileOf, macroDelays, quietFor, withMacroSize, macroFromTrace, cleanTarget, resumeOptions } from '../src/cycle.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import './packs.js'
@@ -1171,6 +1171,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
       assert.deepEqual(rows.map(r => r.action), ['Click', 'Wait', 'Wait', 'Wait', 'Wait', 'Key Enter', 'Type “hello”', 'Scroll up', 'Click'], 'editor rows: Action')
       assert.deepEqual([rows[0].where, rows[7].where, rows[8].where], ['550, 400', '550, 400', '413, 200 button#next “Next”'], 'editor rows: Where in pixels, with the element')
       assert.equal(macroRows([clk(0)])[0].where, '50%, 50%', 'editor rows: no size, so percentages')
+      assert.deepEqual(macroTable(rows.slice(0, 2)), [['Step', 'When', 'Action', 'Where'], ['1', '+0.8 s', 'Click', '550, 400'], ['2', 'wait for “Next” (30 s)', 'Wait', '']], 'macro show: the table is a header and one row of strings per step')
       assert.equal(macroName('next'), 'next'); assert.equal(macroName('Step 2.v-1_a'), 'Step 2.v-1_a', 'editor: a good name')
       for (const bad of ['', ' ', '../x', '.hidden', 'a/b', 'a\\b', 'x'.repeat(61), 'tab\t', null, 'é']) assert.throws(() => macroName(bad), /name|dot|characters|letters/, `editor: the name ${JSON.stringify(bad)} is refused`)
       assert.equal(macroName('x'.repeat(60)).length, 60, 'editor: 60 characters is fine')
@@ -1818,6 +1819,19 @@ if (!process.argv.includes('--unit')) {
     assert.match(JSON.parse(node(['version', '--json']).stdout).version, /^\d+\.\d+\.\d+/, 'json: version')
     const cz = node(['completion', 'zsh']); assert.equal(cz.status, 0, cz.stderr); assert.equal(cz.stdout, zshCompletion(), 'completion: the script on standard output')
     assert.equal(JSON.parse(node(['completion', 'zsh', '--json']).stdout).shell, 'zsh', 'json: completion')
+    assert.ok(COMMANDS.some(c => c.name === 'macro') && cz.stdout.includes('\n    macro)\n') && cz.stdout.includes("'1:subcommand:(show)'"), 'completion: macro show is listed')
+    // E5.1: macro show on a version 1 file (no size) and a version 2 file with a size, a wait and a target.
+    const mv1 = join(work, 'show1.json'); writeFileSync(mv1, JSON.stringify([{ t: 400, type: 'click', x: 0.5, y: 0.25 }, { t: 900, type: 'key', key: 'Enter' }]))
+    const mv2 = join(work, 'show2.json'); writeFileSync(mv2, JSON.stringify({ format: 'package-lab-macro', version: 2, viewport: { width: 1100, height: 800 }, events: [{ t: 100, type: 'wait', text: 'Next', timeout: 10000 }, { t: 200, type: 'click', x: 0.5, y: 0.25, target: { sel: '#next', text: 'Next' } }] }))
+    const mv3 = join(work, 'show3.json'); writeFileSync(mv3, JSON.stringify([{ t: 1, type: 'text', text: 'a\u009bb' }]))
+    const s3 = node(['macro', 'show', mv3]); assert.ok(!s3.stdout.includes('\u009b') && s3.stdout.includes('Type “ab”') && /; 1 step$/m.test(s3.stdout), 'macro show: C1 controls are dropped, and one step is singular')
+    const s1 = node(['macro', 'show', mv1]); assert.equal(s1.status, 0, s1.stderr)
+    assert.match(s1.stdout, /No size recorded[^\n]*2 steps/); assert.match(s1.stdout, /^1 {2,}\+0\.4 s {2,}Click {2,}50%, 25%$/m, 'macro show: version 1 rows are in percentages'); assert.match(s1.stdout, /^2 {2,}\+0\.5 s {2,}Key Enter$/m)
+    const s2 = node(['macro', 'show', mv2]); assert.equal(s2.status, 0, s2.stderr)
+    assert.match(s2.stdout, /Recorded at 1100x800; 2 steps/); assert.match(s2.stdout, /wait for “Next” \(10 s\)/, 'macro show: the wait'); assert.match(s2.stdout, /550, 200 #next “Next”/, 'macro show: pixels and the target')
+    const j2 = JSON.parse(node(['macro', 'show', mv2, '--json']).stdout); assert.deepEqual([j2.viewport, j2.steps.length, j2.steps[0].action, j2.steps[1].where], [{ width: 1100, height: 800 }, 2, 'Wait', '550, 200 #next “Next”'], 'macro show: json')
+    assert.equal(JSON.parse(node(['macro', 'show', mv1, '--json']).stdout).viewport, null, 'macro show: version 1 has no viewport')
+    assert.equal(node(['macro', 'show', join(work, 'nope.json')]).status, 2, 'macro show: a missing file fails'); assert.match(node(['macro', 'show']).stderr, /Name a macro file/); assert.match(node(['macro']).stderr, /Usage: package-lab macro show/)
     assert.equal(node(['completion', 'bash']).status, 2, 'completion: only zsh'); assert.match(node(['completion']).stderr, /Name the shell/)
     const zfile = join(work, '_package-lab'); writeFileSync(zfile, cz.stdout)
     if (spawnSync('zsh', ['-c', 'true']).status === 0) { const zn = spawnSync('zsh', ['-n', zfile], { encoding: 'utf8' }); assert.equal(zn.status, 0, 'completion: zsh -n accepts it: ' + zn.stderr) }

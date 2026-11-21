@@ -437,6 +437,31 @@ async function webChecks() {
     assert.equal(await p.locator('#status').textContent(), 'Only .zip packages can be opened', 'web: a .txt is refused with the message')
     assert.match(await p.locator('#pkg-name').textContent(), /good\.zip/, 'web: the package stays open')
     assert.deepEqual(await longTitles(p), [], 'web: no title attribute is longer than 100 characters')
+    // E5.1: the live view's coordinates bar works in the browser too: a run of good, a frame, a hover.
+    await p.getByRole('button', { name: 'Run', exact: true }).click()
+    await p.getByRole('button', { name: 'Stop', exact: true }).waitFor(); await view('Live', p)
+    await p.locator('#view img.live-frame[src^="data:image/jpeg"]').waitFor({ timeout: 8000 })
+    await p.locator('.live-frame').hover({ position: { x: 40, y: 40 } })
+    await p.locator('.live-pos').filter({ hasText: /^x \d+ {2}y \d+ px · [\d.]+% [\d.]+%/ }).waitFor({ timeout: 3000 })
+    await p.getByRole('button', { name: 'Stop', exact: true }).click(); await p.locator('#runs li').first().waitFor()
+    const wasOpen = await p.locator('#inspector').isVisible()
+    // E5.1: the macro editor's Import reads a file through the browser's file input, and Export downloads one.
+    if (await p.locator('#inspector').isHidden()) await p.getByRole('button', { name: 'Inspector', exact: true }).click()
+    await p.getByRole('tab', { name: 'Macro', exact: true }).click()
+    const imported = { format: 'package-lab-macro', version: 2, viewport: { width: 1100, height: 800 }, events: [{ t: 100, type: 'wait', text: 'Next', timeout: 10000 }, { t: 200, type: 'click', x: 0.5, y: 0.25 }] }
+    await p.locator('#macro-file').setInputFiles({ name: 'imp.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(imported)) })
+    await p.locator('.macro-table tbody tr').nth(1).waitFor()
+    assert.match(await p.locator('#macro-summary').innerText(), /^2 events.*recorded at 1100×800/, 'web: Import loads the file and its size')
+    assert.match(await p.locator('.macro-table tbody tr').first().innerText(), /wait for “Next” \(10 s\)/, 'web: the imported wait is in the table')
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.getByRole('button', { name: 'Export…', exact: true }).click()])
+    assert.equal(dl.suggestedFilename(), 'macro.json', 'web: Export downloads macro.json')
+    assert.deepEqual(JSON.parse(readFileSync(await dl.path(), 'utf8')), imported, 'web: the exported file is the imported one')
+    await p.locator('#macro-file').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('nope') })
+    await p.locator('#status').filter({ hasText: /isn’t a macro/ }).waitFor()
+    assert.equal(await p.locator('.macro-table tbody tr').count(), 2, 'web: a bad file changes nothing')
+    problems.splice(0, problems.length, ...problems.filter(m => !/api\/invoke\/macro-parse/.test(m)))   // the browser logs the refused file's 500
+    await p.getByRole('button', { name: 'Clear', exact: true }).click(); await p.locator('#macro-summary').filter({ hasText: /^None/ }).waitFor()   // later steps compare the launch options
+    if (!wasOpen) await p.getByRole('button', { name: 'Inspector', exact: true }).click()
     // E2.2: with every control set to a non-default value, launchOptions() and the Copy as CLI command line are what the window made of
     // the same choices before the controls moved into the inspector.
     const before = JSON.parse(readFileSync(join(root, 'test', 'fixtures', 'launch-options-before.json'), 'utf8'))

@@ -67,6 +67,9 @@ export function macroRows(events, viewport = null) {
   })
 }
 
+// The rows as a grid of strings with a header row, for the CLI's macro show.
+export const macroTable = rows => [['Step', 'When', 'Action', 'Where'], ...rows.map(r => [String(r.n), r.when, r.action, r.where])]
+
 // A saved macro's name: 1 to 60 characters from letters, digits, spaces, dots, dashes and underscores, not starting with a dot.
 export function macroName(name) {
   if (typeof name !== 'string' || !name.trim()) throw new Error('Give the macro a name.')

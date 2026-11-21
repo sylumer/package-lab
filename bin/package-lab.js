@@ -32,6 +32,7 @@ import { renderReport, verdict, counts, screens, experimentHtml } from '../src/r
 import { COMMANDS, zshCompletion } from '../src/completion.js'
 import { launchPlan, runAnalysis, savedRun, WEBKIT_ORIGINS } from '../src/launch.js'
 import { comparePackages, compareBehaviour } from '../src/pkgdiff.js'
+import { macroRows, macroTable } from '../src/macros.js'
 import { readMacro, withMacroSize, cycleFindings, cycleRows, resumeOptions } from '../src/cycle.js'
 import { availableParallelism } from 'node:os'
 import { batchFiles, staticRows, runRow, failedRun, batchSummary, summaryText, batchTable, batchCsv, batchHtml } from '../src/batch.js'
@@ -62,6 +63,7 @@ Commands
                             Write an HTML report: of the package (or, with --run, of a run), or of a saved run.
   open [package.zip]        Open the desktop app, optionally with a package.
   serve                     Start the web interface, to use Package Lab from another device.
+  macro show <file.json>    Print a macro's steps as a table: when, action and where. The size it was recorded at is shown above it.
   settings [port [n]]       Show the settings and where they are kept; settings port prints the web interface's port, settings port <n> changes it.
   completion zsh            A zsh completion script: package-lab completion zsh > ~/.zfunc/_package-lab.
   help                      This help. Also: package-lab <command> --help.
@@ -108,8 +110,8 @@ Options for doctor
   --port <n>                The port to check is free. Default: the port in Settings (4880 unless changed).
   --json                    Print JSON instead of text: the checks, what this Mac can do, and the names the options accept.
 
-Options for completion, help, version, open
-  --json                    Print JSON instead of text. open: which app it opened (installed or repo) and its path.
+Options for completion, help, version, open, macro
+  --json                    Print JSON instead of text. open: which app it opened (installed or repo) and its path. macro show: { file, viewport, steps }.
   (completion takes the shell: package-lab completion zsh)
 
 Options for fix
@@ -212,8 +214,8 @@ function redactOptions(o) {
 const fail = msg => { throw new Fail(msg) }
 const tty = process.stdout.isTTY && !process.env.NO_COLOR
 // Text from a package (file names, diff lines, findings quoting them) may hold control characters: drop them before printing (tab stays).
-const clean = s => String(s ?? '').replace(/[\x00-\x08\x0a-\x1f\x7f]/g, '')
-const paint = (code, s) => { s = String(s).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ''); return tty ? `\x1b[${code}m${s}\x1b[0m` : s }   // keeps the newlines of our own text; names go through clean() first
+const clean = s => String(s ?? '').replace(/[\x00-\x08\x0a-\x1f\x7f-\x9f]/g, '')
+const paint = (code, s) => { s = String(s).replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, ''); return tty ? `\x1b[${code}m${s}\x1b[0m` : s }   // keeps the newlines of our own text; names go through clean() first
 const SEV = { error: s => paint('31;1', s), warn: s => paint('33;1', s), info: s => paint('2', s), ok: s => paint('32;1', s) }
 
 // ---- Packages ----
@@ -851,6 +853,19 @@ const commands = {
     for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => child.kill())
     child.on('exit', code => process.exit(code ?? 0))
     return null
+  },
+  // macro show <file>: the steps as the editor's table (E5.1).
+  macro(o) {
+    if (o._[0] !== 'show') fail('Usage: package-lab macro show <file.json>')
+    if (!o._[1]) fail('Name a macro file: package-lab macro show <file.json>')
+    const { events, viewport } = macroFile(o._[1]), steps = macroRows(events, viewport)
+    const n = `${steps.length} step${steps.length === 1 ? '' : 's'}`
+    if (o.json) console.log(JSON.stringify({ file: resolve(o._[1]), viewport, steps }, null, 1))
+    else {
+      console.log(viewport ? `Recorded at ${viewport.width}x${viewport.height}; ${n}` : `No size recorded (positions are percentages); ${n}`)
+      if (steps.length) { console.log(); printGrid(macroTable(steps)) }
+    }
+    return 0
   },
   // The settings kept in the data folder (src/settings.js): the web interface's port.
   settings(o) {

@@ -74,6 +74,7 @@ export const COMMANDS = [
   { name: 'diff', summary: 'What changed between two packages', pos: 'zip2', flags: ['item', 'run', 'json', ...RUN] },
   { name: 'batch', summary: 'Check every package in a folder, one row each', pos: 'zipdir', flags: ['run', 'recursive', 'jobs', 'csv', 'json', ...RUN] },
   { name: 'report', summary: 'Write an HTML report of a package or a run', pos: 'zipjson', flags: ['item', 'open', 'fragment', 'run', 'redact', 'redact-names', 'key-out', 'key', 'json', ...RUN] },
+  { name: 'macro', summary: 'Show a macro’s steps as a table', pos: 'macro', flags: ['json'] },
   { name: 'open', summary: 'Open the desktop app, optionally with a package', pos: 'zip', flags: ['json'] },
   { name: 'serve', summary: 'Start the web interface', flags: ['port', 'host', 'window', 'show-runs', 'url', 'json'] },
   { name: 'settings', summary: 'Show or change the settings (the web interface port)', pos: 'settings', flags: ['json'] },
@@ -89,6 +90,7 @@ const POS = {
   zip2: ['1:first package:_files -g "*.zip"', '2:second package:_files -g "*.zip"'],
   zipjson: ['1:package or saved run:_files'],
   zipdir: ['*:package or folder:_files'],
+  macro: ['1:subcommand:(show)', '2:macro file:_files -g "*.json"'],
   shell: ['1:shell:(zsh)'],
   settings: ['1:setting:(port)'],
 }
