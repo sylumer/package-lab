@@ -1222,12 +1222,20 @@ machine and run.
 - **The icon.** Write `build/icon.ico` from the existing rendered PNG in plain Node. An ICO file holding PNG images
   (16, 32, 48 and 256) is a short header plus the PNG bytes, so it needs no dependency; resize with Electron's
   `nativeImage` in `icon.cjs`.
-  - Packager needs Wine to set an `.exe` icon from a non-Windows machine. If `wine` or `wine64` isn't on `PATH`,
-    build without the icon, print one line saying why, and log the decision.
+  - **Don't use Wine.** Packager sets an `.exe` icon through `rcedit`, and that needs Wine off Windows. Homebrew's
+    Wine casks were disabled on 2026-09-01 for failing Gatekeeper, and on Apple Silicon Wine also needs Rosetta.
+    The owner chose `resedit` instead (2026-11-21): a pure-JavaScript editor for Windows executable resources.
+    - Add it as a **devDependency**. It is a build tool, not shipped in the app, so it doesn't break the
+      no-runtime-dependencies rule.
+    - Pin an exact version that is at least two weeks old.
+    - Pass no `icon` to packager for win32. After packaging, use `resedit` to set the icon from `build/icon.ico` and
+      the version details (`FileVersion`, `ProductVersion`, `ProductName` "Package Lab", `FileDescription`) on
+      `Package Lab.exe`. Then make the zip.
+    - Never run `rcedit` or Wine.
   - The window's own icon is set at runtime with `BrowserWindow`'s `icon` option off the Mac, so the taskbar shows
     it either way.
 - **Not in this work package:** an installer (Squirrel, NSIS or MSIX), code signing, the `.zip` file association and
-  auto-update. Each needs a new dependency, a certificate or a Windows machine. Add them to Not planned, with what
+  auto-update. Each needs a new runtime-side dependency, a certificate or a Windows machine. Add them to Not planned, with what
   each would need.
 - **`docs/windows.md`**: how to build, how to copy the build to Windows and run it, and the `PACKAGE_LAB_APP` and data
   folder locations. It also lists what differs from the Mac: no Alfred, no vibrancy, no accent colour, Ctrl for ⌘,
@@ -1247,7 +1255,9 @@ machine and run.
 
 **Acceptance.**
 - The darwin build and `--install` are unchanged.
-- The win32 zip is produced with no new dependency.
+- The win32 zip is produced with no new runtime dependency. `resedit` is the only new devDependency.
+- Reading `Package Lab.exe` back with `resedit` shows the icon group and `ProductVersion` equal to `package.json`'s
+  version.
 
 ### E6.3 Try it on Windows, or leave it ready to try (haiku)
 
@@ -1314,7 +1324,10 @@ by eye in review.
   target prove hard to tell apart.
 - **Drag to reorder steps.** Up and Down buttons cover it and work from the keyboard.
 - **A Windows installer, signing, the `.zip` file association and auto-update** (E6.2). An installer needs a new
-  devDependency (electron-winstaller or NSIS) and is best built on Windows. Signing needs a code-signing certificate.
+  devDependency (electron-winstaller or NSIS) and is best built on Windows. Signing isn't required: unsigned
+  builds run after SmartScreen's "More info, Run anyway". Paid certificates are costly, so if signing is wanted
+  later, try the free routes first: SignPath Foundation's free signing for open-source projects (it needs a public
+  repository and a CI build), or Azure Trusted Signing (about US$10 a month).
   The file association needs the installer. Auto-update needs a release server. Add them once a portable build has
   been tried on Windows and is worth shipping.
 
