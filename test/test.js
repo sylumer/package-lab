@@ -37,7 +37,7 @@ import { Recorder, shiftTimes, isBlocked, nameAt } from '../src/recorder.js'
 import { launchPlan, serveRequest, WEBKIT_ORIGINS, runAnalysis } from '../src/launch.js'
 import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams, storageMode } from '../src/profiles.js'
 import { originFindings, storageFindings } from '../src/rules.js'
-import { cycleFindings, cycleRows, readMacro, macroFile as macroFileOf, macroDelays, quietFor, withMacroSize, macroFromTrace, resumeOptions } from '../src/cycle.js'
+import { cycleFindings, cycleRows, readMacro, macroFile as macroFileOf, macroDelays, quietFor, withMacroSize, macroFromTrace, cleanTarget, resumeOptions } from '../src/cycle.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import './packs.js'
 import { cmi5Package, cmi5Steps, tincanPackage } from './xapi.js'
@@ -117,6 +117,10 @@ const typing = fixture('typing', d => sub(d, 'lesson.html', '<nav>', '<p><input 
 // latebutton: Next is there from the start but only visible, and so only clickable and only in the page's text, after 3 s. It is a big
 // button in the top left corner, so a click at (0.15, 0.1) hits it at any window size.
 const latebutton = fixture('latebutton', d => writeFileSync(join(d, 'lesson.js'), readFileSync(join(d, 'lesson.js'), 'utf8') + "\nvar late = document.getElementById('next'); late.style.cssText = 'position:fixed;left:10px;top:10px;width:300px;height:100px;visibility:hidden'; setTimeout(function () { late.style.visibility = 'visible' }, 3000)\n"))
+// movebutton: Next is pinned 20px from the top right corner, so its fraction across the window changes with the width. It has a unique id.
+const movebutton = fixture('movebutton', d => writeFileSync(join(d, 'lesson.js'), readFileSync(join(d, 'lesson.js'), 'utf8') + "\ndocument.getElementById('next').style.cssText = 'position:fixed;right:20px;top:20px;width:100px;height:40px'\n"))
+// clickfields: a password field and a textarea with text in it, at known places (the top left corner), to see what a click on them records.
+const clickfields = fixture('clickfields', d => sub(d, 'lesson.html', '<nav>', '<input id="pw" type="password" placeholder="Your password" style="position:fixed;left:0;top:0;width:300px;height:50px"><textarea id="ta" placeholder="Notes" style="position:fixed;left:0;top:60px;width:300px;height:50px">my private notes</textarea><nav>'))
 // handshake: tells its parent it is ready and waits for {type: 'launch'}, which no LMS here sends. polling: checks
 // window.API every 250 ms (the LMS offers it on the parent, so it never finds it on its own window).
 const handshake = fixture('handshake', d => {
@@ -1123,6 +1127,28 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   }
   assert.deepEqual(macroFromTrace({ probe: [{ type: 'input', kind: 'click', x: 0.5, y: 0.25, t: 40 }, { type: 'api', t: 41 }, { type: 'input', kind: 'key', key: 'Tab', t: 50 }, { type: 'input', kind: 'text', text: 'a', t: 60 }] }),
     [{ t: 40, type: 'click', x: 0.5, y: 0.25 }, { t: 50, type: 'key', key: 'Tab' }, { t: 60, type: 'text', text: 'a' }], 'macro: made from the probe’s input reports')
+  // Clicks tied to their element (E1.2): the target field, what the trace carries over, and what redaction cuts.
+  {
+    const tg = { sel: '#next', text: 'Next', role: 'button', frame: [0, 2] }, ck = target => [{ t: 1, type: 'click', x: 0.5, y: 0.5, target }]
+    assert.deepEqual(normaliseOptions({ macro: ck(tg) }).macro[0].target, tg, 'target: accepted whole'); assert.deepEqual(normaliseOptions({ macro: ck({ sel: 'a' }) }).macro[0].target, { sel: 'a' }, 'target: only sel is needed')
+    for (const [bad, why] of [['#next', /target to be like/], [{}, /target.sel in event 1 to be 1 to 500/], [{ sel: 'a'.repeat(501) }, /target.sel/], [{ sel: 'a', text: 'x'.repeat(61) }, /target.text in event 1 to be at most 60/], [{ sel: 'a', role: 'x'.repeat(41) }, /target.role/],
+      [{ sel: 'a', frame: [1000] }, /target.frame/], [{ sel: 'a', frame: [0, 0, 0, 0, 0, 0, 0, 0, 0] }, /target.frame/], [{ sel: 'a', frame: [1.5] }, /target.frame/], [{ sel: 'a', x: 1 }, /target to be like/]])
+      assert.throws(() => normaliseOptions({ macro: ck(bad) }), why, 'target: refused ' + JSON.stringify(bad).slice(0, 40))
+    assert.throws(() => normaliseOptions({ macro: [{ t: 1, type: 'key', key: 'Tab', target: tg }] }), /unknown field in event 1: target/, 'target: only on clicks')
+    assert.deepEqual(readMacro(JSON.parse(JSON.stringify({ version: 2, events: ck(tg) }))).events, ck(tg), 'target: survives a macro file')
+    assert.deepEqual(macroFromTrace({ probe: [{ type: 'input', kind: 'click', x: 0.5, y: 0.5, t: 1, target: tg }, { type: 'input', kind: 'click', x: 0.1, y: 0.1, t: 2, approx: true, target: tg }, { type: 'input', kind: 'click', x: 0.2, y: 0.2, t: 3, target: { sel: '' } }] }),
+      [{ t: 1, type: 'click', x: 0.5, y: 0.5, target: tg }, { t: 2, type: 'click', x: 0.1, y: 0.1, approx: true }, { t: 3, type: 'click', x: 0.2, y: 0.2 }], 'target: macroFromTrace keeps it, but not on an approximate click or a bad one')
+    assert.deepEqual([cleanTarget(tg), cleanTarget(null), cleanTarget({ sel: 5 })], [tg, undefined, undefined], 'target: cleanTarget')
+    const mkTrace = o => ({ ...trace(), label: 'x', duration: 4000, sources: {}, console: [], navigations: [], cmi: {}, exec: [], sites: [], targets: [], untraced: [], ...o })
+    const rd = redactRun({ trace: mkTrace({ probe: [{ type: 'input', t: 1, kind: 'click', x: 0.5, y: 0.5, target: { sel: '#chapter-two > [aria-label="Secret label"]:nth-of-type(2)', text: 'Secret words', role: 'button' } }, { type: 'input', t: 2, kind: 'click', x: 0.5, y: 0.5, target: { sel: '#\\32 nd-chapter > b' } }] }), kind: 'reference', launch: { options: { macro: ck({ sel: '[name="user-name"]', text: 'Secret words', role: 'input' }) } } })
+    assert.deepEqual(rd.trace.probe[0].target, { sel: '#‹11 characters› > [aria-label="‹12 characters›"]:nth-of-type(2)', text: '‹12 characters›', role: 'button' }, 'redact: a target’s text, ids and attribute values')
+    assert.equal(rd.trace.probe[1].target.sel, '#‹14 characters› > b', 'redact: an id with a CSS hex escape is cut whole')
+    assert.deepEqual(rd.launch.options.macro[0].target, { sel: '[name="‹9 characters›"]', text: '‹12 characters›', role: 'input' }, 'redact: a macro’s target')
+    assert.ok(!JSON.stringify(rd).includes('Secret') && !JSON.stringify(rd).includes('chapter') && !JSON.stringify(rd).includes('nd-'), 'redact: nothing of the target is left')
+    const anchored = runFindings(trace({ probe: [{ type: 'macro-anchor', event: 2, found: 0, used: 'position', t: 5 }, { type: 'macro-anchor', event: 4, found: 2, used: 'position', t: 6 }, { type: 'macro-anchor', event: 5, found: 0, used: 'position', t: 7 }] }), { kind: 'package', itemType: 'sco', expose: '1.2' }).find(f => /element/.test(f.title))
+    assert.deepEqual([anchored.sev, anchored.title, anchored.evidence], ['info', '3 clicks didn’t find their element and used their recorded position', ['step 3: no element found', 'step 5: 2 elements matched', 'step 6: no element found']], 'macro anchor: the finding')
+    assert.equal(runFindings(trace({ probe: [{ type: 'macro-anchor', event: 0, found: 0, used: 'position', t: 5 }] }), { kind: 'package', itemType: 'sco', expose: '1.2' }).find(f => /element/.test(f.title)).title, '1 click didn’t find its element and used its recorded position', 'macro anchor: one click')
+  }
   assert.deepEqual([resumeOptions({ macro: [click(1)], depth: 1 })].map(o => [o.macro.length, o.resume, o.depth]), [[0, true, 1]], 'cycle: the second run plays no macro and resumes')
 
   // cycleFindings over runs made of the probe's API reports (SCORM 1.2).
@@ -2221,6 +2247,25 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
       const forced = run(latebutton, '--wait', '8', '--viewport', '1000x700', '--macro', small)
       assert.deepEqual([forced.launch.options.viewport.width, forced.launch.options.viewport.height], [1000, 700], 'macro size: --viewport wins')
       assert.ok(forced.findings.some(f => f.sev === 'info' && f.title === 'The macro was recorded at 800×600 and played at 1000×700: clicks may miss'), 'macro size: and says so: ' + titles(forced))
+    }
+    // Clicks tied to their element (E1.2): recorded at 1100 wide, replayed at 600 where Next has moved.
+    {
+      const at = (px, py, w, h) => ({ type: 'click', x: px / w, y: py / h }), tf = join(work, 'target.json')
+      const rec = (id, fixtureZip, clicks, viewport) => { const out = join(work, id + '.json'); run(fixtureZip, '--wait', '3', '--viewport', viewport, '--macro', (() => { const f = join(work, id + '-in.json'); writeFileSync(f, JSON.stringify(clicks.map((c, i) => ({ t: 500 + i * 400, ...c })))); return f })(), '--out', out); return JSON.parse(readFileSync(out, 'utf8')) }
+      const made = rec('movebutton-rec', movebutton, [at(1075, 40, 1100, 800)], '1100x800'), events = macroFromTrace(made.trace)
+      assert.equal(events.length, 1, 'target: the recording run saw the click'); assert.deepEqual([events[0].target.sel, events[0].target.text, events[0].target.role], ['#next', 'Next', 'button'], 'target: a real recording carries the element: ' + JSON.stringify(events))
+      const toTwo = r => r.api.some(a => a.el === 'cmi.core.lesson_location' && a.value === '2'), anchors = r => r.trace?.probe?.filter(p => p.type === 'macro-anchor') ?? []
+      const play = (events, ...args) => { writeFileSync(tf, JSON.stringify({ format: 'package-lab-macro', version: 2, viewport: { width: 1100, height: 800 }, events })); const out = join(work, 'target-out.json'), r = run(movebutton, '--wait', '3', '--viewport', '600x800', '--macro', tf, '--out', out); return { ...r, trace: JSON.parse(readFileSync(out, 'utf8')).trace } }
+      const found = play(events)
+      assert.ok(toTwo(found) && !anchors(found).length, 'target: the click finds Next at 600 wide: ' + calls(found) + JSON.stringify(anchors(found)))
+      const lost = play([{ ...events[0], target: { ...events[0].target, sel: '#nope' } }])
+      assert.ok(!toTwo(lost), 'target: a lost element falls back to the position, which misses at 600 wide')
+      assert.deepEqual(anchors(lost).map(p => [p.event, p.found, p.used]), [[0, 0, 'position']], 'target: and leaves a note'); assert.ok(lost.findings.some(f => f.sev === 'info' && f.title === '1 click didn’t find its element and used its recorded position'), 'target: and the finding: ' + titles(lost))
+      assert.ok(!toTwo(play([{ t: 500, ...at(1075, 40, 1100, 800) }])), 'target: the same click with no target misses at 600 wide')
+      // Secret fields: a click on a password field or a textarea never records its text.
+      const f = rec('clickfields-rec', clickfields, [at(80, 30, 800, 600), at(80, 90, 800, 600)], '800x600'), ins = f.trace.probe.filter(p => p.type === 'input' && p.kind === 'click')
+      assert.equal(ins.length, 2, 'target: both clicks recorded: ' + JSON.stringify(ins)); assert.deepEqual(ins.map(p => p.target?.sel), ['#pw', '#ta'], 'target: the fields are found by id')
+      assert.equal(ins[0].target.text, undefined, 'target: no text for a password field'); assert.equal(ins[1].target.text, 'Notes', 'target: a textarea gives its placeholder'); assert.ok(!JSON.stringify(f.trace.probe).includes('my private notes'), 'target: never the textarea’s content')
     }
     writeFileSync(optFile, JSON.stringify({ macro: [{ t: 1, type: 'tap' }] })); assert.match(node(['run', good, '--options', optFile]).stderr, /type to be click/, 'macro: a bad macro in the options file fails')
     writeFileSync(optFile, '{"nope":1}'); assert.match(node(['run', good, '--macro', optFile]).stderr, /list of events/, 'macro: a bad macro file fails')

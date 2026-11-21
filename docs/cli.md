@@ -545,7 +545,7 @@ has `t`, the milliseconds since the run started (0 to 3,600,000), and a `type`:
 
 | Type | Fields | Does |
 |---|---|---|
-| `click` | `x`, `y`, `approx`? | A left click at that point. `x` and `y` run from 0 to 1 across the window. `approx: true` (made in a frame of another origin, where only the frame's own position is known) is skipped in replay, and the run's trace has a `macro-skipped` note |
+| `click` | `x`, `y`, `approx`?, `target`? | A left click at that point. `x` and `y` run from 0 to 1 across the window. `approx: true` (made in a frame of another origin, where only the frame's own position is known) is skipped in replay, and the run's trace has a `macro-skipped` note. `target` ties the click to the element it was made on (below) |
 | `move` | `x`, `y` | Moves the pointer |
 | `wheel` | `x`, `y`, `dy` | Scrolls by `dy` pixels (positive is down) |
 | `key` | `key` | One of `Enter`, `Tab`, `Escape`, `Backspace`, `Delete`, `Space`, `Up`, `Down`, `Left`, `Right`, `PageUp`, `PageDown`, `Home`, `End` |
@@ -564,6 +564,16 @@ A `wait` has exactly one condition, and an optional `timeout` in milliseconds (1
 The sleep before each event is the gap between its `t` and the one before (the first: its own `t`), counted from the end
 of a wait. If a wait times out, the run's trace gets a `macro-wait` note, the macro plays nothing more, and the run
 carries on to its end (finding: [From a run](findings.md#from-a-run-the-macro)).
+
+**Target.** A click made in the course's own frames is recorded with `target`, the element it hit:
+`{ "sel": "#next", "text": "Next", "role": "button", "frame": [0] }`. `sel` is a CSS selector (an id, a `data-testid`,
+`aria-label` or `name` that is unique, or a path of `tag:nth-of-type()` steps of at most 6 levels; at most 500
+characters), `text` the element's text (at most 60 characters; for a field its `aria-label` or placeholder, and nothing
+for a password field), `role` its `role` or tag name, and `frame` the indexes of the frames to go down from the top
+window (left out for the top window itself). When the macro is played, the click looks for that element: if exactly one
+element matches and can be seen, it is scrolled to the middle and clicked wherever it is now, however the window size or
+layout differs. Otherwise the click uses `x` and `y`, the trace gets a `macro-anchor` note, and the run has one info
+finding ([From a run](findings.md#from-a-run-the-macro)). Edit `sel` to point a click at another element.
 
 **Size.** `viewport` (whole pixels, 100 to 10,000) is the window the positions were measured across. When a macro with
 a `viewport` is loaded by `--macro`, the desktop app or the web interface, and the run has no device size of its own,

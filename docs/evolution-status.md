@@ -14,9 +14,9 @@ Each commit column is filled in by the following work package's commit, since a 
 | # | Work package | Model | State | Commit | Notes |
 |---|---|---|---|---|---|
 | E0.1 | UI smoke test harness | sonnet | done | 5736ac5 | Playwright `_electron` works with Electron 45; no fallback needed. One review round. |
-| E1.1 | Macro format 2: window size and wait steps | sonnet | done | | One review round: wait text now counts toward the 100 KB text cap; out-of-order events were already sorted by `check.macro`. The 800×600 test uses latebutton, not good (see decisions.md). |
-| E1.2 | Clicks tied to the element clicked | sonnet | todo | | |
-| E1.3 | Record from the desktop app | haiku | todo | | |
+| E1.1 | Macro format 2: window size and wait steps | sonnet | done | 86accd4 | One review round: wait text now counts toward the 100 KB text cap; out-of-order events were already sorted by `check.macro`. The 800×600 test uses latebutton, not good (see decisions.md). |
+| E1.2 | Clicks tied to the element clicked | sonnet | done | | One review round: the element is asked for before the click is sent, selectors are checked for uniqueness, no text near fields, CSS hex escapes redacted. The field-text guard has no unit test (probe code), only end-to-end coverage. |
+| E1.3 | Record from the desktop app | haiku | in progress | | |
 | E2.1 | Window chrome and one toolbar | sonnet | todo | | |
 | E2.2 | The inspector: run settings on the right | sonnet | todo | | |
 | E2.3 | Views grouped in the sidebar | sonnet | todo | | |

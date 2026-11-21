@@ -147,11 +147,13 @@ export function redactRun(input, { names = false, key, map = new Map(), package:
     if (p[0] === 'symbol') return ['symbol']
     return p
   }
+  // A macro click's target (E1.2): its text is cut like typed text; the selector keeps its structure, with the ids and attribute values in it cut.
+  const target = t => { if (!t) return; cut(t, 'text', 'typed'); fix(t, 'sel', s => s.replace(/#((?:\\[0-9a-fA-F]{1,6}\s?|\\.|[^\s>:[\\])+)|="((?:[^"\\]|\\.)*)"/g, (m, id, v) => id !== undefined ? '#' + drop(id, 'typed') : '="' + drop(v, 'typed') + '"')) }
   const probe = p => {
     switch (p.type) {
       case 'dom': cut(p, 'sample', 'dom'); cut(p, 'loader', 'dom'); break
       case 'dialog': cut(p, 'message', 'dom'); break
-      case 'input': cut(p, 'text', 'typed'); break
+      case 'input': cut(p, 'text', 'typed'); target(p.target); break
       case 'macro-wait': cut(p.for, 'text', 'typed'); break   // the text a wait step waited for can be course text
       case 'post': if (p.shape) { fix(p.shape, 'value', v => tree(v)); fix(p.shape, 'vals', v => tree(v)) } break
       case 'pin-failed': case 'probe-failed': edit(p, 'error', browserMsg); break
@@ -215,7 +217,7 @@ export function redactRun(input, { names = false, key, map = new Map(), package:
   if (l) { if (l.item !== undefined) { delete l.item; count('titles') }; profile(l.profile) }
   if (o) {
     if (o.files) o.files = Object.fromEntries(Object.entries(o.files).map(([p, e]) => [hashPath(p), e?.base64 !== undefined ? { base64: drop(e.base64, 'files') } : { content: drop(typeof e === 'string' ? e : e?.content ?? '', 'files') }]))
-    if (o.macro) for (const ev of o.macro) cut(ev, 'text', 'typed')
+    if (o.macro) for (const ev of o.macro) { cut(ev, 'text', 'typed'); target(ev.target) }
     for (const x of o.responses ?? []) {
       cut(x, 'body', 'bodies'); fix(x, 'match', urlish)
       if (x.headers && typeof x.headers === 'object') { x.headers = Object.fromEntries(Object.entries(x.headers).map(([k, v]) => [k, drop(String(v), 'headers')])); skip(x, 'headers') }

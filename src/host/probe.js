@@ -91,13 +91,64 @@
     const target = e => { try { return e.composedPath()[0] } catch (err) { return e.target } }
     const secret = t => { try { return !!t && (t.type === 'password' || /(^|\s)(current-password|new-password|one-time-code|cc-[a-z-]+)(\s|$)/i.test(t.getAttribute('autocomplete') || '')) } catch (err) { return true } }
     const input = data => { if (sent++ < 2000) report({ type: 'input', ...data }) }
+    // E1.2: describes an element so a macro can find it again: { sel (CSS), text, role, frame (indexes down from the top window) }, or null
+    // when it can't be described within the macro limits. Text never comes from fields (their aria-label or placeholder stands in) and never from a secret one.
+    const generated = s => /[0-9a-f]{5,}/i.test(s), q = s => String(s).replace(/["\\]/g, '\\$&')
+    const unique = (el, sel) => { try { const l = el.ownerDocument.querySelectorAll(sel); return l.length === 1 && l[0] === el } catch (err) { return false } }
+    const anchor = el => {
+      const id = el.id && !generated(el.id) && '#' + CSS.escape(el.id)
+      if (id && unique(el, id)) return id
+      for (const a of ['data-testid', 'aria-label', 'name']) { const v = el.getAttribute(a); if (v) { const s = '[' + a + '="' + q(v) + '"]'; if (unique(el, s)) return s } }
+      return ''
+    }
+    const selOf = el => {
+      const parts = []
+      for (let n = el, i = 0; n && i < 6; n = n.parentElement, i++) {
+        const a = anchor(n)
+        if (a) { parts.unshift(a); break }
+        let k = 1; for (let s = n.previousElementSibling; s; s = s.previousElementSibling) if (s.localName === n.localName) k++
+        parts.unshift(n.localName + ':nth-of-type(' + k + ')')
+      }
+      const sel = parts.join(' > ')
+      return unique(el, sel) ? sel : ''
+    }
+    const frameOf = w => {
+      const path = []
+      try { while (w !== w.parent) { const p = w.parent; let i = 0; while (i < p.frames.length && p.frames[i] !== w) i++; if (i >= p.frames.length) return null; path.unshift(i); w = p } } catch (err) { return null }
+      return path
+    }
+    window.__labSel = el => {
+      try {
+        if (!el || el.nodeType !== 1) return null
+        const sel = selOf(el), frame = frameOf(el.ownerDocument.defaultView), tag = el.localName
+        if (!sel || sel.length > 500 || !frame || frame.length > 8 || frame.some(i => i > 999)) return null
+        const field = /^(input|textarea)$/.test(tag) || el.isContentEditable
+        const text = secret(el) || el.querySelector('input,textarea,[contenteditable]:not([contenteditable=false])') || el.closest('[contenteditable]:not([contenteditable=false])') ? '' : (field ? el.getAttribute('aria-label') || el.getAttribute('placeholder') || '' : el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 60)
+        return { sel, ...(text ? { text } : {}), role: (el.getAttribute('role') || tag).slice(0, 40), ...(frame.length ? { frame } : {}) }
+      } catch (err) { return null }
+    }
+    // The element at (x, y), 0–1 across this window, followed down through same-origin frames; null over a frame it can't enter.
+    window.__labHit = (x, y) => {
+      try {
+        let w = window, px = x * w.innerWidth, py = y * w.innerHeight, el = null
+        for (;;) {
+          el = w.document.elementFromPoint(px, py)
+          if (!el || !/^i?frame$/.test(el.localName)) break
+          const r = el.getBoundingClientRect(); px -= r.left + el.clientLeft; py -= r.top + el.clientTop
+          if (!el.contentDocument) return null
+          w = el.contentWindow
+        }
+        return window.__labSel(el)
+      } catch (err) { return null }
+    }
     addEventListener('pointerdown', e => {
       if (!e.isTrusted || e.button !== 0) return
       let ox = e.clientX, oy = e.clientY, f = window
       try { while (f !== f.parent && f.frameElement) { const r = f.frameElement.getBoundingClientRect(); ox += r.left; oy += r.top; f = f.parent } } catch (err) { /* another origin */ }
       let approx = false
       try { approx = f !== f.parent } catch (err) { approx = true }   // stopped at a frame inside another origin's page: only the frame's own position is known
-      input({ kind: 'click', x: unit(ox / f.innerWidth), y: unit(oy / f.innerHeight), ...(approx ? { approx: true } : {}) })
+      const t = approx ? null : window.__labSel(target(e))
+      input({ kind: 'click', x: unit(ox / f.innerWidth), y: unit(oy / f.innerHeight), ...(approx ? { approx: true } : t ? { target: t } : {}) })
     }, true)
     addEventListener('keydown', e => { if (e.isTrusted && KEYS[e.key] && !e.metaKey && !e.ctrlKey && !secret(target(e))) input({ kind: 'key', key: KEYS[e.key] }) }, true)
     addEventListener('input', e => {

@@ -32,9 +32,11 @@ export function withMacroSize(options, recorded) {
 
 // The clicks, keys and typing the probe saw in the content's frames (probe.js, type 'input'), as macro events.
 // Text kept only with the recordInput option, and never from password-like fields (the probe reports those by length only, and they are left out here).
-// A click in a frame of another origin is marked approx and isn't replayed.
+// A click in a frame of another origin is marked approx and isn't replayed; any other click keeps its target (E1.2).
+// A click's target (the element it was made on, E1.2) is kept when it passes the macro's checks, so a bad report can't break the macro.
+export const cleanTarget = target => { try { return normaliseOptions({ macro: [{ t: 0, type: 'click', x: 0, y: 0, target }] }).macro[0].target } catch { return undefined } }
 export const macroFromTrace = trace => normaliseOptions({ macro: (trace?.probe ?? []).filter(p => p.type === 'input' && typeof p.t === 'number' && (p.kind !== 'text' || typeof p.text === 'string')).map(p => ({ t: p.t, type: p.kind,
-  ...(p.kind === 'click' ? { x: p.x, y: p.y, ...(p.approx ? { approx: true } : {}) } : p.kind === 'key' ? { key: p.key } : { text: p.text }) })).slice(0, 2000) }).macro
+  ...(p.kind === 'click' ? { x: p.x, y: p.y, ...(p.approx ? { approx: true } : cleanTarget(p.target) ? { target: cleanTarget(p.target) } : {}) } : p.kind === 'key' ? { key: p.key } : { text: p.text }) })).slice(0, 2000) }).macro
 
 // The second run of a cycle resumes from the first's data and plays no macro. The first leaves the way a learner does (main.js, headless).
 export const resumeOptions = options => normaliseOptions({ ...options, macro: [], resume: true })

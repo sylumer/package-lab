@@ -32,7 +32,7 @@ import { comparePackages } from './pkgdiff.js'
 import { batchFiles, staticRows, batchSummary } from './batch.js'
 import { exportFixed, fixedName, applicable } from './fixes.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
-import { cycleFindings, cycleRows, macroFromTrace, resumeOptions, macroDelays, quietFor, withMacroSize, macroSize } from './cycle.js'
+import { cycleFindings, cycleRows, macroFromTrace, resumeOptions, macroDelays, quietFor, withMacroSize, macroSize, cleanTarget } from './cycle.js'
 import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
 import { PROFILES, launchProfile } from './profiles.js'
@@ -255,6 +255,12 @@ async function leaveLikeLearner(a) {
 
 // ---- Live view: frames of the content window for remote viewers, and their clicks and keys sent back ----
 // Frames are captured only while someone watches: a web client on /api/live, or a headless run with a live folder.
+// The element under (x, y), 0–1 across the run window's top page (E1.2). The top page is Package Lab's own host page, which has no probe, so this
+// follows same-origin frames down to the first one that has the probe's __labHit and asks that, with the point across that frame.
+const HIT = (x, y) => `(function(w,x,y){try{var px=x*w.innerWidth,py=y*w.innerHeight;for(;;){if(w.__labHit)return w.__labHit(px/w.innerWidth,py/w.innerHeight);var e=w.document.elementFromPoint(px,py);if(!e||!/^i?frame$/.test(e.localName)||!e.contentDocument)return null;var r=e.getBoundingClientRect();px-=r.left+e.clientLeft;py-=r.top+e.clientTop;w=e.contentWindow}}catch(err){return null}})(window,${x},${y})`
+// Where a click's element is now, as 0–1 across the run window (E1.2): { found, x, y }. found is how many elements the selector matched in the
+// frame (0 also for one that can't be clicked: no size, or out of the window after scrolling it to the middle); x and y only when found is 1.
+const FIND = target => `(function(sel,path){try{var w=window,i;for(i=0;i<path.length;i++)w=w.frames[path[i]];var l=w.document.querySelectorAll(sel);if(l.length!==1)return{found:l.length};var el=l[0];el.scrollIntoView({block:'center',inline:'center',behavior:'instant'});var r=el.getBoundingClientRect();if(!(r.width>0&&r.height>0))return{found:0};var x=r.left+r.width/2,y=r.top+r.height/2;for(var f=w;f!==window;f=f.parent){var b=f.frameElement.getBoundingClientRect();x+=b.left+f.frameElement.clientLeft;y+=b.top+f.frameElement.clientTop}if(x<0||y<0||x>window.innerWidth||y>window.innerHeight)return{found:0};return{found:1,x:x/window.innerWidth,y:y/window.innerHeight}}catch(err){return{found:0}}})(${JSON.stringify(target.sel)},${JSON.stringify(target.frame ?? [])})`
 const live = {
   watchers: 0, dir: null, timer: null, last: null, busy: false,
   // The newest open window of the run: a popup the content opened, or the run's own window.
@@ -288,6 +294,8 @@ const live = {
     if (!w || !e) return false
     const wc = w.webContents, [cw, ch] = w.getContentSize()
     const x = Math.round(Math.min(1, Math.max(0, +e.x || 0)) * cw), y = Math.round(Math.min(1, Math.max(0, +e.y || 0)) * ch)
+    // The element under a recorded click is asked for before the click is sent, so a click that navigates or re-renders doesn't change the answer (E1.2).
+    const hit = !replay && macro.recording && active && e.type === 'click' ? wc.executeJavaScript(HIT(Math.min(1, Math.max(0, +e.x || 0)), Math.min(1, Math.max(0, +e.y || 0)))).catch(() => null) : null
     if (e.type === 'click') {
       wc.sendInputEvent({ type: 'mouseMove', x, y })
       wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 })
@@ -308,7 +316,9 @@ const live = {
       } else if (e.type !== 'text' || text) {
         const clamp = n => Math.min(1, Math.max(0, +n || 0)); macro.text += text.length
         if (!macro.events.length) macro.viewport = { width: cw, height: ch }   // the size the positions are across
-        macro.events.push({ t: Date.now() - active.started, type: e.type, ...(e.type === 'click' || e.type === 'wheel' ? { x: clamp(e.x), y: clamp(e.y) } : {}), ...(e.type === 'wheel' ? { dy: Math.max(-10000, Math.min(10000, +e.dy || 0)) } : {}), ...(e.type === 'key' ? { key: e.key } : {}), ...(e.type === 'text' ? { text } : {}) })
+        const ev = { t: Date.now() - active.started, type: e.type, ...(e.type === 'click' || e.type === 'wheel' ? { x: clamp(e.x), y: clamp(e.y) } : {}), ...(e.type === 'wheel' ? { dy: Math.max(-10000, Math.min(10000, +e.dy || 0)) } : {}), ...(e.type === 'key' ? { key: e.key } : {}), ...(e.type === 'text' ? { text } : {}) }
+        macro.events.push(ev)
+        if (hit) hit.then(t => { const c = cleanTarget(t); if (c) ev.target = c })   // the element under the click (E1.2), added when the page answers
       }
     }
     if (this.watchers > 0 || this.dir) setTimeout(() => this.capture().catch(() => {}), 150)
@@ -387,6 +397,12 @@ async function playMacro(a, events, from = 0, to = events.length) {
     due += delays[i]
     await sleep(due - Date.now())
     if (active !== a) return
+    if (e.type === 'click' && e.target && !e.approx) {
+      const w = live.target(), at = w ? await w.webContents.executeJavaScript(FIND(e.target)).catch(() => null) : null
+      if (active !== a) return
+      if (at?.found === 1) { live.input({ ...e, x: at.x, y: at.y }, true); continue }
+      a.rec.push('probe', { type: 'macro-anchor', event: i, found: at?.found ?? 0, used: 'position', t: a.rec.t(), sid: '' })
+    }
     if (e.type !== 'wait') { if (!e.approx) live.input(e, true); continue }
     const start = Date.now(), timeout = e.timeout ?? 30000
     if (e.ms) await sleep(e.ms)

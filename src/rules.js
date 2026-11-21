@@ -93,6 +93,10 @@ export function runFindings(trace, launch = {}, analysis = null) {
     out.push({ sev: 'info', title: `The macro was recorded at ${n.recorded.width}×${n.recorded.height} and played at ${n.used.width}×${n.used.height}: clicks may miss`,
       detail: 'A macro’s clicks are positions across the window. This run has a device size of its own, which wins over the size the macro was recorded at.',
       evidence: [], fix: 'Run with the device size set to “Window as it is” to play the macro at its own size, or record it again at this size.' })
+  const anchors = probe.filter(p => p.type === 'macro-anchor')
+  if (anchors.length) out.push({ sev: 'info', title: `${anchors.length} click${anchors.length === 1 ? '' : 's'} didn’t find ${anchors.length === 1 ? 'its' : 'their'} element and used ${anchors.length === 1 ? 'its' : 'their'} recorded position`,
+    detail: 'A macro click that knows its element looks for it first and clicks wherever it is now. When that element wasn’t on the page (or more than one matched, or it couldn’t be seen), the click went to the position it was recorded at, which may be somewhere else at this window size.',
+    evidence: anchors.slice(0, 8).map(n => `step ${n.event + 1}: ${n.found ? n.found + ' elements matched' : 'no element found'}`), fix: 'Record the macro again on this version of the content, or edit the click’s target in the macro file.' })
   for (const n of probe.filter(p => p.type === 'macro-wait')) {
     const w = n.for ?? {}, what = w.text !== undefined ? `“${w.text}” and it never appeared` : w.milestone ? `the step “${w.milestone}” and the run never reached it` : `the network to be quiet for ${w.quiet} ms and it never was`
     out.push({ sev: 'warn', title: `The macro stopped at step ${n.event + 1}: waited ${+(n.waited / 1000).toFixed(1)} s for ${what}`,

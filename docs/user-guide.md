@@ -821,6 +821,13 @@ through the Live view while **Record clicks** is on is kept in the macro, so don
 Recording drops pointer moves, and stops with a message at 2,000 events or 100 KB of text.
 A click made in a frame from another origin is marked approximate and is not replayed (the run's trace says how many were skipped).
 
+**Clicks follow the element.** A click is saved with the element it was made on, as well as its position. When the macro
+plays, the click goes to that element wherever it is now (a button that moved at another window size, say). If the
+element can't be found, the click goes to its recorded position and the run has an info finding: “3 clicks didn’t find
+their element and used their recorded position”. What is saved about the element is a selector, its role, and at most 60
+characters of its text; never the text of a password field. A redacted report cuts the text and the values in the
+selector.
+
 **Size.** A macro remembers the window size it was recorded at ("14 events over 12.3 s, recorded at 1100×800" under
 More options), because its clicks are positions across the window. When **Device size** is "Window as it is", the
 course runs at that size. If you choose a device size yourself, yours wins, and the run says so in a finding: "The macro

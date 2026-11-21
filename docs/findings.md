@@ -333,6 +333,7 @@ Only when a macro was played (`--macro`, or the macro in the options). See [Macr
 |---|---|---|---|
 | The macro stopped at step 4: waited 30 s for “Next” and it never appeared | warning | A wait step (the number counts events from 1) ran out of time. It named text, a step of the progress strip or a quiet network, and what it waited for didn't happen. The clicks and keys after it were not played | Lengthen the wait's `timeout`, or check the step before it: it may not have done what this one waits for |
 | The macro was recorded at 1100×800 and played at 390×844: clicks may miss | info | The macro's clicks are positions across the window. The run has a device size of its own, and it wins over the size the macro was recorded at | Set Device size to "Window as it is" to play at the recorded size, or record the macro again at this size |
+| 3 clicks didn’t find their element and used their recorded position | info | A click that was recorded with the element it was made on looks for that element first (by its selector) and clicks wherever it is now. For these clicks nothing matched, more than one element matched, or the match couldn’t be seen, so they went to the position they were recorded at, which may be elsewhere at this window size. The evidence lists the steps (counted from 1) | Record the macro again on this version of the content, or edit the click’s `target` in the macro file |
 
 ## From a save-and-resume test
 

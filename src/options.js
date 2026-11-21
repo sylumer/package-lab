@@ -13,7 +13,7 @@ const MAX_PIN = 1024 ** 2, MAX_BODY = 10 * 1024 ** 2, MAX_BODIES = 20 * 1024 ** 
 // A macro (P2.4; wait steps in format 2, E1.1): events, at most this many, with at most this much typed text in all, none later than an hour into the run.
 export const MACRO_KEYS = /^(Enter|Tab|Escape|Backspace|Delete|Space|Up|Down|Left|Right|PageUp|PageDown|Home|End)$/
 const MAX_MACRO = 2000, MAX_MACRO_TEXT = 100 * 1024, MAX_MACRO_T = 3600 * 1000
-const MACRO_FIELDS = { click: ['x', 'y', 'approx'], move: ['x', 'y', 'approx'], wheel: ['x', 'y', 'dy'], key: ['key'], text: ['text'], wait: ['ms', 'text', 'milestone', 'quiet', 'timeout'] }
+const MACRO_FIELDS = { click: ['x', 'y', 'approx', 'target'], move: ['x', 'y', 'approx'], wheel: ['x', 'y', 'dy'], key: ['key'], text: ['text'], wait: ['ms', 'text', 'milestone', 'quiet', 'timeout'] }
 const MAX_FILE = 50 * 1024 ** 2, MAX_TOTAL = 200 * 1024 ** 2   // changed files: per file and in all
 const EXPOSE = ['manifest', 'both', '1.2', '2004', 'none']
 export const STORAGE = ['normal', 'blocked', 'partitioned']
@@ -153,6 +153,15 @@ const check = {
       const out = { t: Math.round(e.t), type: e.type }
       if (allowed.includes('x')) { out.x = unit(e, 'x'); out.y = unit(e, 'y') }
       if (e.approx !== undefined) { if (e.approx !== true) bad(k, `needs approx to be true or left out in event ${i + 1}`); out.approx = true }   // a click in another origin's frame, placed approximately: not replayed
+      if (e.target !== undefined) {   // E1.2: the element a click was made on: { sel, text?, role?, frame? }
+        const t = e.target, at = f => `needs target.${f} in event ${i + 1}`, has = f => t[f] !== undefined
+        if (!obj(t) || Object.keys(t).some(f => !['sel', 'text', 'role', 'frame'].includes(f))) bad(k, `needs target to be like { "sel": "#next" } in event ${i + 1}`)
+        if (typeof t.sel !== 'string' || !t.sel || t.sel.length > 500) bad(k, at('sel') + ' to be 1 to 500 characters')
+        if (has('text') && (typeof t.text !== 'string' || t.text.length > 60)) bad(k, at('text') + ' to be at most 60 characters')
+        if (has('role') && (typeof t.role !== 'string' || t.role.length > 40)) bad(k, at('role') + ' to be at most 40 characters')
+        if (has('frame') && (!Array.isArray(t.frame) || t.frame.length > 8 || !t.frame.every(n => Number.isInteger(n) && n >= 0 && n <= 999))) bad(k, at('frame') + ' to be at most 8 whole numbers from 0 to 999')
+        out.target = { sel: t.sel, ...(has('text') ? { text: t.text } : {}), ...(has('role') ? { role: t.role } : {}), ...(has('frame') ? { frame: [...t.frame] } : {}) }
+      }
       if (e.type === 'wheel') { if (typeof e.dy !== 'number' || !Number.isFinite(e.dy) || Math.abs(e.dy) > 10000) bad(k, `needs dy to be a number from -10000 to 10000 in event ${i + 1}`); out.dy = e.dy }
       if (e.type === 'key') { if (!MACRO_KEYS.test(e.key)) bad(k, `needs key to be a name like Enter or Tab in event ${i + 1}, not ${JSON.stringify(e.key)}`); out.key = e.key }
       if (e.type === 'wait') {
