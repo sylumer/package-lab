@@ -4,7 +4,7 @@
 // package from toolbox. See docs/developer-guide.md.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:net'
@@ -25,7 +25,7 @@ import { normaliseOptions, cliCommand, VIEWPORTS, viewportName, optionsSummary }
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
 import { markdown, slugOf, headings, searchDocs } from '../src/ui/markdown.js'
-import { DOCS } from '../src/docs.js'
+import { DOCS, MAX_IMAGE, inlineImages } from '../src/docs.js'
 import { comparePackages, compareFiles, compareManifests, compareBoots, compareFindings, compareBehaviour } from '../src/pkgdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
 import { pinPathProblem, matcher, answerFor, buildAnswer, pinPrefix, userAgentPin, lexicalDeclaration, pinFindings, parsePinFlag, parseAnswerFlag } from '../src/pins.js'
@@ -1592,6 +1592,13 @@ console.log('settings: unit ok')
   assert.equal(markdown('a **b** *c* `<d>`\nnext'), '<p>a <strong>b</strong> <em>c</em> <code>&lt;d&gt;</code> next</p>\n', 'markdown: inline formatting, wrapped lines join')
 }
   assert.ok(markdown('## settings', 'doc-').includes('id="doc-settings"'), 'markdown: heading ids take the prefix')
+{   // E3.3: an image is drawn from a relative path or a PNG data: URI, with its alt text escaped; any other source is only the alt text.
+  assert.equal(markdown('![A "q" <b>](images/x.png)'), '<p><img alt="A &quot;q&quot; &lt;b&gt;" src="images/x.png"></p>\n', 'markdown: an image with escaped alt text')
+  assert.ok(markdown('![x](data:image/png;base64,QUJD)').includes('<img alt="x" src="data:image/png;base64,QUJD">'), 'markdown: a PNG data URI is drawn')
+  const js = markdown('![x](javascript:alert(1))')
+  assert.ok(!js.includes('javascript') && !js.includes('<img'), 'markdown: a javascript: source is not used')
+  assert.ok(!markdown('![x](//evil.test/a.png)').includes('<img'), 'markdown: a protocol-relative source is not used')
+}
 console.log('markdown: unit ok')
 {   // The docs' links (E3.1): every relative link in a doc in DOCS names a file that exists, and every #anchor is a heading there, slugged as the panel slugs them. The guide pages and the index link only to docs the panel can open. Code blocks are not read for links.
   const docsDir = new URL('../docs/', import.meta.url).pathname
@@ -1620,6 +1627,9 @@ console.log('markdown: unit ok')
     }
   }
   assert.deepEqual(broken, [], 'docs: every link in DOCS points to a file and a heading that exist, and the guide links only to panel docs')
+  // E3.3: the images the guide shows are PNGs in docs/images, each at most 400 KB and 2 MB in all. The link check above covers their paths.
+  const imgs = readdirSync(join(docsDir, 'images')), sizes = imgs.map(f => statSync(join(docsDir, 'images', f)).size)
+  assert.ok(imgs.every(f => f.endsWith('.png')) && sizes.every(n => n <= MAX_IMAGE) && sizes.reduce((a, b) => a + b, 0) < 2 * 1024 * 1024, 'docs images: PNGs, each at most 400 KB, under 2 MB in all')
   console.log('docs links: unit ok')
   // E3.2: every data-help target resolves to a doc and heading. The targets are the data-help="…" values in index.html, and in app.js the first argument after the name in infoBtn(…, '…') and the values in GROUP_HELP, which are the only places it writes them.
   const ui = f => readFileSync(new URL('../src/ui/' + f, import.meta.url), 'utf8')
@@ -1644,6 +1654,18 @@ console.log('markdown: unit ok')
   assert.deepEqual(searchDocs(docs, 'zzz'), [], 'searchDocs: no match')
   assert.equal(searchDocs([{ name: 'b.md', title: 'B', text: 'x\n'.repeat(50) }], 'x').length, 20, 'searchDocs: capped at 20')
   console.log('docs search: unit ok')
+}
+{   // E3.3: inlineImages puts a doc's PNGs in as data: URIs (up to 400 KB, PNG signature, under docs/); anything else becomes its alt text. searchDocs skips the data.
+  const png = n => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(n - 4)])
+  const files = { 'images/a.png': png(10), 'images/edge.png': png(MAX_IMAGE), 'images/big.png': png(MAX_IMAGE + 1), 'images/b.jpg': Buffer.from([0xff, 0xd8, 0xff]), 'images/fake.png': Buffer.from('not a png') }
+  const read = p => files[p] ?? null, data = b => `data:image/png;base64,${b.toString('base64')}`
+  const md = '![A](../images/a.png) ![Edge](../images/edge.png) ![Big](../images/big.png) ![Jpg](../images/b.jpg) ![Fake](../images/fake.png) ![Missing](../images/none.png) ![Web](https://x.test/a.png) ![Up](../../a.png) ![Abs](/etc/a.png)'
+  assert.equal(inlineImages(md, 'guide/page.md', read), `![A](${data(files['images/a.png'])}) ![Edge](${data(files['images/edge.png'])}) Big Jpg Fake Missing Web Up Abs`, 'inlineImages: PNGs up to 400 KB inline, everything else is its alt text')
+  assert.equal(inlineImages('![A](images/a.png)', 'README.md', read), `![A](${data(files['images/a.png'])})`, 'inlineImages: a doc at the top of docs/')
+  assert.equal(inlineImages('no images, [a link](x.md)', 'README.md', read), 'no images, [a link](x.md)', 'inlineImages: text without images is unchanged')
+  assert.equal(inlineImages('![W](..\\images\\a.png) ![P](//evil.test/a.png)', 'guide/page.md', read), 'W P', 'inlineImages: a backslash path or a protocol-relative address is alt text')
+  assert.deepEqual(searchDocs([{ name: 'a.md', title: 'A', text: '![Pic](' + data(files['images/a.png']) + ')' }], 'QUJD'), [], 'searchDocs: an inlined image is not searched')
+  assert.equal(searchDocs([{ name: 'a.md', title: 'A', text: '![Pic](' + data(files['images/a.png']) + ')' }], 'pic')[0].html, '![<mark>Pic</mark>]()', 'searchDocs: the alt text is searched')
 }
 console.log('unit: ok')
 
@@ -2400,6 +2422,11 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     const cookie = login.headers.get('set-cookie').split(';')[0], H = { cookie }
     const invoke = async (name, arg) => { const r = await (await fetch(`${base}/api/invoke/${name}`, { method: 'POST', headers: H, body: JSON.stringify(arg ?? {}) })).json(); if (r.error) throw new Error(r.error); return r.value }
     assert.match(await (await fetch(base + '/', { headers: H })).text(), /bridge\.js/, 'web: UI served')
+    // E3.3: the doc handler inlines the guide's PNGs, so a doc comes with no image paths left to fetch.
+    const guide = await invoke('doc', { name: 'guide/getting-started.md' })
+    assert.ok(guide.includes('](data:image/png;base64,') && !/\]\(\.\.\/images\//.test(guide), 'web: the doc handler inlines the guide images')
+    const macrosDoc = await invoke('doc', { name: 'guide/macros.md' })
+    assert.ok(macrosDoc.includes('](data:image/png;base64,'), 'web: a page with images inlines them')
     const up = await (await fetch(base + '/api/upload?name=good.zip', { method: 'POST', headers: H, body: readFileSync(good) })).json()
     assert.equal(up.value.name, 'good.zip', 'web: upload')
     await invoke('launch', { item: 0, auto: 4 })

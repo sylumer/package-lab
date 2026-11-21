@@ -29,6 +29,8 @@ There are four ways to make one:
 - **A run in the desktop app**: clicks made directly in the course window can't be seen from outside, so the probe records them in the course's frames instead. Choose a run, then **Use this run's clicks** in the inspector's **Macro** segment. Clicks in a frame on another origin are placed relative to that frame.
 - **A file**: the `--macro` option on the command line, or `"macro"` in an options file.
 
+![The inspector's Macro segment after a run, offering the run's clicks as a macro](../images/macro-light.png)
+
 Recording drops pointer moves, and stops with a message at 2,000 events or 100 KB of text. A click made in a frame from another origin is marked approximate and is not replayed; the run's trace says how many were skipped.
 
 ## What is kept

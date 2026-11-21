@@ -25,7 +25,9 @@ if (!existsSync(join(build, 'icon.icns'))) {
 
 // Drops dist, tests, scripts etc. and every .md file, except the docs shown in the app (docs/ itself and the folders they sit in, such as packs/ and guide/, stay as directories).
 const kept = new Set(DOCS.map(d => '/docs/' + d.name)), keptDirs = new Set(['/docs', ...DOCS.filter(d => d.name.includes('/')).map(d => '/docs/' + d.name.split('/')[0])])
-const ignore = p => kept.has(p) || keptDirs.has(p) ? false : /^\/(dist|test|docs|scripts|build|alfred)(\/|$)/.test(p) || /^\/\.git/.test(p) || /\.md$/.test(p)
+// The guide's light pictures (docs/images/*-light.png, E3.3) are kept too: the panel draws them from the packaged docs.
+const shot = p => p === '/docs/images' || /^\/docs\/images\/[^/]+-light\.png$/.test(p)
+const ignore = p => kept.has(p) || keptDirs.has(p) || shot(p) ? false : /^\/(dist|test|docs|scripts|build|alfred)(\/|$)/.test(p) || /^\/\.git/.test(p) || /\.md$/.test(p)
 
 const [out] = await packager({
   dir: root, out: join(root, 'dist'), overwrite: true, platform: 'darwin', arch: process.arch,

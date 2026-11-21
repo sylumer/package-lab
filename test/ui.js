@@ -36,6 +36,10 @@ export async function start(zip) {
 }
 export async function close() { const a = app; app = win = null; if (a) await a.close().catch(() => {}) }
 export const page = () => win
+// Sets the main window's content size (scripts/screenshots.js uses 1280 × 800). The main window is the one that loads the UI page.
+export const contentSize = (w, h) => app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows().find(x => /src\/ui\/index\.html$/.test(x.webContents.getURL())).setContentSize(w, h), [w, h])
+// Brings the main window to the front and focuses it (a run's course window takes focus, which dims the main window's sidebar).
+export const focusMain = () => app.evaluate(({ app, BrowserWindow }) => { app.focus({ steal: true }); BrowserWindow.getAllWindows().find(x => /src\/ui\/index\.html$/.test(x.webContents.getURL())).focus() })
 // Closes the app and removes the temp folder.
 export async function cleanup() { await close(); if (work) rmSync(work, { recursive: true, force: true, maxRetries: 5 }); work = null }
 // There is no handler to open a package in a running app, so this restarts the app with the package as an argument.
@@ -386,7 +390,7 @@ async function recordRound() {
 }
 // The run window is the window that isn't the main one and shows the course's host (the LMS address, not a file or about: page).
 // It is shown, so its mouse reaches the course.
-async function runWindow() {
+export async function runWindow() {
   for (let i = 0; i < 100; i++) {
     const run = app.windows().find(w => w !== win && /^https?:/.test(w.url()))
     if (run) return run
@@ -395,7 +399,7 @@ async function runWindow() {
   throw new Error('The run window never opened')
 }
 // Clicks the middle of a course button (Next, or Save and exit) with the run window's mouse, at its measured position (in whichever frame it is).
-async function clickCourse(run, sel) {
+export async function clickCourse(run, sel) {
   for (let i = 0; i < 100; i++) {
     for (const f of run.frames()) {
       if (!await f.locator(sel).count()) continue

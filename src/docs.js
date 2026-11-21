@@ -1,3 +1,5 @@
+import { posix } from 'node:path'
+
 // The user-facing docs bundled with the app and shown in its docs panel; names are paths relative to docs/.
 // group is the heading the panel's list puts them under; the order here is the order in the list.
 export const DOCS = [
@@ -30,3 +32,20 @@ export const DOCS = [
   { name: 'packs/storyline.md', title: 'Storyline', group: 'Authoring tools' },
   { name: 'packs/xyleme.md', title: 'Xyleme', group: 'Authoring tools' },
 ]
+
+// Images in the docs panel (E3.3): every ![alt](path) becomes a data: URI, so the page's CSP (img-src 'self' data:) stays as it is.
+// path is relative to the doc's own folder and must stay under docs/. Only PNGs are inlined, and only up to MAX_IMAGE bytes; anything else
+// (missing, another format, a web address, too big) becomes its alt text. read(path) returns the file's bytes, or null.
+export const MAX_IMAGE = 400 * 1024
+const PNG = [0x89, 0x50, 0x4e, 0x47]
+// ponytail: rewrites every image syntax in the text, including one inside a code span or fence. Fine for the repo's docs; skip code when a doc needs a literal ![..](..).
+export function inlineImages(md, name, read) {
+  return String(md).replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) => {
+    if (/^[a-z][\w+.-]*:|^\/|\\/i.test(src)) return alt   // a web address, an absolute path, or a Windows separator (the paths are POSIX)
+    const path = posix.normalize(posix.join(posix.dirname(name), src))
+    if (path.startsWith('../') || !path.toLowerCase().endsWith('.png')) return alt
+    const buf = read(path)
+    if (!buf || buf.length > MAX_IMAGE || !PNG.every((b, i) => buf[i] === b)) return alt
+    return `![${alt}](data:image/png;base64,${buf.toString('base64')})`
+  })
+}
