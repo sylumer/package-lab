@@ -5,7 +5,7 @@ that is described in full elsewhere: the [user guide](user-guide.md) for the des
 commands, and [Findings](findings.md) for what each message means.
 
 The commands here use the CLI, because each one saves its result to a folder you can keep. The desktop app has the same
-steps on its tabs; each recipe says where they are.
+steps on its views; each recipe says where they are.
 
 Three rules run through all of them:
 
@@ -51,7 +51,7 @@ package-lab run course.zip --tool xyleme --wait 20 --out run.json
 ```
 
 Read the **Milestones** line. If the run didn't reach **Looked for the API**, the content never started its LMS code.
-Look at **Got as far as** and **Didn't reach**. In the user guide, the Findings tab shows the same.
+Look at **Got as far as** and **Didn't reach**. In the user guide, the Findings view shows the same.
 
 **3. Find out what it wants from its server (Server needs).** Each request to the server's root or another site is
 listed, and each field the content reads from the answer is named.
@@ -61,7 +61,7 @@ package-lab discover course.zip --tool xyleme --wait 20 --out disc
 ```
 
 Open `disc/discovery.json`, or the text output. The findings say what the content needs, and whether a stand-in answer
-got it further. In the desktop app, use the **Server needs** tab and **Discover all server requests**.
+got it further. In the desktop app, use the **Server needs** view and **Discover all server requests**.
 
 **4. Answer those requests and run again.** Build an options file from the stand-in answers that Discover saved:
 
@@ -118,7 +118,7 @@ its evidence is in loading order. Fix the first item: later ones often follow fr
 package-lab run course.zip --wait 20 --out run.json
 ```
 
-**2. Check the loading path.** In the desktop app, the **Boot path** tab's **In the run** column shows when each file
+**2. Check the loading path.** In the desktop app, the **Boot path** view's **In the run** column shows when each file
 was asked for and its status. The first file marked *never asked for* is where loading stopped. From the files alone:
 
 ```bash
@@ -128,7 +128,7 @@ package-lab analyze course.zip
 Errors here (a missing file, wrong capitals, a path at the root of the server, a file that climbs out of the package)
 are almost always the cause. Run `package-lab fix course.zip --out fixed.zip` for capitals and the manifest.
 
-**3. Read the first error.** The **Errors** tab lists uncaught errors in time order. The first one usually explains the
+**3. Read the first error.** The **Errors** view lists uncaught errors in time order. The first one usually explains the
 rest. Look at the file and line it names (the link opens the code).
 
 **4. If there is no cause listed, the content is waiting.** The finding "The content was waiting for: …" names what was
@@ -141,7 +141,7 @@ in the real LMS, then give the content the same, with a pin or an answer (see th
 package-lab drill course.zip --wait 20 --out drill
 ```
 
-Drill-down runs the content with tracing and gives the chain of decisions that led to the dead end. The Execution tab
+Drill-down runs the content with tracing and gives the chain of decisions that led to the dead end. The Execution view
 shows the same events, from the bottom up.
 
 **6. Check for the old-browser causes.** Flash, code that only runs in Internet Explorer, and `document.write` in
@@ -149,7 +149,7 @@ deferred scripts are listed in the boot findings with their own fixes.
 
 ## No API calls
 
-The content loads, but the LMS never gets a call. The **Lookups** tab is the first place to look.
+The content loads, but the LMS never gets a call. The **Lookups** view is the first place to look.
 
 **1. Did the content look for the API at all?**
 
@@ -157,7 +157,7 @@ The content loads, but the LMS never gets a call. The **Lookups** tab is the fir
   and the boot path (the recipe above). If the content sets its own `window.API`, its own preview or standalone path
   took over. Find the setting that makes it do that, and turn it off in the export.
 - **Looked, and found nothing**: the LMS isn't where the content looks. Go to step 2.
-- **Found it, but never called it**: the first error after the lookup stopped it. Check the **Errors** tab for that
+- **Found it, but never called it**: the first error after the lookup stopped it. Check the **Errors** view for that
   point.
 
 **2. Try the API versions the LMS might offer.**
@@ -343,7 +343,7 @@ package-lab run course.zip --profile-file moodle-site.json --wait 20
 browser storage; wrap cross-frame calls in `try/catch` and use a `postMessage` bridge when the content is on another
 origin; read the saved place on launch rather than at the first page. The findings for each setting name the fix.
 
-If one LMS fails for a reason the profile doesn't cover (its own player, a licence server), the Network tab shows the
+If one LMS fails for a reason the profile doesn't cover (its own player, a licence server), the Network view shows the
 requests it fails on. Use the Discover recipe for what the content reads from its server.
 
 ## Sending the evidence

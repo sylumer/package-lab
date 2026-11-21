@@ -31,12 +31,12 @@ The profile fields show the chosen profile's values. Change any of them to try a
 | **Content origin** | **same**: served from the LMS's origin (`https://lms.lab.invalid/`, shown as `lab://run/`). **other**: from another origin (`https://cdn.content.invalid/`, shown as `lab://content/`), as when an LMS serves packages from a separate domain or CDN. The content then can't read anything on the LMS's windows, the API included |
 | **Frames**, **Frame kind** | How many empty LMS frames are between the LMS page and the content (0–5), and whether they are `iframe`s or a `frameset` with `frame`s |
 | **Sandbox**, **Allow** | The `sandbox` and `allow` attributes of the content's own frame (iframes only). An empty sandbox means none. A sandbox without `allow-same-origin` gives the content an opaque origin |
-| **Launch**, **Popup delay** | **frame**, or **popup**: the LMS opens the content with `window.open`, after the delay |
+| **Launch**, **Popup delay (ms)** | **frame**, or **popup**: the LMS opens the content with `window.open`, after the delay |
 | **Profile parameters** | Query text the LMS adds to the launch address. `{scoid}` (the item's identifier), `{attempt}` (1, or 2 when resuming) and `{learner}` (`learner-1`) are filled in. **Launch parameters** (Advanced) are added after these |
-| **API delay** | How long after the launch the API objects appear. Content that looks only once, at once, misses them |
+| **API delay (ms)** | How long after the launch the API objects appear. Content that looks only once, at once, misses them |
 | **API on** | Which window holds the API: **top** (the LMS page; in a popup, the new window's top LMS frame), **parent** (the content's parent frame) or **opener** (the window that opened the content: needs **popup**). With **popup**, **top** and **parent** need at least one frame |
-| **CSP**, **Headers** | A `Content-Security-Policy` header, and other headers (a JSON object), on every package file |
-| **Commit**, **Slow commit** | **ok**; **fail**: `LMSCommit`/`Commit` returns false with error 101 (1.2) or 391 (2004); **slow**: each commit blocks for the given time, like a slow synchronous save |
+| **CSP**, **Headers (JSON)** | A `Content-Security-Policy` header, and other headers (a JSON object), on every package file |
+| **Commit**, **Slow commit (ms)** | **ok**; **fail**: `LMSCommit`/`Commit` returns false with error 101 (1.2) or 391 (2004); **slow**: each commit blocks for the given time, like a slow synchronous save |
 | **Suspend data 1.2**, **2004** | The LMS's own limit on `cmi.suspend_data`, in characters. Empty means the standard's (4,096 and 64,000) |
 | **Cookies** | **normal** or **third-party-blocked**. With **third-party-blocked**, storage in the content's frames is blocked, as **Storage: Blocked** does. The **scorm-cloud** preset sets it |
 

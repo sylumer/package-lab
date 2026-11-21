@@ -100,7 +100,7 @@ src/
   experiments.js        Experiments: PRESETS (api, frames, standard, lms, storage, browsers), planVariants, runResult, summarise, experimentFindings (P0.3)
   macros.js             The macro editor's pure parts: setDelay, move, remove, insertWait, setFields, edit, macroRows, macroName (E4.2)
   cycle.js              Save and resume: macros (readMacro, macroFile, macroDelays, quietFor, withMacroSize), resumeOptions, cycleFindings, cycleRows (P2.4)
-  timeline.js           The Timeline: timelineModel (lanes in ms) and timelineView (fractions of the window shown), for the tab and the report (P4.2)
+  timeline.js           The Timeline: timelineModel (lanes in ms) and timelineView (fractions of the window shown), for the Timeline view and the report (P4.2)
   ui/                   The interface (desktop window and web)
     index.html, style.css, app.js (an ES module)
     codeview.js         The shared code view (classic script, window.CodeView; P4.1)
@@ -237,7 +237,7 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `saved-runs` | — | `[{ file, size, mtime }]` from the runs folder |
 | `load-run` | `{ file }` | `[run summary]`. The name is reduced to a base name in the runs folder |
 | `code-view` | `{ run?, path, line?, col?, mode?, source? }` | The shared code view's data for one file (see [Code views](#code-views-p41)): `{ path, kind, mode, modes, later, text, target, cov, covNote, marks, source, sources, note, minified }`, or `{ path, empty: true }` when the text isn't available. With no run, the open package's file (a changed file as changed) |
-| `source` | `{ run, url }` or `{ run, path }` | A script's source from a run, by address; or by package path (the Execution tab): the script as recorded, or for a page, the file the run was served (its changed file, or the open package's if it is that package), else `''` |
+| `source` | `{ run, url }` or `{ run, path }` | A script's source from a run, by address; or by package path (the Execution view): the script as recorded, or for a page, the file the run was served (its changed file, or the open package's if it is that package), else `''` |
 | `live-input` | an input event | `true` if delivered |
 | `live-watch` | `{ on }` | Desktop only. The number of watchers. The desktop UI's Live view calls it with `on: true` while it is shown, `false` after |
 | `live-hit` | `{ x, y }` (0–1 across the run window) | `{ sel, text, role }` of the element there (the probe's `__labHit`, through `HIT`), or `null`. `x` and `y` are clamped to numbers before they go in the expression; the strings are cut to 300, 60 and 40 characters |
@@ -803,7 +803,7 @@ every reader of a traced run (findings, discovery's source hints, comparisons) s
 `traceFindings(trace)` gives the [tracing findings](findings.md#from-a-run-tracing) (called by `runFindings`).
 
 The run summary the interfaces get has no `exec` or `sites`; it has `execEvents` (the count) and `execTail` (the last
-500 from `lastEvents`, worked out once per run). The `source` handler takes `{ run, path }` too, for the Execution tab.
+500 from `lastEvents`, worked out once per run). The `source` handler takes `{ run, path }` too, for the Execution view.
 
 `PACKAGE_LAB_FORCE_TRACE=1` makes `launchItem` trace every run: the tests use it.
 
@@ -848,7 +848,7 @@ Callers run twice: the CLI's `drill` (`runPackage`, then again with `watchPins` 
 in `main.js` (in the experiment slot; traces the run again first if it wasn't traced; `runToEnd` for each run). Events
 `drill`: `{ state: 'start', run }`, `{ state: 'step', run, note }`, `{ state: 'done', run, result }` (with `traceRun` and
 `watchRun`, run ids), `{ state: 'error', run, message }`. The UI keeps the latest in `st.drill` and shows it in the
-**Drill-down** tab for that run.
+**Drill-down** view for that run.
 
 ## Pins and answers
 
@@ -906,7 +906,7 @@ without the CLI's `package`, `item`, `base`, `request` and `out`; `discoverFindi
 
 In the apps, `discoverStart` runs the loop in the experiment slot (one at a time; `experiment-stop` and `discover-stop`
 both stop it), emits `discover` events (`{ state: 'start', request }`, `{ state: 'round', index, row }`,
-`{ state: 'done', result }`, `{ state: 'error', message }`) and saves the result (below). The UI's Server needs tab
+`{ state: 'done', result }`, `{ state: 'error', message }`) and saves the result (below). The UI's Server needs view
 keeps it in `st.disc`; **Save as response** puts `result.requests[i].response` into `st.responses`, replacing one with
 the same pattern.
 
@@ -924,7 +924,7 @@ JSON instead.
 
 ## Overrides
 
-`options.files` replaces or adds files for one run. The session's overrides live in `pkg.overrides` (`{ path: { content } | { base64 } }`, reset when a package is opened); the Files tab's handlers change them. `launchItem` uses `options.files` if the caller gave it and otherwise `pkg.overrides`; the headless run and the CLI always give it. A run is served from `overlayFiles(pkg.files, o.files)` (`served` in `main.js`, which `serve()` reads, so the original `pkg.files` is never touched), and its boot graph is recomputed for that file set and not cached. The static analysis of the package (`pkg.analysis`) stays that of the original.
+`options.files` replaces or adds files for one run. The session's overrides live in `pkg.overrides` (`{ path: { content } | { base64 } }`, reset when a package is opened); the Files view's handlers change them. `launchItem` uses `options.files` if the caller gave it and otherwise `pkg.overrides`; the headless run and the CLI always give it. A run is served from `overlayFiles(pkg.files, o.files)` (`served` in `main.js`, which `serve()` reads, so the original `pkg.files` is never touched), and its boot graph is recomputed for that file set and not cached. The static analysis of the package (`pkg.analysis`) stays that of the original.
 
 All paths are checked by `packagePath` in `options.js` (relative, `/` only, no `..`, no empty segment): in `normaliseOptions`, and again in each handler before it looks at `pkg.files`. Nothing is ever read from or written to disk from an override path; the web interface sends replacement files as base64 inside the JSON body (limit 20 MB).
 
@@ -982,7 +982,7 @@ Limits: one run at a time, or two with `--jobs` over 1. A run that exits with an
 last line of its stderr.
 
 The desktop **Check a folder…** (`check-folder` in `main.js`) uses `batchFiles` and `staticRows` with two threads, static only,
-and shows the rows in the **Folder check** tab. `open-batch-row` opens a path only if it came from the last check
+and shows the rows in the **Folder check** view. `open-batch-row` opens a path only if it came from the last check
 (`batchPaths`). The button is hidden in the web interface.
 
 **Tests.** `test/batch.js` (unit, in `--unit`) covers the cells, the guard, the summary, the rows after a run, the HTML
@@ -1060,7 +1060,7 @@ the [CLI guide](cli.md#diff)), built from five small functions that are exported
 - `compareBoots`: nodes keyed by path (or target), first one wins. Added, removed, and status changed.
 - `compareFindings`: static findings plus the boot graph's risks, as `analyze` gives them. Same title and evidence is the same finding.
 - `compareBehaviour(runA, runB, names)`: from two saved runs' milestones and `runCounts`, through `progress()`. The CLI's `--run` runs both
-  with the same options (`runPackage` twice) and attaches it as `.behaviour`. The desktop and web **Package diff** tab shows the file-only result.
+  with the same options (`runPackage` twice) and attaches it as `.behaviour`. The desktop and web **Package diff** view shows the file-only result.
 
 `textdiff.js` is a Myers O(ND) diff over lines mapped to integers, with common ends trimmed first. Past 3000 edits it gives up on a
 minimal script and shows the changed middle as removed then added (the same result as before for a file that was rewritten), which bounds
@@ -1120,7 +1120,7 @@ runs have no `scripts` or `exec`) count as empty.
 (and `x2` for a bar) as a fraction of the window (0 to 1), the density buckets as `{ x, w, n }`, `ticks` (`{ x, label }`
 at round steps), and `lanes` as `{ id, label, tab, items }` in the order of `LANES`. `tab` is the tab a click opens.
 
-The Timeline tab calls the `timeline` handler (`{ run, from?, to? }`) in `main.js`, because the UI is a classic script and can't
+The Timeline view calls the `timeline` handler (`{ run, from?, to? }`) in `main.js`, because the UI is a classic script and can't
 import the module; it draws the SVG itself with `createElementNS`. The report draws the whole run with `timelineHtml`
 (`report.js`), every label through `esc`. Requests get an `end` time from the recorder (on the response or the failure); older
 saved runs and WebKit runs have none, so their bars are dots. The milestone lane is in STEPS order, not sorted by time: a
@@ -1160,7 +1160,7 @@ Running is up to the caller. The CLI calls `runPackage` for each plan entry (a f
 `--out`). `main.js` runs the plan inside one process: `experimentStart` launches each variant with `auto` set to its
 `wait`, waits for the run to be recorded, and emits `experiment` events: `{ state: 'start', names }`,
 `{ state: 'result', index, row }`, `{ state: 'done', rows, findings, stopped }` and `{ state: 'error', message }`. One
-experiment at a time; the runs also appear in the runs list as usual. The UI's Experiments tab keeps its table in
+experiment at a time; the runs also appear in the runs list as usual. The UI's Experiments view keeps its table in
 `st.exp` and fills it from these events; it doesn't survive a page reload in the web interface.
 
 ## Code views (P4.1)
@@ -1300,11 +1300,11 @@ The page's CSP allows only its own scripts and styles, and `data:` images (for l
 
 **Toolbar and icons.** `index.html` starts with one `<header id="toolbar">` (52 px, `-webkit-app-region: drag`; every control in it is `no-drag`), then the `.main` row. Icons are `<symbol id="i-…">` elements in one hidden `<svg>` at the top of the toolbar, 16×16, `stroke="currentColor"`, 1.5 stroke, drawn by hand; use them with `<svg class="icon" aria-hidden="true"><use href="#i-run"/></svg>`. There is no icon library. Every toolbar button has an `aria-label`; its `.tb-label` text hides below 1100 px. `syncRun()` in `app.js` sets the Run/Stop button's label, icon and enabled state from `st.running`.
 
-**The view list (E2.3).** `GROUPS` in `app.js` puts every name in `TABS` in exactly one of five groups (a `console.assert` at module load and a check in `test/ui.js` hold it). `render()` draws `#views` in the left sidebar, between Runs and the Actions buttons: an `<h2>` and a `<nav aria-label>` per group, one `<button>` per view, `aria-current="page"` on `st.tab`, a roving `tabindex`. A name in `GROUPS` but not in `TABS` (Live on the desktop, Folder check on the web) is simply not drawn, so E4.1 can add Live to `TABS` without touching `GROUPS`; `HIDE` hides empty views and a group with none left is left out. `st.tab` and `VIEWS` are what they were. ↑ and ↓ in `#views`, and ⌘1 to ⌘5 anywhere (a page `keydown`, not a menu item), go through `visibleGroups()`. In `test/ui.js`, `view(name)` clicks the entry in `#views`; the toolbar's Test saving button and the Compare button have the same names as views, so find them under `#toolbar` or by id.
+**The view list (E2.3).** `GROUPS` in `app.js` puts every name in `TABS` in exactly one of five groups (a `console.assert` at module load and a check in `test/ui.js` hold it). `render()` draws `#views` in the left sidebar, between Runs and the Actions buttons: an `<h2>` and a `<nav aria-label>` per group, one `<button>` per view, `aria-current="page"` on `st.tab`, a roving `tabindex`. A name in `GROUPS` but not in `TABS` (Folder check on the web) is simply not drawn; `HIDE` hides empty views and a group with none left is left out. `st.tab` and `VIEWS` are what they were. ↑ and ↓ in `#views`, and ⌘1 to ⌘5 anywhere (a page `keydown`, not a menu item), go through `visibleGroups()`. In `test/ui.js`, `view(name)` clicks the entry in `#views`; the toolbar's Test saving button and the Compare button have the same names as views, so find them under `#toolbar` or by id.
 
 **The live view and its coordinates bar (E4.1).** `livePanel` serves both interfaces. `liveWatch(on)` runs from `render()` while the Live view is shown and a run is going: the web calls `lab.live(fn)` (SSE), the desktop calls `live-watch` and listens to `lab.on('live')`. The bar turns the pointer's fraction across the picture into pixels with the last frame's `w` and `h`, and asks `live-hit` at most once every 150 ms (a timer, so the latest position is the one asked). Everything it shows is set with `textContent`. `#show-live` in the toolbar is shown on the desktop while a run is going and Live is not the chosen view. Tests: the slow handlers check `live-hit` and `live-watch`; `test/ui.js` checks that no `capturePage` call happens until Live is open, then a frame, the hover text and Copy.
 
-**The inspector (E2.2).** `#inspector` is the right-hand pane in `.main`: 340 px (`--inspector-w`; the width is kept in `localStorage` `pl.inspector-width`, and `#inspector-resize` is a `role="separator"` handle that drags and takes the left and right arrow keys), a segmented control (`#insp-tabs`, `role="tablist"`, roving tabindex, arrow keys, Home and End) and three panes: `#insp-settings`, `#insp-macro` (the `#macro` box) and `#docs` (Help: the docs panel, unchanged inside). `showInspector(open, seg)` is the one place that shows, hides and selects, and it keeps `pl.inspector` (`{ open, seg }`); `openInspector(seg)` loads the first doc the first time Help shows; `openDoc` opens Help. Settings is `<details>` groups (LMS, Browser and device, Recording, Advanced) holding the same control ids as before, so `launchOptions()` is unchanged. `test/fixtures/launch-options-before.json` is what `launchOptions()` and the Copy as CLI line made, before the controls moved, of a choice of every control (the web check in `test/ui.js` repeats the choices with `everyChoice()` and compares). The `options` handler also returns `summary: optionsSummary(options)` (`src/options.js`, pure: short labels for the fields that differ from `DEFAULTS`, in a fixed order, at most 4 and then "+N more"); `showSummary()` draws it in the chip `#summary` beside Run, which opens Settings and is hidden when the list is empty. Compare packages, Record a working copy (`#ref`, which opens `#ref-dialog`; File → Record a Working Copy… sends the same `ref` action), Check a folder and Export corrected package are buttons under **Package** in the left sidebar, so the web interface keeps them; E2.3 reorganises that sidebar.
+**The inspector (E2.2).** `#inspector` is the right-hand pane in `.main`: 340 px (`--inspector-w`; the width is kept in `localStorage` `pl.inspector-width`, and `#inspector-resize` is a `role="separator"` handle that drags and takes the left and right arrow keys), a segmented control (`#insp-tabs`, `role="tablist"`, roving tabindex, arrow keys, Home and End) and three panes: `#insp-settings`, `#insp-macro` (the `#macro` box) and `#docs` (Help: the docs panel, unchanged inside). `showInspector(open, seg)` is the one place that shows, hides and selects, and it keeps `pl.inspector` (`{ open, seg }`); `openInspector(seg)` loads the first doc the first time Help shows; `openDoc` opens Help. Settings is `<details>` groups (LMS, Browser and device, Recording, Advanced) holding the same control ids as before, so `launchOptions()` is unchanged. `test/fixtures/launch-options-before.json` is what `launchOptions()` and the Copy as CLI line made, before the controls moved, of a choice of every control (the web check in `test/ui.js` repeats the choices with `everyChoice()` and compares). The `options` handler also returns `summary: optionsSummary(options)` (`src/options.js`, pure: short labels for the fields that differ from `DEFAULTS`, in a fixed order, at most 4 and then "+N more"); `showSummary()` draws it in the chip `#summary` beside Run, which opens Settings and is hidden when the list is empty. Compare packages, Record a working copy (`#ref`, which opens `#ref-dialog`; File → Record a Working Copy… sends the same `ref` action), Check a folder and Export corrected package are buttons under **Actions** at the bottom of the left sidebar, so the web interface keeps them.
 
 ### Web interface
 
@@ -1325,7 +1325,7 @@ with mode 600.
 
 `src/ui/bridge.js` defines `window.lab` over these endpoints when there is no preload, and adds `lab.web`,
 `lab.upload(file, progress, role?)` and `lab.live(fn)`. `app.js` checks `lab.web` for the differences (upload, saved-runs
-dialog, Live tab, joining a session in progress).
+dialog, Live view, joining a session in progress).
 
 ### CLI
 
@@ -1353,7 +1353,7 @@ Every file or object the tools read and write, and where each is described:
 | Execution trace (`trace.exec`, `trace.sites`) | A traced run's saved run | [The execution trace](#the-execution-trace) |
 | Milestones | Each package run (`milestones`, `furthest`) | [Milestones](#milestones) and [below](#milestones-in-a-saved-run) |
 | Discovery (`package-lab-discovery`, version 1) | `discoveries/` in the data folder; `discover --out` | [Saved discovery](#saved-discovery-package-lab-discovery-version-1) |
-| Experiment result (`experiment.json`) | `experiment --out`; the Experiments tab | [below](#experiment-result-experimentjson) |
+| Experiment result (`experiment.json`) | `experiment --out`; the Experiments view | [below](#experiment-result-experimentjson) |
 | Cycle result | `cycle --json`; `cycle --out` keeps the two runs | [below](#cycle-result) |
 | Macro (`package-lab-macro`, version 2) | A macro file; the `macro` option | [below](#macro-package-lab-macro-version-2) |
 | Profile | The `profile` option (a name or an object); `--profile-file` | [LMS profiles](#lms-profiles) |
@@ -1512,7 +1512,7 @@ The code views (P4.1) have no end-to-end run: `test/codeview.js` is pure and run
 | (cmi5, Tin Can) | built in `test/xapi.js` from the cmi5 spec's sample structure (one block, one AU) and a Tin Can course: the AU is a script that fetches its token, reads LMS.LaunchData and sends statements | See below |
 | `loader` | Loading screen; `data/config.json` with a trailing comma; `js/next.js` loaded only after the config parses | Invalid JSON; stuck on loading screen; code that loads next never ran |
 
-The desktop window (E0.1) is tested by `test/ui.js`: it opens the real app with Playwright's Electron driver (`_electron.launch`, already a devDependency) on a temporary `PACKAGE_LAB_DATA` folder, clicks through the start screen, opening `good`, Launch and Stop, Findings, the Help panel and Settings, and fails if any of them breaks. It takes about 10 s. Run it alone with `npm run test:ui`; `node test/test.js --slow` runs it too, and the default suite doesn't. The file exports its helpers (`start`, `close`, `open`, `launch`, `stop`, `view`, `text`, `menu`, `page`, `goodZip`) for later work packages and `scripts/screenshots.js`. Select by role and visible text, so a change to the window's layout changes the helpers and not every check. `open(zip)` restarts the app with the zip as an argument, and `menu(label)` clicks a native menu item from the main process, since Playwright's keyboard doesn't reach menu shortcuts.
+The desktop window (E0.1) is tested by `test/ui.js`: it opens the real app with Playwright's Electron driver (`_electron.launch`, already a devDependency) on a temporary `PACKAGE_LAB_DATA` folder, clicks through the start screen, opening `good`, Launch and Stop, Findings, the Help panel and Settings, and fails if any of them breaks. It takes about 10 s. Run it alone with `npm run test:ui`; `node test/test.js --slow` runs it too, and the default suite doesn't. The file exports its helpers (`start`, `close`, `open`, `launch`, `stop`, `view`, `text`, `menu`, `page`, `goodZip`, `contentSize`, `focusMain`, `runWindow`, `clickCourse`, `cleanup`, `withWeb`, `everyChoice`, and the `errors` list) for `scripts/screenshots.js` and later checks. Select by role and visible text, so a change to the window's layout changes the helpers and not every check. `open(zip)` restarts the app with the zip as an argument, and `menu(label)` clicks a native menu item from the main process, since Playwright's keyboard doesn't reach menu shortcuts.
 `npm run screenshots` (`scripts/screenshots.js`) uses the same helpers to write the guide's pictures: `docs/images/<view>-<light|dark>.png`, 1280 × 800, one per view the guide shows. It isn't in the suite; run it when the UI changes and commit the PNGs. `PACKAGE_LAB_THEME=light|dark` sets the app's theme (`nativeTheme.themeSource`), and the docs panel draws a guide's PNG images inline from `docs/` (`inlineImages` in `src/docs.js`, up to 400 KB each).
 
 The cmi5 and xAPI tests (P4.5) are in `test/xapi.js` and run in `--unit`: detection and parsing, validation (each rule, and that no problem text quotes a value), the LRS (every resource, the version header, auth, the fetch URL

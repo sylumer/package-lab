@@ -109,8 +109,8 @@ Everything works as in the [user guide](user-guide.md), except:
 - The **Profile** list and the **Profile fields** in the inspector's Settings work as in the desktop app. Changed fields are kept in the page, so reloading it clears them; the CLI line then says `--profile-file profile.json` (save the custom profile from the options JSON shown above it).
 - **Storage** (in the inspector's Settings) and the **storage** experiment work as in the desktop app; the CLI line says `--storage blocked`.
 - **Browser** and **Device size** (in the inspector's Settings) work as in the desktop app; the CLI line says `--browser webkit --viewport iphone`. A WebKit run happens on the Mac in a Node process, shows in the Runs list like any run, and has no live view. If Playwright isn't installed, the page shows the message that says how to install it. With a device size, the **Live** view shows the page at that size.
-- **Test saving** (the button next to Launch, and its view) works as in the desktop app: both runs happen on the Mac, in the same slot as experiments, and the view shows the two runs side by side with the findings when the second ends. Like the Experiments table, a page opened midway shows only what happens after it joined.
-- **Macro** (in the inspector's Settings) shows the macro the page holds, with **Clear** and **Use this run's clicks** (the clicks the probe saw in the selected run). The macro is kept in the page, so reloading clears it; the CLI line says `--macro macro.json`.
+- **Test saving** (the toolbar button next to Run, and its view) works as in the desktop app: both runs happen on the Mac, in the same slot as experiments, and the view shows the two runs side by side with the findings when the second ends. Like the Experiments table, a page opened midway shows only what happens after it joined.
+- **Macro** (the inspector's Macro segment) shows the macro the page holds, with **Clear** and **Use this run's clicks** (the clicks the probe saw in the selected run). The macro is kept in the page, so reloading clears it; the CLI line says `--macro macro.json`.
 - The **xAPI** view works as in the desktop app, for a cmi5 or Tin Can run: the statements with their validation, the documents and the requests to the LRS. The LRS runs on the Mac (at `lab://run/__lrs/` inside the run's browser); the page only reads the run's record.
 - A **Live** view shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** view selected.
@@ -119,9 +119,10 @@ Everything works as in the [user guide](user-guide.md), except:
 
 ## Live view
 
-While a run is going, the **Live** view shows the course window, updated about every half second while it changes.
+While a run is going, the **Live** view shows the course window, updated several times a second while it changes.
 
 - **Click** the picture to click the course at that point.
+- **The coordinates bar** under the picture follows the pointer: its position in the course window's pixels and as fractions across it (the same numbers a macro's click holds), and the element under it. **Crosshair** draws guide lines through the pointer, and **Copy** (or ⌘C with the picture focused) copies the position, with the element's selector on a second line when known.
 - **Scroll** over the picture to scroll the course.
 - **Keys:** click the picture to focus it, then type. Letters go to the course as text; Enter, Tab, Escape, Backspace,
   Delete, Space, the arrows, Page Up/Down, Home and End go as keys. ⌘ and Ctrl shortcuts stay with your browser.
@@ -129,7 +130,7 @@ While a run is going, the **Live** view shows the course window, updated about e
 - **Record clicks** keeps every click, key and piece of text you send through the picture, with its time into the run;
   **Save macro** stops recording and keeps them as the page's macro, which is played at the start of every launch and by
   **Test saving**. Recording starts fresh each time, drops pointer moves, and stops with a message at 2,000 events or 100 KB of text. Text typed here is kept in the macro, so don't type secrets.
-- **Stop and analyse** ends the run.
+- **Stop** in the toolbar (the Run button becomes Stop while a run goes) ends the run and analyses it.
 
 The picture is a few hundred milliseconds behind, so wait for it to update before the next click. Courses that open a
 popup are shown in the popup, since input goes to the newest window of the run.

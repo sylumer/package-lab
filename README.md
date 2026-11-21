@@ -18,7 +18,7 @@ Everything runs on your Mac. No package content is sent anywhere.
 
 | Interface | Best for | Guide |
 |---|---|---|
-| **Desktop app** | Hands-on debugging: launch, use the course, dig through every tab | [User guide](docs/user-guide.md) |
+| **Desktop app** | Hands-on debugging: launch, use the course, dig through every view | [User guide](docs/user-guide.md) |
 | **Command line** (`package-lab`) | Quick checks, scripted runs, reports, automation | [CLI](docs/cli.md) |
 | **Web interface** | The full app from another computer, iPad or phone, with a live view of the course | [Web interface](docs/web.md) |
 | **Alfred** | Opening, checking or running a package straight from Alfred or Finder | [Alfred](docs/alfred.md) |
@@ -106,7 +106,7 @@ This starts the web interface. See [Web interface](docs/web.md) for reaching it 
 - **Corrected package:** `fix` and **Export corrected package…** make six mechanical fixes (capitals, the manifest
   name and version, missing file entries, `http://` links, and the files' position in the ZIP) and check that they
   clear the findings they address.
-- **Comparing packages:** `diff` and the **Package diff** tab compare two exports: files, manifest, loading path and
+- **Comparing packages:** `diff` and the **Package diff** view compare two exports: files, manifest, loading path and
   findings. `diff --run` runs both and compares how far each got.
 - **Folder checks:** `batch` checks every package in a folder, one row each, with a CSV and an HTML report.
 

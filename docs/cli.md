@@ -108,6 +108,7 @@ Each setting of the desktop app and the web interface has a flag, so a launch th
 | Save report, content taken out | `report --redact` | |
 | Saved runs | `run --out`, `--options-from` | |
 | Record a working copy | none | desktop app and web interface only |
+| Appearance | none | Settings only (`theme` in `settings --json`); the course never sees it |
 | Code view | none | `report` links each `file:line` to an excerpt |
 
 ## Choosing an item
@@ -641,13 +642,17 @@ step is `{ n, when, action, where, wait }`. `--macro` prints the size it plays a
 it was recorded at.`) on standard error, unless `--json` is given.
 
 ```
-Recorded at 1100x800; 2 steps
+Recorded at 1100x800; 3 steps
 
 Step  When                    Action  Where
-────  ──────────────────────  ──────  ─────────────────────
+────  ──────────────────────  ──────  ────────
 1     wait for “Next” (10 s)  Wait
-2     +0.1 s                  Click   550, 200 #next “Next”
+2     +0.1 s                  Click   694, 262
+3     +0.4 s                  Click   803, 262
 ```
+
+The example is the macro above. The Where column has no element here, because the macro has no `target`; a click
+with one shows it after the position, as `#next “Next”`.
 
 ## fix
 
@@ -911,8 +916,10 @@ package-lab settings port <n>
 ```
 
 `settings` shows the settings and the path of the file they are kept in: `settings.json` in the data folder (see
-[Environment](#environment)). `settings port` prints just the port, for scripts. `settings port <n>` saves it. The port
-must be 1024 to 65535; any other value exits with status 1 and a message. The desktop app's **Package Lab › Settings…**
+[Environment](#environment)). `settings --json` (without `port`) also has `theme` (system, light or dark), the app's
+appearance, which is changed in the app's Settings and not from the command line. `settings port` prints just the
+port, for scripts. `settings port <n>` saves it. The port must be 1024 to 65535; any other value exits with status 1
+and a message. The desktop app's **Package Lab › Settings…**
 does the same ([Settings](guide/getting-started.md#settings)). The web interface uses this port unless `--port` is given.
 
 ## completion

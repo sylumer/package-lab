@@ -42,7 +42,7 @@ Every SCORM API call in order (element, value, result, error), and the stored va
 
 ### xAPI
 
-For a cmi5 or Tin Can run: the statements, their validation, the documents and the requests to the LRS. See [The xAPI tab](other-formats.md#the-xapi-tab).
+For a cmi5 or Tin Can run: the statements, their validation, the documents and the requests to the LRS. See [The xAPI view](other-formats.md#the-xapi-view).
 
 ### Network
 
@@ -106,7 +106,7 @@ The server requests of the run, with **Discover all server requests**, **Rounds*
 
 ### Live
 
-The course window as it runs, in Package Lab (desktop app and web interface). It is listed while a run is going, and **Show in Package Lab** in the toolbar opens it. Click the picture to click the course; with the picture focused, keys go to the course too.
+The course window as it runs, in Package Lab (desktop app and web interface). It is always listed in **Tools**; with no run going it says “Run an item to see it here.” While a run goes, **Show in Package Lab** in the toolbar opens it (desktop app only). Click the picture to click the course; with the picture focused, keys go to the course too.
 
 ![The Live view: the course's first page in the picture, with the coordinates bar and its buttons under it](../images/live-light.png)
 

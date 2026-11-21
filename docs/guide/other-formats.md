@@ -25,7 +25,7 @@ The milestones follow the statements:
 
 Launch settings that are about SCORM (**API**, **Resume last run's data**, and the save-and-resume test) don't apply to these runs. Profiles, frame depth, the device size, storage and WebKit do, and a run saves its statements.
 
-## The xAPI tab
+## The xAPI view
 
 For a cmi5 or Tin Can run, the **xAPI** view shows:
 

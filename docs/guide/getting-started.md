@@ -75,11 +75,14 @@ Start with **Findings**. A banner at the top says how the run went, with one wor
 
 ## Settings
 
-**Package Lab › Settings…** (⌘,) sets the port the [web interface](../web.md) listens on. The default is 4880. The dialog has **Web interface port** (1024 to 65535), **Reset to default**, **Cancel** and **Save**.
+**Package Lab › Settings…** (⌘,) has two settings:
 
-Save checks the port. A value outside the range is refused with a message. If something is already listening on the port, the setting is saved anyway, with a warning. A new port takes effect the next time the web interface starts. The web interface itself has no Settings dialog.
+- **Appearance**: **System** (the default), **Light** or **Dark**. It applies at once. See [Appearance](run-settings.md#appearance).
+- **Web interface port** (1024 to 65535; 4880 unless changed): the port the [web interface](../web.md) listens on. **Reset to default** fills in 4880, and **Save port** keeps it.
 
-The settings are kept in `settings.json` in the data folder (`~/Library/Application Support/Package Lab`).
+Save port checks the port. A value outside the range is refused with a message. If something is already listening on the port, the port is saved anyway, with a warning, and the dialog stays open. A new port takes effect the next time the web interface starts. **Close** shuts the dialog without saving the port.
+
+The settings are kept in `settings.json` in the data folder (`~/Library/Application Support/Package Lab`). The web interface's **Settings** button has only the Appearance, and keeps it in that browser.
 
 ## The docs panel
 

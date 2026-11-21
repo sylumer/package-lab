@@ -112,7 +112,7 @@ such marker gets no pack unless you choose one (the **Authoring tool** option, o
 | Xyleme: the content builds its own SCORM API | info | pattern | A preview or standalone path may talk to its own object | Run it; find what makes it choose that path |
 | Xyleme: the launch page is small and points to another site | info | pattern | A cloud-player style launch: the content comes from an outside host | Run it and look at the requests to that host |
 | Xyleme: scripts refer to a Xyleme address | info | pattern | The content may depend on that host | Check these requests succeed from the LMS's network |
-| Xyleme: the content asked its host for data outside the package | info (warning if a Xyleme host is named and a request failed) | run | Requests went to the host root, not the package: the pattern a platform-hosted export shows | Server needs tab, Discover, then pins and answers |
+| Xyleme: the content asked its host for data outside the package | info (warning if a Xyleme host is named and a request failed) | run | Requests went to the host root, not the package: the pattern a platform-hosted export shows | Server needs view, Discover, then pins and answers |
 | Xyleme: the content fetches from another site | info (warning if a Xyleme host is named and a request failed) | run | A cloud-player style launch: it works only while that host answers | Check the failed requests; Discover |
 | Xyleme: the content built its own SCORM API in this run | info (warning if a Xyleme host is named) | run | It set `window.API` itself, so it may not talk to the LMS | Answer the request that makes it do so, run again |
 | Articulate Storyline: story.html is here but there is no scormdriver.js | info | pattern | May be a Web publish, which has no LMS code | Publish for LMS and run that package |
@@ -172,7 +172,7 @@ such marker gets no pack unless you choose one (the **Authoring tool** option, o
 ## From a run: milestones
 
 Every package run has this finding first, whatever else is found. The same steps show as ticks and crosses at the top
-of the Findings tab, in the report, and in `run --json`. See [Milestones](guide/reading-a-run.md#milestones) for the ten steps (and the shorter lists for cmi5 and Tin Can runs).
+of the Findings view, in the report, and in `run --json`. See [Milestones](guide/reading-a-run.md#milestones) for the ten steps (and the shorter lists for cmi5 and Tin Can runs).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -220,7 +220,7 @@ SCORM API) are not made for them. These come from the course file:
 
 ## From a cmi5 or Tin Can run: the LRS
 
-A run of a cmi5 or Tin Can package is given a local LRS (see [the xAPI tab](guide/other-formats.md#the-xapi-tab)), and the
+A run of a cmi5 or Tin Can package is given a local LRS (see [the xAPI view](guide/other-formats.md#the-xapi-view)), and the
 content's statements are checked as they arrive. These findings come from what the LRS recorded. The
 [milestones](guide/reading-a-run.md#milestones) of these runs follow the statements instead of the SCORM API: for cmi5 *Fetched the
 auth token*, *Initialized*, *Completed, passed or failed*, *Terminated*; for Tin Can *Sent a statement* and *Sent a
@@ -231,7 +231,7 @@ completion statement*. "The content never looked for the SCORM API" and the SCOR
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
 | The content never called the LRS | error | The launch gave it the endpoint (and the fetch URL or auth), and nothing was requested: no statement was sent, so nothing is recorded | Check the launch parameters the content reads, and the Console for errors before its LRS code |
-| The content used the LRS but sent no statements | warning | It fetched a token or read a document, and stopped | Look for the error after the last request, in the xAPI tab's request list |
+| The content used the LRS but sent no statements | warning | It fetched a token or read a document, and stopped | Look for the error after the last request, in the xAPI view's request list |
 | *N* requests had no usable X-Experience-API-Version header | error | Every xAPI request must say the version it speaks (1.0.0 to 1.0.3); an LRS answers 400 otherwise | Send `X-Experience-API-Version: 1.0.3` |
 | *N* requests to the LRS had no Authorization header, or weren't authorised | error | The LRS answers 401 until the request carries `Authorization: Basic <token>` (cmi5: the token from the fetch URL; Tin Can: the `auth` parameter) | Send the token on every request |
 | Statements were sent with the wrong Content-Type | error | Statements must be sent as `application/json` | Set the header |
@@ -289,11 +289,11 @@ Added to a package run that used pins or responses. See
 |---|---|---|---|
 | The content tried to change a pinned value | warning | The content assigned a different value to something you pinned. The pin held. The evidence names the code that did it (`previewMode = true from boot.js:12:3`), which is usually where the content decides its mode | Look at that code. Change it with a file override, or take the pin off if you wanted the content to choose |
 | Couldn’t pin *name* | warning | The browser refused: the name is on a frozen or locked object, or can't be redefined. Also when the content redefined or deleted the pinned name after the pin was set (checked when the page has loaded), so the pin no longer applies | Use a file override instead |
-| Couldn’t pin *name*: the script declares it with let or const | warning | A `let` or `const` at the top of a script makes a name of its own, which a pin can't replace. The content kept its own value. The evidence gives the file and line | Use a file override instead: change that line in the Files tab |
+| Couldn’t pin *name*: the script declares it with let or const | warning | A `let` or `const` at the top of a script makes a name of its own, which a pin can't replace. The content kept its own value. The evidence gives the file and line | Use a file override instead: change that line in the Files view |
 | Couldn’t answer *N* requests | warning | The browser refused a response, so the request went to the server as normal | Check the status, headers and body |
 | Pinned value never read | info | The content never looked at the pinned value (the name may be wrong, the code that reads it never ran, or the name is declared with `let` or `const` somewhere other than the start of a line, which Package Lab can’t see). `navigator.userAgent` pins aren't checked | Check the spelling, and whether the content got as far as the code that reads it |
 | Answered *N* requests with your responses | info | These requests never reached a server: the content got your response. The evidence lists them | Compare with a run without the answer to see what changed |
-| *A response* matched no request | info | The content never made a request that matches one of your responses | Check the pattern against the Network tab, and whether the content got as far as making the request |
+| *A response* matched no request | info | The content never made a request that matches one of your responses | Check the pattern against the Network view, and whether the content got as far as making the request |
 
 ## From a run in WebKit
 
@@ -312,12 +312,12 @@ Added to a package run with **Trace the code** on (`--trace`). See [Tracing](gui
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
-| *N* script files were not traced | info | These files ran as they are, so the Execution tab has nothing from them. The evidence gives each file and why: over 2 MB, not UTF-8 text, or Package Lab couldn't read it as JavaScript (it may use syntax Package Lab doesn't know yet). For a page, the reason names its inline scripts | Nothing, if the code you care about is elsewhere. The rest of the trace still applies |
+| *N* script files were not traced | info | These files ran as they are, so the Execution view has nothing from them. The evidence gives each file and why: over 2 MB, not UTF-8 text, or Package Lab couldn't read it as JavaScript (it may use syntax Package Lab doesn't know yet). For a page, the reason names its inline scripts | Nothing, if the code you care about is elsewhere. The rest of the trace still applies |
 | The execution trace is incomplete | info | The content ran more than 200,000 functions and decisions, so the oldest were dropped. The last ones, which show where it stopped, are kept | Stop the run sooner after the point you care about |
 
 ## From an experiment
 
-Only after **Run all** on the Experiments tab, or `package-lab experiment`. They compare each variant with the default run.
+Only after **Run all** on the Experiments view, or `package-lab experiment`. They compare each variant with the default run.
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -337,7 +337,7 @@ Only when a macro was played (`--macro`, or the macro in the options). See [Macr
 
 ## From a save-and-resume test
 
-Only after **Test saving** (the Test saving tab) or `package-lab cycle`. The first run plays the macro and then leaves the
+Only after **Test saving** (the Test saving view) or `package-lab cycle`. The first run plays the macro and then leaves the
 way a learner closing the window does; the second run resumes from the data the first left. See
 [Testing saving](guide/macros.md#test-saving). When the first finding is an error, the
 checks that need the second run are skipped.
@@ -356,7 +356,7 @@ checks that need the second run are skipped.
 
 ## From a discovery
 
-Only after **Discover** on the Server needs tab, or `package-lab discover`. See
+Only after **Discover** on the Server needs view, or `package-lab discover`. See
 [What the content wants from its server](guide/experiments-and-servers.md#server-needs).
 
 | Finding | Severity | Meaning | What to try |
@@ -368,13 +368,13 @@ Only after **Discover** on the Server needs tab, or `package-lab discover`. See
 
 ## From a drill-down
 
-Only after **Drill down** on the Drill-down tab, or `package-lab drill`. See [Why it stopped](guide/experiments-and-servers.md#drill-down).
+Only after **Drill down** on the Drill-down view, or `package-lab drill`. See [Why it stopped](guide/experiments-and-servers.md#drill-down).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
 | Why it stopped: *chain* | error | The title is the chain in one line, each step the reason for the one before (`←`). The evidence numbers the steps: the decision that kept the content from code that never ran, with its values; where each `undefined` came from (an assignment, or one that never ran and the decision that kept it from running, up to three levels); and the cause at the end, which Package Lab can name: a request that failed, a script that failed or that nothing loads, a JSON file without the field, or an API version the LMS didn't offer | The fix depends on the cause: answer the request, add the field with a file override, check the script, or offer the other API version |
 | Why it stopped: *chain* | warning | The same, but the last step isn't a cause Package Lab can name: a value local to a function, a response from a server Package Lab can't see, a query parameter, a value from the LMS, something nothing in the package sets, or a value set too late | Read the code in the last step. For a server response, run Discover |
-| Why it stopped: no decision led to code that never ran | info | In the last part of the run, every decision's other branch ran at some point, or had nothing to run | Look at the Execution tab for the last events before the run went quiet |
+| Why it stopped: no decision led to code that never ran | info | In the last part of the run, every decision's other branch ran at some point, or had nothing to run | Look at the Execution view for the last events before the run went quiet |
 | Why it stopped: nothing to drill into | info | The run had no trace, or the trace has no decisions in the package's scripts | Drill down on a traced run |
 
 ## From a comparison

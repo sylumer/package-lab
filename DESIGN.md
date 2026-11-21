@@ -64,14 +64,18 @@ A comparison with a working run is an extra, for when one exists.
 
 All of them drive the same main process (`src/main.js`) and the same findings:
 
-- **Desktop window**: a toolbar (open package, launch settings, profile, stop after, test saving, export), the runs
-  list, and tabs for the package and each run: Findings, Boot path, Package, Files, API, xAPI, Lookups, Network,
-  Scripts, Execution, Drill-down, Timeline, Errors, Console, Frames, Compare, Package diff, Folder check, Experiments,
-  Test saving and Server needs. [The user guide](docs/user-guide.md) covers each one.
-- **Web interface** (`package-lab serve`): the same interface over HTTP with a token, plus a Live tab that streams the
-  running course and sends clicks and keys back. For use from other devices.
+- **Desktop window**: a toolbar (open package, item, Run, which becomes Stop, Record while a run goes, Test saving,
+  Inspector, Help), the runs list, and the views in five sidebar groups (Summary, Package, What happened, Deep dive,
+  Tools). An inspector on the right has three segments: Settings (the run's launch options), Macro (the macro editor)
+  and Help (the docs). The views are Findings, Timeline, Boot path, Files, Package, API, xAPI, Network, Errors, Console,
+  Frames, Lookups, Scripts, Execution, Drill-down, Experiments, Compare, Package diff, Folder check, Test saving, Server
+  needs and Live. [The user guide](docs/user-guide.md) covers each one.
+- **Web interface** (`package-lab serve`): the same interface over HTTP with a token. Its Live view streams the running
+  course and sends clicks and keys back, with the coordinates bar. For use from other devices. Its Settings has only
+  the appearance, kept in that browser.
 - **CLI** (`bin/package-lab.js`): analyze, items, run (headless, with a live folder for frames and input), experiment,
-  discover, drill, cycle, diff, batch, fix, report (HTML, optionally redacted), doctor, open, serve, completion.
+  discover, drill, cycle, diff, batch, fix, report (HTML, optionally redacted), macro show, doctor, open, serve,
+  settings, completion.
 - **Alfred workflow** and **Concierge module**: thin layers over the CLI.
 
 See docs/developer-guide.md.

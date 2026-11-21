@@ -1,6 +1,6 @@
 # Reading a run
 
-A run is one launch of an item, from **Run** to **Stop**. When it ends, Package Lab analyses it, saves it and selects it. The [views](views.md) are the tabs in the sidebar; this page explains the findings, the milestones and how to find the cause.
+A run is one launch of an item, from **Run** to **Stop**. When it ends, Package Lab analyses it, saves it and selects it. The [views](views.md) are listed in the sidebar; this page explains the findings, the milestones and how to find the cause.
 
 ## Findings
 

@@ -25,7 +25,7 @@ If it starts from the beginning, look in the second run's **API** view: did it r
 There are four ways to make one:
 
 - **Record** (the desktop app): launch the item, press **Record** in the toolbar (or **Run › Record Macro**, ⌥⌘R), then click through the course. The button reads **Recording…** while it is on. Press **Record** again, or choose **Stop**, and Package Lab asks “Save 14 steps as the macro?”. **Save** replaces the macro with those clicks, and **Discard** keeps the macro you had. Only clicks made after Record was pressed are kept. Typed text is kept only if **Keep typed text in runs (for macros)** was ticked for that run.
-- **Live view** (the desktop app and the web interface): open **Live** (or **Show in Package Lab** in the toolbar), choose **Record clicks** over the Live tab, use the course, then **Save macro**. Everything sent through the picture is recorded with its time into the run. The coordinates bar under the picture shows where a click will land and which element is there (see [Live](views.md#live)).
+- **Live view** (the desktop app and the web interface): open **Live** (or, in the desktop app, **Show in Package Lab** in the toolbar), choose **Record clicks** in the Live view, use the course, then **Save macro**. Everything sent through the picture is recorded with its time into the run. The coordinates bar under the picture shows where a click will land and which element is there (see [Live](views.md#live)).
 - **A run in the desktop app**: clicks made directly in the course window can't be seen from outside, so the probe records them in the course's frames instead. Choose a run, then **Use this run's clicks** in the inspector's **Macro** segment. Clicks in a frame on another origin are placed relative to that frame.
 - **A file**: the `--macro` option on the command line, or `"macro"` in an options file.
 
@@ -49,7 +49,7 @@ A macro remembers the window size it was recorded at (“14 events over 12.3 s, 
 
 ## Waits
 
-Timing is the usual reason a macro misses: a button that appears after a slow request isn't there at the moment the click is. A macro file can hold wait steps that block until something has happened, then carry on. A wait is one of: some milliseconds; a piece of text that appears on the page (in any frame of the lesson's origin, or a frame of its own); a step of the run's progress strip (`found`, `initialised`, `wrote`…); or a quiet network (no request pending for that long). Each has a timeout (30 s unless it says otherwise). If it runs out, the macro stops there, the run has the finding “The macro stopped at step 4: waited 30 s for “Next” and it never appeared”, and the run carries on to its end.
+Timing is the usual reason a macro misses: a button that appears after a slow request isn't there at the moment the click is. A macro file can hold wait steps that block until something has happened, then carry on. A wait is one of: some milliseconds; a piece of text that appears on the page (in any frame of the lesson's origin, or a frame of its own); a step of the run's progress strip (`found`, `initialised`, `wrote`…); or a quiet network (no request pending for that long). A text, milestone or quiet wait gives up after its timeout (30 s unless it says otherwise, and 1 s to 10 min in a macro file); a time wait has none. If it runs out, the macro stops there, the run has the finding “The macro stopped at step 4: waited 30 s for “Next” and it never appeared”, and the run carries on to its end.
 
 ## The macro editor
 
@@ -59,8 +59,8 @@ The **Macro** segment of the inspector shows every step of the macro as a table:
 |---|---|
 | # | The step number |
 | When | The time since the step before (`+0.8 s`), or, for a wait, what it waits for (“wait for “Next” (30 s)”) |
-| Action | Click, Key Enter, Type “…”, Scroll, or Wait |
-| Where | The position in pixels at the size the macro was recorded at (`412, 233`), and the element when the step has one (`button#next “Next”`). With no recorded size, the position is a percentage |
+| Action | Click, Move, Key Enter, Type “…”, Scroll down or up, or Wait |
+| Where | The position in pixels at the size the macro was recorded at (`412, 233`), and the element when the step has one (`#next “Next”`). With no recorded size, the position is a percentage |
 | | **↑** and **↓** move the step, **✕** deletes it |
 
 Choose a row (click it, or Tab to it and press Enter) to change it. The form under the table has the step's delay and its fields. If a value isn't allowed, the message appears beside the field and the step stays as it was. Changing a delay moves every later step by the same amount, so the rest of the macro keeps its timing. Moving a step takes its delay with it. Deleting a step takes its delay out of the macro.
