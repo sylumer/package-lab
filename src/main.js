@@ -186,7 +186,7 @@ async function begin({ kind, label, url, launch, partition, lrs: lrsConfig, caug
   // The debugger needs a renderer: start one on a blank page, attach, then go to the content.
   await win.loadURL('about:blank')
   await rec.start()
-  emit('state', { running: kind, label, auto: auto || 0 })
+  emit('state', { running: kind, label, auto: auto || 0, started: active.started })   // Record (E1.3) keeps the clicks from this moment on
   live.restart()
   win.loadURL(url)
 }
@@ -450,7 +450,7 @@ async function beginWebkit({ plan, itemIndex, cmi }) {
     await new Promise(r => setTimeout(r, 100))
   }
   exited.then(() => { a.webkit.done = true; if (active === a) finish().catch(() => {}) })   // it stops by itself after its wait
-  emit('state', { running: 'package', label, auto: o.auto || 0 })
+  emit('state', { running: 'package', label, auto: o.auto || 0, started: a.started })
   return true
 }
 // The run once the child has exited: its trace, put through the same findings as any run. A refusal (no Playwright, no WebKit) is the child's message.
@@ -862,7 +862,7 @@ function buildMenu() {
       { role: 'reload', accelerator: 'Shift+CmdOrCtrl+Alt+R' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' },
       { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' } ] },
     { label: 'Run', submenu: [
-      item('Launch', 'CmdOrCtrl+R', 'launch'), item('Test Saving', 'Shift+CmdOrCtrl+R', 'cycle'),
+      item('Launch', 'CmdOrCtrl+R', 'launch'), item('Test Saving', 'Shift+CmdOrCtrl+R', 'cycle'), item('Record Macro', 'Alt+CmdOrCtrl+R', 'record'),
       item('Record Reference', undefined, 'ref'), item('Stop and Analyse', 'CmdOrCtrl+.', 'stop') ] },
     { role: 'windowMenu' },
     { role: 'help', submenu: [

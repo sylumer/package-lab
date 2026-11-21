@@ -83,7 +83,51 @@ async function checks() {
   await win.keyboard.press('Escape')
   await win.locator('#settings:not([open])').waitFor({ state: 'attached' })
   console.log('ui: settings ok')
+
+  // Record (E1.3): Record, click Next in the course, stop. The dialog keeps the one click; Discard keeps the macro as it was.
+  await recordRound()
+  assert.match(await win.locator('#record-title').textContent(), /^Save 1 step as the macro\?$/, 'the dialog says 1 step')
+  await win.locator('#record-dialog').getByRole('button', { name: 'Save', exact: true }).click()
+  await win.locator('#record-dialog:not([open])').waitFor({ state: 'attached' })
+  assert.match(await win.locator('#macro').textContent(), /1 event/, 'the macro summary says 1 event')
+  await recordRound()
+  await win.locator('#record-dialog').getByRole('button', { name: 'Discard', exact: true }).click()
+  await win.locator('#record-dialog:not([open])').waitFor({ state: 'attached' })
+  assert.match(await win.locator('#macro').textContent(), /1 event/, 'Discard leaves the earlier macro unchanged')
+  console.log('ui: record ok')
   assert.deepEqual(errors, [], 'no uncaught errors in the window')
+}
+
+// Launches with Record pressed, clicks Next in the course window, and stops. Leaves the Save/Discard dialog open.
+async function recordRound() {
+  await launch()
+  await win.getByRole('button', { name: 'Record macro', exact: true }).click()
+  await win.locator('#record[aria-pressed="true"]').waitFor()
+  await clickNext(await runWindow())
+  await stop()
+  await win.locator('#record-dialog[open]').waitFor()
+}
+// The run window is the window that isn't the main one and shows the course's host (the LMS address, not a file or about: page).
+// It is shown, so its mouse reaches the course.
+async function runWindow() {
+  for (let i = 0; i < 100; i++) {
+    const run = app.windows().find(w => w !== win && /^https?:/.test(w.url()))
+    if (run) return run
+    await win.waitForTimeout(200)
+  }
+  throw new Error('The run window never opened')
+}
+// Clicks the middle of the course's Next button with the run window's mouse, at its measured position (in whichever frame it is).
+async function clickNext(run) {
+  for (let i = 0; i < 100; i++) {
+    for (const f of run.frames()) {
+      if (!await f.locator('#next').count()) continue
+      const box = await f.locator('#next').boundingBox()
+      if (box) return run.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    }
+    await run.waitForTimeout(200)
+  }
+  throw new Error('Next never appeared in the run window')
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

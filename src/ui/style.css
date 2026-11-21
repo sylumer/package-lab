@@ -55,6 +55,9 @@ button.link { background: none; color: var(--accent); padding: 0; text-align: le
 dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); max-width: min(700px, 90vw); }
 dialog ul { list-style: none; padding: 0; max-height: 60vh; overflow: auto; } dialog li { padding: 3px 0; }
 dialog h2 { font-size: 15px; margin: 0 0 4px; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.icon { width: 16px; height: 16px; vertical-align: -3px; flex: none; }
+button.record[aria-pressed="true"] { background: var(--err); }
 @media (max-width: 800px) { .main { flex-direction: column; } aside { width: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 30vh; } }
 tr.click { cursor: pointer; } tr.click:hover { background: var(--code); }
 

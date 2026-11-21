@@ -804,8 +804,13 @@ exit, whether the session was ended) with the findings (see [From a save-and-res
 Each run is in the Runs list too, so you can open its API tab. Each run lasts as long as **Stop after** (10 s if that
 is “I stop it”). It runs in Chromium only.
 
-**Macros.** A macro is a list of clicks, keys, typed text and waits, with the time of each. Three ways to make one:
+**Macros.** A macro is a list of clicks, keys, typed text and waits, with the time of each. Four ways to make one:
 
+- **Record** (the desktop app): launch the item, press **Record** in the toolbar (or **Run › Record Macro**, ⌥⌘R), then
+  click through the course. The button reads **Recording…** while it is on. Press **Record** again, or choose **Stop and
+  analyse**, and Package Lab asks "Save 14 steps as the macro?". **Save** replaces the macro with those clicks, and
+  **Discard** keeps the macro you had. Only clicks made after Record was pressed are kept. Typed text is kept only if
+  **Keep typed text in runs (for macros)** was ticked for that run.
 - **Live view** (the web interface): choose **Record clicks** over the Live tab, use the course, then **Save macro**.
   Everything sent through the picture is recorded with its time into the run.
 - **A run in the desktop app**: clicks made directly in the course window can't be seen from outside, so the probe
@@ -842,8 +847,8 @@ there and the run has the finding "The macro stopped at step 4: waited 30 s for 
 carries on to its end. The file format is in [Macros](cli.md#macros).
 
 The macro is kept with your other options (**More options** shows how many events it has, with **Clear**), is played
-at the start of every launch from then on, and is saved in each run's launch options. **Use this run's clicks** and
-**Record clicks** replace the macro you had. Macros need Chromium; with WebKit chosen, the launch says so.
+at the start of every launch from then on, and is saved in each run's launch options. **Use this run's clicks**, **Record**
+and **Record clicks** replace the macro you had. Macros need Chromium; with WebKit chosen, the launch says so.
 
 ## Checks for particular authoring tools
 

@@ -8,6 +8,7 @@
 </head>
 <body>
 <header>
+<svg class="sprite" aria-hidden="true" width="0" height="0"><symbol id="i-record" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2.5" fill="currentColor"/></symbol></svg>
   <div class="bar">
     <button id="open" type="button">Open package…</button>
     <input id="file" type="file" accept=".zip,application/zip" hidden>
@@ -36,6 +37,8 @@
     <button id="ref" type="button">Record reference</button>
     <label class="check"><input type="checkbox" id="caught" checked> Record caught errors</label>
     <button id="stop" type="button" disabled>Stop and analyse</button>
+    <button id="record" type="button" class="record" hidden aria-pressed="false" aria-label="Record macro" title="Click through the course while this is pressed: the clicks are kept as the macro after the run stops. Desktop app only.">
+      <svg class="icon" aria-hidden="true"><use href="#i-record"/></svg><span id="record-text">Record</span></button>
     <span id="status" role="status"></span>
   </div>
   <div class="bar" id="export-panel" hidden></div>
@@ -91,6 +94,8 @@
   <p class="muted small">Used when the web interface starts: package-lab serve, Alfred’s packageweb, and the desktop app’s --serve. Takes effect the next time it starts. Default 4880.</p>
   <p class="muted small" id="set-status" role="status"></p>
   <form method="dialog"><button class="secondary" id="set-cancel">Cancel</button> <button type="button" id="set-save">Save</button></form></dialog>
+<dialog id="record-dialog" aria-labelledby="record-title"><h2 id="record-title"></h2><p id="record-note" class="muted small"></p>
+  <div class="row"><button type="button" class="secondary" id="record-discard">Discard</button> <button type="button" id="record-save">Save</button></div></dialog>
 <script src="bridge.js"></script>
 <script src="codeview.js"></script>
 <script type="module" src="app.js"></script>

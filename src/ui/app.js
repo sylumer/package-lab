@@ -759,6 +759,38 @@ for (const id of ['item', 'expose', 'profile', 'depth', 'opener', 'resume', 'cau
 $('viewport').addEventListener('change', () => { $('viewport-custom').hidden = $('viewport').value !== 'custom' })
 $('more').addEventListener('toggle', showOptions)
 $('cycle').onclick = startCycle
+// ---- Record (E1.3, desktop only): press Record during a run and click through the course. When the run stops, its clicks
+// (from the press on) become the macro, once the user says Save in the dialog. Discard leaves the macro as it was. ----
+st.recordFrom = null; st.recordPending = null; st.recordRun = null   // recordFrom: ms into the run where Record was pressed; recordRun: that run's start (state event); null when not recording
+const recordEl = $('record'), recordDlg = $('record-dialog'), recordTip = recordEl.title
+const showRecord = () => { const on = st.recordFrom != null; $('record-text').textContent = on ? 'Recording…' : 'Record'; recordEl.setAttribute('aria-pressed', String(on)); recordEl.title = on ? 'Press again to stop the run and save the clicks.' : recordTip }
+// Shown only in the desktop app and only while a run is going; used by the state event and by the restore path.
+function setRunning(s) { st.running = s || null; recordEl.hidden = lab.web || !s; showRecord() }
+recordEl.onclick = () => {
+  if (st.recordFrom != null) return $('stop').click()   // Record again ends the run too: the clicks are only read once the run is analysed
+  if (!st.running) return say('Launch an item first, then press Record and click through the course.')
+  // A macro replays at the start of the run as real input: its clicks are not the user's, so recording starts after its last event.
+  const press = Date.now() - st.running.started, last = st.macro.events.at(-1)
+  st.recordFrom = last ? Math.max(press, last.t + 1) : press
+  showRecord(); say('Recording: click through the course. Press Record again, or Stop and analyse, to keep the clicks.')
+}
+const finishRecord = (run, from) => act(async () => {
+  const m = await lab.invoke('macro-from-run', { run: run.id })
+  const events = m.events.filter(e => e.t >= from).map(e => ({ ...e, t: e.t - from }))
+  st.recordPending = { events, viewport: m.viewport }
+  const n = events.length, inputOff = !run.launch?.options?.recordInput
+  $('record-title').textContent = n ? `Save ${n} ${n === 1 ? 'step' : 'steps'} as the macro?` : 'Nothing was recorded'
+  $('record-note').textContent = [n ? '' : 'Click in the course while Record is pressed, then press Record again.', inputOff ? 'Typed text wasn’t kept. Turn on Keep typed text to include it.' : ''].filter(Boolean).join(' ')
+  $('record-save').disabled = !n
+  recordDlg.showModal()
+})
+$('record-save').onclick = () => {
+  const p = st.recordPending; recordDlg.close(); if (!p) return
+  st.macro = { events: p.events, viewport: p.viewport }; showMacro(); showOptions()
+  say(`Macro saved: ${p.events.length} ${p.events.length === 1 ? 'step' : 'steps'}. It plays at the start of each launch.`)
+}
+$('record-discard').onclick = () => recordDlg.close()
+recordDlg.addEventListener('close', () => { st.recordPending = null; $('launch').focus() })   // Record is hidden once the run has ended, so focus goes to Launch
 // Export corrected package…: a checklist of the fixes that apply to this package (all ticked), then the export.
 $('export').onclick = () => {
   const fixes = st.pkg?.fixes ?? [], panel = $('export-panel')
@@ -795,8 +827,8 @@ $('filter').oninput = () => render()
 $('item').onchange = () => render()
 let pending = false
 lab.on('probe', p => { st.live.push(p); if (!run() && !pending) { pending = true; setTimeout(() => { pending = false; if (!run()) render() }, 300) } })
-lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; st.runs.push(r); if (!st.exp.busy && !st.disc.busy && !st.drill.busy && !st.cyc.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
-lab.on('state', s => { st.running = s.running ? s : null; if (!s.running && st.tab === 'Live') st.tab = 'Findings'; render(); $('stop').disabled = !s.running; $('launch').disabled = !!s.running || !st.pkg?.items.length; $('cycle').disabled = !!s.running || !st.pkg?.items.length; $('ref').disabled = !!s.running; if (s.running) say(`Recording ${s.label}. ${s.auto ? `It stops by itself after ${s.auto} s, or` : 'Use the course, then'} Stop and analyse${lab.web ? '' : ' (or close its window)'}.`) })
+lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; if (st.recordFrom != null && Math.abs(Date.parse(r.trace.started) - st.recordRun) < 50) { const from = st.recordFrom; st.recordFrom = null; showRecord(); finishRecord(r, from) } st.runs.push(r);if (!st.exp.busy && !st.disc.busy && !st.drill.busy && !st.cyc.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
+lab.on('state', s => { if (s.running) Object.assign(st, { recordFrom: null, recordRun: s.started }); setRunning(s.running ? s : null);if (!s.running && st.tab === 'Live') st.tab = 'Findings'; render(); $('stop').disabled = !s.running;$('launch').disabled = !!s.running || !st.pkg?.items.length; $('cycle').disabled = !!s.running || !st.pkg?.items.length; $('ref').disabled = !!s.running; if (s.running) say(`Recording ${s.label}. ${s.auto ? `It stops by itself after ${s.auto} s, or` : 'Use the course, then'} Stop and analyse${lab.web ? '' : ' (or close its window)'}.`) })
 lab.on('experiment', e => {
   const x = st.exp
   if (e.state === 'start') { x.names = e.names; x.rows = []; x.findings = []; x.busy = true }
@@ -837,6 +869,6 @@ render()
 if (lab.web) lab.invoke('state').then(s => {
   if (s.pkg) showPackage(s.pkg)
   addRuns(s.runs)
-  if (s.running) { st.running = s.running; $('stop').disabled = false; $('launch').disabled = true; st.tab = 'Live'; render() }
+  if (s.running) { setRunning(s.running); $('stop').disabled = false; $('launch').disabled = true; st.tab = 'Live'; render() }
   document.title = 'Package Lab (web)'
 }).catch(e => say(e.message))

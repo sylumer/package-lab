@@ -160,7 +160,7 @@ The rest of the file, in order:
   (`active`: window, popups, recorders, launch settings, boot graph, auto-stop timer). Finished runs are kept in a Map
   for the session.
 - **`emit(channel, data)`:** sends to the desktop window over IPC and to web clients over server-sent events.
-  Channels: `package`, `run`, `state`, `probe`, `experiment`, `discover`, `drill`.
+  Channels: `package`, `run`, `state`, `probe`, `experiment`, `discover`, `drill`. A run's `state` event (`running`, `label`, `auto`) also carries `started`, the run's start time (`Date.now()`), so the desktop Record can count from the press.
 - **`begin()` and `finish()`:** open a run window, start the recorder on `about:blank` (the debugger needs a renderer
   before the content loads), then navigate. `finish()` reads the stored data model, stops the recorders (merging
   popups), destroys the windows, computes findings and saves the run.
