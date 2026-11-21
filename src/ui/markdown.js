@@ -16,15 +16,18 @@ const cells = l => l.trim().replace(/\\\|/g, '\u0000').replace(/^\||\|$/g, '').s
 const LIST = /^(\s*)([-*]|\d+\.)\s+(.*)$/
 const indent = l => l.match(/^ */)[0].length
 
+// The anchor a heading gets. `seen` counts one document's headings, so a repeat gets -1, -2 … (pass the same {} for each heading of a document).
+export function slugOf(t, seen = {}) {
+  const base = t.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[`*]/g, '').toLowerCase()
+    .replace(/[^\p{L}\p{N}_ -]/gu, '').replace(/ /g, '-')
+  const n = seen[base] = seen[base] === undefined ? -1 : seen[base] + 1
+  return n < 0 ? base : base + '-' + (n + 1)
+}
+
 // prefix goes before every heading id, so a doc heading can never take the id of an element in the page around it.
 export function markdown(text, prefix = '') {
   const seen = {}
-  const slug = t => {
-    const base = t.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[`*]/g, '').toLowerCase()
-      .replace(/[^\p{L}\p{N}_ -]/gu, '').replace(/ /g, '-')
-    const n = seen[base] = seen[base] === undefined ? -1 : seen[base] + 1
-    return n < 0 ? base : base + '-' + (n + 1)
-  }
+  const slug = t => slugOf(t, seen)
 
   function blocks(lines) {
     let out = '', i = 0

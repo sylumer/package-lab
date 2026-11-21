@@ -49,7 +49,7 @@ bin/package-lab.js        CLI
 src/
   main.js               Electron main process: windows, the app menu (buildMenu), lab:// server, runs, IPC and web handlers, headless runs
   preload.cjs           window.lab for the desktop window (IPC)
-  docs.js               The bundled docs: DOCS (name, title, file). scripts/package.js copies exactly these into the app; the docs and doc handlers serve only these names
+  docs.js               The bundled docs: DOCS (name, title, group, file). scripts/package.js copies exactly these into the app; the docs and doc handlers serve only these names
   web.js                HTTP server for the web interface (API, events, live frames, auth)
   settings.js           Settings: DEFAULT_PORT (4880), validPort, readSettings, writeSettings (settings.json in the data folder; readSettings never throws)
   recorder.js           CDP recorder: one per run window or popup; probeSource (the script put into every frame)
@@ -104,7 +104,7 @@ src/
     index.html, style.css, app.js (an ES module)
     codeview.js         The shared code view (classic script, window.CodeView; P4.1)
     bridge.js           window.lab over HTTP when there is no preload (web)
-    markdown.js         The docs panel's Markdown renderer: escapes everything, drops non-http and relative link schemes, GitHub-style heading ids; no dependencies
+    markdown.js         The docs panel's Markdown renderer: escapes everything, drops non-http and relative link schemes, GitHub-style heading ids (`slugOf`, exported, is the same slug the link check uses); no dependencies
 scripts/
   package.js            Builds Package Lab.app (and --install); includes the DOCS from src/docs.js
   icon.cjs              Renders build/icon.svg to build/icon.png
@@ -189,7 +189,7 @@ and a line in the guides. The shape:
   macro: [{ t (ms), type: 'click'|'move'|'wheel'|'key'|'text'|'wait', x, y, dy, key, text, ms, milestone, quiet, timeout }] (see Save and resume) }
 ```
 
-The UI keeps the remembered launch options (the ones listed in the [user guide](user-guide.md#testing-a-theory-launch-settings)) in localStorage under `pl.launch`; in the web interface that is per browser. The docs panel's state is under `pl.docs`.
+The UI keeps the remembered launch options (the ones listed in the [user guide](guide/run-settings.md#remembered-between-sessions)) in localStorage under `pl.launch`; in the web interface that is per browser. The docs panel's state is under `pl.docs`.
 
 `launchItem` takes `{ item, cmi?, ...options }`, normalises the options and saves them in `launch.options` (the older
 `launch` fields stay for version 1 readers). The CLI merges the `--options` file and then the flags, normalises, and
@@ -374,7 +374,7 @@ A preset is one entry in `PROFILES` (`src/profiles.js`). To add one:
    `doctor --json` (its `profiles`), by the `lms` experiment preset, and by the **Profile** list in the apps (which adds
    "(approximation)" to a preset that has the flag).
 3. Update the text that lists the names by hand: the `--profile` line of the help in `bin/package-lab.js`, the profile
-   paragraph in `docs/user-guide.md`, and the `--profile` line in `docs/cli.md`.
+   paragraph in `docs/guide/run-settings.md`, and the `--profile` line in `docs/cli.md`.
 4. Add a unit check if the preset has a combination `launchProfile` must refuse (for example a frameset with a sandbox),
    and run `node test/test.js --unit`.
 
@@ -1475,6 +1475,8 @@ and no macro in its `launch.options` (`resumeOptions` makes it), and its `trace.
 npm test
 ```
 
+The docs' links are checked in `--unit`: every relative link in a doc listed in `src/docs.js` names an existing file, and every `#anchor` matches a heading there, slugged with `slugOf` from `src/ui/markdown.js`. Links from `docs/guide/` and the user guide index must also point to docs the panel can open. Links inside code blocks are skipped.
+
 `npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `PACKAGE_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers; P2.1: profiles with a delayed popup, a frameset, a late API and a CSP, and the `lms` experiment; P3.1: the corrected `blank` and `mismatch` run (no longer blank, API calls appear), and the corrected package as a web download). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
 `test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
 
@@ -1565,8 +1567,7 @@ npm run package
 `scripts/package.js` does the following:
 1. If `build/icon.icns` is missing, renders `build/icon.svg` with Electron (`scripts/icon.cjs`), resizes it with
    `sips` and builds the `.icns` with `iconutil`.
-2. Packages with `@electron/packager` for this Mac's architecture into `dist/Package Lab-darwin-<arch>/`. Tests, docs,
-   scripts and build files are left out; devDependencies are pruned.
+2. Packages with `@electron/packager` for this Mac's architecture into `dist/Package Lab-darwin-<arch>/`. Tests, scripts and build files are left out. Docs are left out too, except those listed in `src/docs.js` and the folders they sit in (`docs/guide/`, `docs/packs/`), which the panel needs. devDependencies are pruned.
 3. Signs ad hoc (`codesign --sign -`), so it runs on this Mac.
 
 The bundle id is `com.sylumer.package-lab`. `Info.plist` declares `.zip` files with rank Alternate, so Package Lab is in

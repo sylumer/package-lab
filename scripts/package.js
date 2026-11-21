@@ -23,8 +23,8 @@ if (!existsSync(join(build, 'icon.icns'))) {
   rmSync(set, { recursive: true, force: true })
 }
 
-// Drops dist, tests, scripts etc. and every .md file, except the docs shown in the app (docs/ itself and its packs/ folder stay as directories).
-const kept = new Set(DOCS.map(d => '/docs/' + d.name)), keptDirs = new Set(['/docs', '/docs/packs'])
+// Drops dist, tests, scripts etc. and every .md file, except the docs shown in the app (docs/ itself and the folders they sit in, such as packs/ and guide/, stay as directories).
+const kept = new Set(DOCS.map(d => '/docs/' + d.name)), keptDirs = new Set(['/docs', ...DOCS.filter(d => d.name.includes('/')).map(d => '/docs/' + d.name.split('/')[0])])
 const ignore = p => kept.has(p) || keptDirs.has(p) ? false : /^\/(dist|test|docs|scripts|build|alfred)(\/|$)/.test(p) || /^\/\.git/.test(p) || /\.md$/.test(p)
 
 const [out] = await packager({

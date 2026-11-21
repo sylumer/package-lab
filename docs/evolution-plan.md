@@ -23,6 +23,7 @@ Progress is recorded in [evolution-status.md](evolution-status.md). Decisions ma
 - [Phase 3: documentation built around the app](#phase-3-documentation-built-around-the-app)
 - [Phase 4: coordinates and the macro editor](#phase-4-coordinates-and-the-macro-editor)
 - [Phase 5: interfaces in step, final check](#phase-5-interfaces-in-step-final-check)
+- [Phase 6: Windows](#phase-6-windows)
 - [Not planned](#not-planned)
 - [Prompt templates](#prompt-templates)
 
@@ -272,8 +273,8 @@ review round being likely to fail:**
 
 | Model | Use for | In this plan |
 |---|---|---|
-| **haiku** | The spec decides everything; mechanical edits; moving text; scripts with a clear recipe; documentation | E1.3, E2.4, E2.5, E3.1, E3.3, E5.2. Reviews of doc-only work packages, apart from checking them against the code |
-| **sonnet** | Judgement in Electron, CDP, the probe or the UI's structure; anything touching replay, privacy or the window; every code review | E0.1, E1.1, E1.2, E2.1, E2.2, E2.3, E3.2, E3.4, E4.1, E4.2, E5.1, E5.3, the orchestrator, and reviews of all code work packages and of E3.1's accuracy |
+| **haiku** | The spec decides everything; mechanical edits; moving text; scripts with a clear recipe; documentation | E1.3, E2.4, E2.5, E3.1, E3.3, E5.2, E6.3. Reviews of doc-only work packages, apart from checking them against the code |
+| **sonnet** | Judgement in Electron, CDP, the probe or the UI's structure; anything touching replay, privacy or the window; every code review | E0.1, E1.1, E1.2, E2.1, E2.2, E2.3, E3.2, E3.4, E4.1, E4.2, E5.1, E5.3, E6.1, E6.2, the orchestrator, and reviews of all code work packages and of E3.1's accuracy |
 | **opus** | Only as the escalation after a Sonnet work package fails review twice | — |
 
 **Why so little Opus.** The hard parts here (element anchors across frames, the replay player) are well specified
@@ -307,6 +308,9 @@ types and docs that ship there) before searching the web.
 | E5.1 | CLI, web, Alfred and Concierge in step | sonnet | sonnet | Phases 1–4 | S |
 | E5.2 | Documentation pass | haiku | sonnet (accuracy) | everything | M |
 | E5.3 | Final check and release build | sonnet | — (the orchestrator) | everything | S |
+| E6.1 | Paths, data folder and shortcuts that work anywhere | sonnet | sonnet | E5.3 | M |
+| E6.2 | A Windows build | sonnet | sonnet | E6.1 | S |
+| E6.3 | Try it on Windows, or leave it ready to try | haiku | sonnet | E6.2 | S |
 
 Sizes are as in plan.md: S up to about 300 lines with tests and docs, M up to about 800, L up to about 1,500.
 
@@ -1098,6 +1102,206 @@ module `src/macros.js`, `test/test.js`, `test/ui.js`, docs.
 
 ---
 
+## Phase 6: Windows
+
+Added 2026-11-21, at the owner's request: "Let's see what we get." The goal is to find out how close Package Lab is to
+running on Windows. It gets as far as a Windows build that can be tried, without disturbing the Mac app.
+
+The phase runs after E5.3, in order, on `evolve`. Phase 5 ends with a merge into `main` as usual, then Phase 6 starts,
+so the 0.3.0 release stays Mac-only and clean.
+
+**What's known before starting.** The core is portable: Electron's Chromium, CDP, the probe, Node's standard library
+and the project's own zip reader, which already refuses drive letters and backslashes. The window code already keeps
+Mac-only features behind `process.platform === 'darwin'`. The Mac assumptions are at the edges:
+
+- **Packaging.** `scripts/package.js` uses `platform: 'darwin'`, `sips`, `iconutil`, `codesign`, `ditto`, `osascript`
+  and `lsregister`, and registers for `.zip` files through `Info.plist`.
+- **The command line.** `bin/package-lab.js` hard-codes the app at `/Applications/Package Lab.app/…` and the data
+  folder at `~/Library/Application Support/Package Lab`.
+- **File paths built from URLs.** There are 28 uses of `new URL(…).pathname` in `src`, `bin`, `scripts` and `test`. On
+  Windows they give `/C:/…`.
+- **Tests and tools that are Mac-only by nature.** Alfred (`plutil`), the packaged-app checks and the accent colour.
+
+**No Windows machine is assumed.** This Mac can build for Windows and can check portability rules, but it can't run
+Windows. So:
+
+- E6.1 and E6.2 make everything they can check on the Mac pass.
+- E6.3 tries the build on Windows only if a Windows machine can be reached. Otherwise it leaves a ready-made workflow
+  and a checklist for the owner, and is marked `skipped` with that reason.
+
+| # | Work package | Model | Review | Needs | Size |
+|---|---|---|---|---|---|
+| E6.1 | Paths, data folder and shortcuts that work anywhere | sonnet | sonnet | E5.3 | M |
+| E6.2 | A Windows build | sonnet | sonnet | E6.1 | S |
+| E6.3 | Try it on Windows, or leave it ready to try | haiku | sonnet | E6.2 | S |
+
+### E6.1 Paths, data folder and shortcuts that work anywhere (sonnet)
+
+**Goal.** Nothing in the code assumes macOS except what is behind a platform check. The Mac app behaves exactly as
+before.
+
+**Files.**
+- New `src/platform.js`.
+- Every file with `new URL(…).pathname`; `grep -rn "\.pathname" src bin scripts test` finds them.
+- `bin/package-lab.js`, `src/main.js` (menus and accelerators), `src/ui/app.js` (shortcut text).
+- `test/test.js`, `test/ui.js`.
+- `developer-guide.md`.
+
+**Spec.**
+
+- **File paths.** Replace every `new URL(…, import.meta.url).pathname` with `fileURLToPath(new URL(…))`. Find any
+  other place that turns a URL into a path by hand, such as `lab://` URLs to package files in `main.js`'s protocol
+  handler, and check it uses `path.join` or `fileURLToPath`, not string slicing with `/`.
+- **`src/platform.js`**, pure, taking everything as arguments so it can be unit-tested on the Mac:
+  - `dataDir(platform, env, home)` returns the folder Electron uses for `app.getPath('userData')` with the app name
+    "Package Lab":
+    - darwin: `<home>/Library/Application Support/Package Lab`;
+    - win32: `<APPDATA>/Package Lab`, falling back to `<home>/AppData/Roaming/Package Lab`;
+    - linux: `<XDG_CONFIG_HOME or home/.config>/Package Lab`.
+
+    Build it with `path.win32` or `path.posix`, matching the platform. `PACKAGE_LAB_DATA` still wins, where the
+    callers read it today.
+  - `appBinaries(platform, env, home)` returns the places to look for the installed app, in order:
+    - darwin: today's two `.app` paths;
+    - win32: `<LOCALAPPDATA>/Programs/Package Lab/Package Lab.exe`, then the unpacked build in `dist/`;
+    - linux: the unpacked build in `dist/`.
+
+    `PACKAGE_LAB_APP`, a new environment variable, comes first everywhere. It is for portable copies.
+  - `bin/package-lab.js` uses both helpers in place of `DATA_DIR`, `INSTALLED` and the `Contents/MacOS` path. On a
+    Mac the result must be identical: assert it in a unit test.
+- **Shortcuts.**
+  - Every menu accelerator is `CmdOrCtrl+…`, or `Alt` in place of `Option`, except on items that exist only on the
+    Mac.
+  - Shortcut text shown in the UI (tooltips, the docs panel and the start screen) comes from one helper in `app.js`:
+    `keys('⌘R')` gives `⌘R` on a Mac and `Ctrl+R` elsewhere. Don't rewrite the Markdown docs; they keep the Mac
+    symbols, and the guide says Ctrl replaces ⌘ on Windows.
+- **Off the Mac**, the window uses the standard frame with Electron's in-window menu bar. Check that the toolbar
+  leaves no traffic-light gap and draws no drag region over the menu. That should already follow from `body.mac`;
+  make sure it does.
+- **Runtime shell-outs.** List every `spawn`, `execFile` and `execSync` in `src/` and `bin/`. Each must run a
+  cross-platform binary (`process.execPath`, Electron or Playwright), or sit behind a platform check with a clear
+  message. Don't change `scripts/` here: that is E6.2.
+- **Mac-only tests.** Put the Alfred checks, the packaged-app checks and anything that runs a Mac tool behind
+  `process.platform === 'darwin'`, so the suite can run on Windows. Report each one skipped with one summary line.
+- **A portability lint**, as a unit check over `src`, `bin` and `scripts`:
+  - no `.pathname` on a `URL` built from `import.meta.url`;
+  - no literal `/Applications/`, `Library/Application Support` or `.app/Contents` outside `src/platform.js` and
+    darwin-only branches.
+
+  Mark the allowed lines with a `// darwin-only` comment that the lint accepts.
+
+**Tests.**
+- Unit:
+  - `dataDir` and `appBinaries` for darwin, win32 (with and without `APPDATA`) and linux (with and without
+    `XDG_CONFIG_HOME`), and `PACKAGE_LAB_APP` winning.
+  - The darwin results equal today's hard-coded values.
+  - `keys` on both platforms.
+  - The lint.
+- The whole suite passes on the Mac, unchanged in time: `npm test` and `npm test -- --slow`.
+
+**Acceptance.**
+- `grep -rn "new URL([^)]*import.meta.url).pathname" src bin scripts test` finds nothing.
+- The Mac app, the CLI, Alfred and Concierge behave exactly as before, and the existing tests prove it.
+
+### E6.2 A Windows build (sonnet)
+
+**Goal.** `npm run package -- --platform win32` on this Mac produces a Windows build that can be copied to a Windows
+machine and run.
+
+**Files.** `scripts/package.js`, `scripts/icon.cjs` if needed, `package.json`, `developer-guide.md` and a new
+`docs/windows.md`.
+
+**Spec.**
+
+- **`--platform`** (darwin by default; win32 is the new choice) and **`--arch`** (the host's by default; x64 and
+  arm64). The darwin path, including `--install`, is unchanged.
+- **The win32 build** uses `@electron/packager`, already a devDependency, with `platform: 'win32'`. The output is the
+  unpacked folder `dist/Package Lab-win32-<arch>/` plus a zip of it, `dist/Package Lab-<version>-win32-<arch>.zip`.
+  This is a portable app: unzip it and run `Package Lab.exe`. Make the zip with the project's own `src/zip.js` if it
+  can write; otherwise use `ditto -c -k` on the Mac, and log it.
+- **The icon.** Write `build/icon.ico` from the existing rendered PNG in plain Node. An ICO file holding PNG images
+  (16, 32, 48 and 256) is a short header plus the PNG bytes, so it needs no dependency; resize with Electron's
+  `nativeImage` in `icon.cjs`.
+  - Packager needs Wine to set an `.exe` icon from a non-Windows machine. If `wine` or `wine64` isn't on `PATH`,
+    build without the icon, print one line saying why, and log the decision.
+  - The window's own icon is set at runtime with `BrowserWindow`'s `icon` option off the Mac, so the taskbar shows
+    it either way.
+- **Not in this work package:** an installer (Squirrel, NSIS or MSIX), code signing, the `.zip` file association and
+  auto-update. Each needs a new dependency, a certificate or a Windows machine. Add them to Not planned, with what
+  each would need.
+- **`docs/windows.md`**: how to build, how to copy the build to Windows and run it, and the `PACKAGE_LAB_APP` and data
+  folder locations. It also lists what differs from the Mac: no Alfred, no vibrancy, no accent colour, Ctrl for ⌘,
+  and WebKit runs that work through Playwright but are a weaker stand-in for Safari than on a Mac. It ends with "Not
+  yet tried on Windows" until E6.3 changes that.
+
+**Tests.**
+- Run the win32 x64 build in the work package, not in the suite; it takes minutes. Check:
+  - `Package Lab.exe` exists;
+  - `resources/app/package.json` has the right version;
+  - the docs the app shows are in `resources/app/docs/`;
+  - no test files or `.md` files outside the shown docs got in;
+  - the zip opens and holds the same files.
+- Unit: the ICO writer, with a header for 4 images, the right offsets, and PNG signatures at those offsets.
+- `npm run package` (darwin) still produces the same `.app`: compare the file list with a build from before the
+  change.
+
+**Acceptance.**
+- The darwin build and `--install` are unchanged.
+- The win32 zip is produced with no new dependency.
+
+### E6.3 Try it on Windows, or leave it ready to try (haiku)
+
+**Goal.** Learn what actually happens on Windows. Where that can't be done here, leave the owner a one-command way to
+find out.
+
+**Spec.**
+
+1. **Look for a way to reach Windows.**
+   - Check for a git remote on GitHub: `git remote -v`, then `gh repo view`.
+   - Check for a local VM: `prlctl list -a`, `VBoxManage list vms`, or `utmctl list`. Use a VM only if one named for
+     Windows is already there.
+   - Never create a remote, push, install a VM or download Windows.
+2. **Always write `.github/workflows/windows.yml`.** It runs on `windows-latest`, with `workflow_dispatch` and push
+   to `main`, and does the following:
+   - `npm ci`, then `node test/test.js --unit`, then `npm test`;
+   - builds the win32 zip on the runner with `node scripts/package.js --platform win32`, and uploads it as an
+     artifact;
+   - runs `npm run test:ui` under the runner's desktop session. Allow that step to fail
+     (`continue-on-error: true`), and say so in a comment.
+3. **If a GitHub remote exists:** don't push. Write the exact commands for the owner in `evolution-status.md`.
+4. **If a Windows VM exists:**
+   - copy the zip in with the VM tool's own file sharing;
+   - run `Package Lab.exe`, then the CLI's `doctor`, `analyze` on `good.zip` and `run` on `good.zip`;
+   - record what worked and what failed in `docs/windows.md`, as "Tried on Windows <version>, <date>".
+5. **Otherwise:** mark E6.3 `skipped`, with the reason "no Windows machine reachable; workflow and checklist left
+   ready". Add a **Trying it on Windows** checklist to `docs/windows.md`, ten steps or fewer, for the owner to follow
+   on any Windows PC:
+   - unzip and run;
+   - open `good.zip` and run it;
+   - Test saving;
+   - record a macro;
+   - Settings → Appearance;
+   - the web interface from a phone;
+   - the CLI's `doctor`.
+
+   Say what to note at each step.
+
+**Tests.** The workflow file parses as YAML: check it with a small Node parse, or with `gh workflow view` if a remote
+exists. Don't add a YAML dependency for this. If nothing in the repo can parse YAML, check the indentation and keys
+by eye in review.
+
+**Acceptance.**
+- Either a Windows result is recorded in `docs/windows.md`, or the workflow and checklist are in place and the status
+  says why it was skipped.
+- Nothing was pushed or installed.
+
+**At the end of Phase 6.**
+- Run `npm test -- --slow`, then merge into `main` as at every phase end.
+- Add a "Windows" paragraph to the final summary in `evolution-status.md`: what builds, what is known to work, what is
+  untried, and the next step, which is one of the ten-step checklist, the workflow, or an installer.
+
+---
+
 ## Not planned
 
 - **Showing the course inside the main window** (`WebContentsView`) instead of a separate window. The live view
@@ -1109,6 +1313,10 @@ module `src/macros.js`, `test/test.js`, `test/ui.js`, docs.
 - **Thumbnails per macro step.** The element label and Copy cover identifying a step. Add them if steps without a
   target prove hard to tell apart.
 - **Drag to reorder steps.** Up and Down buttons cover it and work from the keyboard.
+- **A Windows installer, signing, the `.zip` file association and auto-update** (E6.2). An installer needs a new
+  devDependency (electron-winstaller or NSIS) and is best built on Windows. Signing needs a code-signing certificate.
+  The file association needs the installer. Auto-update needs a release server. Add them once a portable build has
+  been tried on Windows and is worth shipping.
 
 ## Prompt templates
 

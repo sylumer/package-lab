@@ -133,6 +133,11 @@ async function checks() {
   await win.getByRole('button', { name: 'Help', exact: true }).click()
   await win.locator('#docs:not([hidden])').waitFor()
   await win.waitForFunction(() => document.querySelector('#doc-body').innerText.length > 200)   // the user guide has loaded
+  // The document list is under its four groups (E3.1), and Getting started opens from it.
+  assert.deepEqual(await win.locator('#doc-pick optgroup').evaluateAll(gs => gs.map(g => g.label)), ['Guide', 'Recipes and findings', 'Reference', 'Authoring tools'], 'help: the list shows the four groups')
+  await win.locator('#doc-pick').selectOption({ label: 'Getting started' })
+  await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'guide/getting-started.md' && document.querySelector('#doc-body h1')?.innerText === 'Getting started')
+  console.log('ui: help groups and getting started ok')
   await win.getByRole('button', { name: 'Close the inspector' }).click()
   await win.locator('#inspector[hidden]').waitFor({ state: 'attached' })   // Close shuts the inspector, Help being one of its segments
   console.log('ui: help panel ok')
