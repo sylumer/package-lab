@@ -138,6 +138,20 @@ async function checks() {
   await win.locator('#doc-pick').selectOption({ label: 'Getting started' })
   await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'guide/getting-started.md' && document.querySelector('#doc-body h1')?.innerText === 'Getting started')
   console.log('ui: help groups and getting started ok')
+  // E3.2: search finds Run settings; the Storage ⓘ opens Run settings at Storage; the contents list the page's headings.
+  await win.locator('#doc-search').fill('partitioned')
+  await win.locator('#doc-results button', { hasText: 'Run settings' }).first().waitFor()
+  await win.locator('#doc-results button', { hasText: 'Run settings' }).first().click()
+  await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'guide/run-settings.md')
+  assert.ok(await win.locator('#doc-toc li').count() > 3, 'help: On this page lists the headings')
+  await win.getByRole('button', { name: 'Close the inspector' }).click()
+  await win.locator('#inspector[hidden]').waitFor({ state: 'attached' })
+  await win.getByRole('button', { name: 'Inspector', exact: true }).click()
+  await win.getByRole('tab', { name: 'Settings' }).click()
+  await win.getByRole('button', { name: 'Help: Storage' }).click()
+  await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'guide/run-settings.md' && document.querySelector('#doc-body h3')?.innerText === 'Storage')
+  assert.ok(await win.evaluate(() => { const r = document.querySelector('#doc-body h3').getBoundingClientRect(), b = document.querySelector('#doc-body').getBoundingClientRect(); return r.top >= b.top - 1 && r.top < b.bottom }), 'help: Storage is scrolled into view')
+  console.log('ui: help search and context help ok')
   await win.getByRole('button', { name: 'Close the inspector' }).click()
   await win.locator('#inspector[hidden]').waitFor({ state: 'attached' })   // Close shuts the inspector, Help being one of its segments
   console.log('ui: help panel ok')
@@ -216,8 +230,8 @@ const GROUPS = ['Summary', 'Package', 'What happened', 'Deep dive', 'Tools']
 async function viewChecks() {
   const trace = on => win.locator('#trace').evaluate((e, on) => { e.checked = on; e.dispatchEvent(new Event('change', { bubbles: true })) }, on)
   await trace(true); await launch(); await win.waitForTimeout(2000); await stop(); await trace(false)   // a traced run, so Execution and the code views have something
-  const views = win.locator('#views'), names = () => views.getByRole('button').allInnerTexts()
-  assert.deepEqual(await views.locator('h2').allTextContents(), GROUPS, 'every group shows after a run of good')
+  const views = win.locator('#views'), names = () => views.locator('nav').getByRole('button').allInnerTexts()
+  assert.deepEqual(await views.locator('h2').evaluateAll(hs => hs.map(h => h.firstChild.textContent)), GROUPS, 'every group shows after a run of good')
   assert.ok(!(await names()).includes('Compare'), 'Compare is hidden until a comparison exists')
   assert.ok(!(await names()).includes('Live'), 'Live is web only')
   await view('Network')

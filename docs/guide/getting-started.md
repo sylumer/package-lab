@@ -79,6 +79,8 @@ The settings are kept in `settings.json` in the data folder (`~/Library/Applicat
 
 **Help** (at the right end of the toolbar, or **Show Docs** in the Help menu) opens the docs in the **Help** segment of the inspector. Choose a doc from the list, which is grouped as Guide, Recipes and findings, Reference and Authoring tools. **Back** returns to the doc you were reading, and **Close** shuts the inspector. Links to other docs open there; web links open in your browser. Package Lab remembers which doc it showed.
 
+The **Search the docs** field at the top searches every doc as you type, up to 20 results. Each shows the doc, the heading above the match and the words around it. Click one to open that heading. **On this page** lists the open doc's headings. The small **ⓘ** beside a Settings group, a view group in the sidebar, the Storage setting and the verdict on Findings opens the part of the guide that explains it.
+
 The docs are bundled in the app, so they work offline. The web interface has the panel too.
 
 ## Privacy

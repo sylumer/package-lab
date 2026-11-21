@@ -71,7 +71,7 @@
       <button type="button" role="tab" id="insp-tab-help" data-seg="help" aria-controls="docs" aria-selected="false" tabindex="-1">Help</button>
     </div>
     <div id="insp-settings" class="insp-pane" role="tabpanel" aria-labelledby="insp-tab-settings">
-      <details class="group" open><summary>LMS</summary>
+      <div class="gwrap"><details class="group" open><summary>LMS</summary>
         <label>Profile <select id="profile" title="Host the content the way an LMS does. Presets are approximations."><option value="generic">generic</option></select></label>
         <p class="muted small" id="profile-notes"></p>
         <div id="profile-fields" class="fields"></div>
@@ -79,25 +79,25 @@
           <option value="manifest">As the manifest says</option><option value="both">Both (1.2 and 2004)</option>
           <option value="1.2">SCORM 1.2 only</option><option value="2004">SCORM 2004 only</option><option value="none">None</option></select></label>
         <label class="check"><input type="checkbox" id="resume"> Resume last run’s data</label>
-      </details>
-      <details class="group" open><summary>Browser and device</summary>
+      </details><button type="button" class="info" data-help="guide/run-settings.md#lms" aria-label="Help: LMS" title="Help: LMS"><span aria-hidden="true">ⓘ</span></button></div>
+      <div class="gwrap"><details class="group" open><summary>Browser and device</summary>
         <label>Browser <select id="browser" title="Chromium is the app’s own browser. WebKit is Safari’s engine.">
           <option value="chromium">Chromium</option><option value="webkit">WebKit (Safari’s engine)</option></select></label>
         <label>Device size <select id="viewport" title="Run at a phone or tablet size, with touch and that device’s user agent.">
           <option value="">Window as it is</option><option value="iphone">iPhone (390×844)</option><option value="ipad">iPad (820×1180)</option><option value="android-phone">Android phone (412×915)</option><option value="custom">Custom size…</option></select></label>
         <div id="viewport-custom" class="fields" hidden><label>Width <input id="viewport-w" type="number" min="100" max="10000" value="390"></label> <label>Height <input id="viewport-h" type="number" min="100" max="10000" value="844"></label></div>
-        <label>Storage <select id="storage" title="Storage in the content’s frames: normal, blocked or partitioned.">
-          <option value="normal">Normal</option><option value="blocked">Blocked (Safari-like)</option><option value="partitioned">Partitioned (empty)</option></select></label>
-      </details>
-      <details class="group" open><summary>Recording</summary>
+        <div class="field-help"><label>Storage <select id="storage" title="Storage in the content’s frames: normal, blocked or partitioned.">
+          <option value="normal">Normal</option><option value="blocked">Blocked (Safari-like)</option><option value="partitioned">Partitioned (empty)</option></select></label> <button type="button" class="info" data-help="guide/run-settings.md#storage" aria-label="Help: Storage" title="Help: Storage"><span aria-hidden="true">ⓘ</span></button></div>
+      </details><button type="button" class="info" data-help="guide/run-settings.md#browser-and-device" aria-label="Help: Browser and device" title="Help: Browser and device"><span aria-hidden="true">ⓘ</span></button></div>
+      <div class="gwrap"><details class="group" open><summary>Recording</summary>
         <label>Stop after <select id="auto" title="Stop and analyse automatically after this long">
           <option value="0">I stop it</option><option value="10">10 s</option><option value="20">20 s</option><option value="30">30 s</option>
           <option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
         <label class="check"><input type="checkbox" id="caught" checked> Record caught errors</label>
         <label class="check" title="Record the functions that ran and the decisions taken. Runs more slowly."><input type="checkbox" id="trace"> Trace the code</label>
         <label class="check" title="Keep typed text in the run, for macros. Never from password fields."><input type="checkbox" id="record-input"> Keep typed text in runs (for macros)</label>
-      </details>
-      <details class="group" id="advanced"><summary>Advanced</summary>
+      </details><button type="button" class="info" data-help="guide/run-settings.md#recording" aria-label="Help: Recording" title="Help: Recording"><span aria-hidden="true">ⓘ</span></button></div>
+      <div class="gwrap"><details class="group" id="advanced"><summary>Advanced</summary>
         <p class="muted small">The options the next run will use. To set the others, use a file with <code>--options</code> on the command line.</p>
         <label>Frame depth <select id="depth"><option>0</option><option>1</option><option>2</option><option>3</option></select></label>
         <label class="check"><input type="checkbox" id="opener"> In a new window</label>
@@ -110,13 +110,17 @@
         <div id="answers"></div>
         <pre id="options-json"></pre>
         <div class="stack"><button id="copy-cli" type="button" class="secondary">Copy as CLI command</button><code id="cli-line"></code></div>
-      </details>
+      </details><button type="button" class="info" data-help="guide/run-settings.md#advanced" aria-label="Help: Advanced" title="Help: Advanced"><span aria-hidden="true">ⓘ</span></button></div>
     </div>
     <div id="insp-macro" class="insp-pane" role="tabpanel" aria-labelledby="insp-tab-macro" hidden>
       <div id="macro"></div>
     </div>
     <div id="docs" role="tabpanel" aria-labelledby="insp-tab-help" hidden>
       <div class="docs-head"><select id="doc-pick" aria-label="Document"></select><button id="doc-back" type="button" class="secondary" disabled>Back</button><button id="doc-close" type="button" class="secondary" aria-label="Close the inspector">Close</button></div>
+      <div class="docs-search" role="search"><input id="doc-search" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off"></div>
+      <p id="doc-status" class="muted small" role="status" aria-live="polite"></p>
+      <ul id="doc-results" hidden></ul>
+      <details id="doc-toc" hidden><summary>On this page</summary><ul></ul></details>
       <div id="doc-body" class="doc"></div>
     </div>
   </div>

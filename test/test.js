@@ -24,7 +24,7 @@ import { timelineModel, timelineView } from '../src/timeline.js'
 import { normaliseOptions, cliCommand, VIEWPORTS, viewportName, optionsSummary } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
-import { markdown, slugOf } from '../src/ui/markdown.js'
+import { markdown, slugOf, headings, searchDocs } from '../src/ui/markdown.js'
 import { DOCS } from '../src/docs.js'
 import { comparePackages, compareFiles, compareManifests, compareBoots, compareFindings, compareBehaviour } from '../src/pkgdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
@@ -1621,6 +1621,29 @@ console.log('markdown: unit ok')
   }
   assert.deepEqual(broken, [], 'docs: every link in DOCS points to a file and a heading that exist, and the guide links only to panel docs')
   console.log('docs links: unit ok')
+  // E3.2: every data-help target resolves to a doc and heading. The targets are the data-help="…" values in index.html, and in app.js the first argument after the name in infoBtn(…, '…') and the values in GROUP_HELP, which are the only places it writes them.
+  const ui = f => readFileSync(new URL('../src/ui/' + f, import.meta.url), 'utf8')
+  const helpTargets = [...ui('index.html').matchAll(/data-help="([^"]+)"/g)].map(m => m[1])
+  const js = ui('app.js')
+  helpTargets.push(...[...js.matchAll(/infoBtn\([^,]+,\s*'([^']+)'/g)].map(m => m[1]), ...[...js.match(/const GROUP_HELP = \{([^}]*)\}/)[1].matchAll(/'([^']+)'/g)].map(m => m[1]).filter(v => v.includes('#')))
+  assert.ok(helpTargets.length >= 10, 'data-help: the targets are found')
+  const bad = helpTargets.filter(t => { const [n, a] = t.split('#'); return !names.has(n) || !a || !anchorsOf(join(docsDir, n)).has(a) })
+  assert.deepEqual(bad, [], 'data-help: every target is a doc and heading that exist')
+}
+{   // E3.2: headings and searchDocs
+  const md = '# T\n\n## A\n\n```\n## not a heading\n```\n\n### B `x`\n\n## A\n'
+  const hs = headings(md)
+  assert.deepEqual(hs.map(x => [x.level, x.text, x.id]), [[1, 'T', 't'], [2, 'A', 'a'], [3, 'B x', 'b-x'], [2, 'A', 'a-1']], 'headings: levels, text, duplicate ids')
+  assert.deepEqual([...markdown(md, 'p-').matchAll(/id="p-([^"]+)"/g)].map(m => m[1]), hs.map(x => x.id), 'headings: ids match the renderer')
+  const docs = [{ name: 'a.md', title: 'Alpha', text: '# Alpha\n\n## Setup\n\nUse the Frobnicator <b>now</b>.\n\n```\nfrobnicator(1)\n```\n' }]
+  const r = searchDocs(docs, 'FROBNICATOR')
+  assert.equal(r.length, 2, 'searchDocs: a match in prose and one in a code block')
+  assert.deepEqual([r[0].title, r[0].heading, r[0].id], ['Alpha', 'Setup', 'setup'], 'searchDocs: title and nearest heading')
+  assert.equal(r[0].html, 'Use the <mark>Frobnicator</mark> &lt;b&gt;now&lt;/b&gt;.', 'searchDocs: the match is marked and the text escaped')
+  assert.equal(searchDocs(docs, '<b>')[0].html, 'Use the Frobnicator <mark>&lt;b&gt;</mark>now&lt;/b&gt;.', 'searchDocs: a query with HTML is escaped too')
+  assert.deepEqual(searchDocs(docs, 'zzz'), [], 'searchDocs: no match')
+  assert.equal(searchDocs([{ name: 'b.md', title: 'B', text: 'x\n'.repeat(50) }], 'x').length, 20, 'searchDocs: capped at 20')
+  console.log('docs search: unit ok')
 }
 console.log('unit: ok')
 
