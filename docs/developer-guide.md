@@ -98,6 +98,7 @@ src/
   redact.js             Redacted reports (P4.4): redactRun, the copy of a run with the course content taken out
   fixes.js              Corrected package export: FIXES (the six autofixes, in run order), correct, prove, exportFixed (P3.1)
   experiments.js        Experiments: PRESETS (api, frames, standard, lms, storage, browsers), planVariants, runResult, summarise, experimentFindings (P0.3)
+  macros.js             The macro editor's pure parts: setDelay, move, remove, insertWait, setFields, edit, macroRows, macroName (E4.2)
   cycle.js              Save and resume: macros (readMacro, macroFile, macroDelays, quietFor, withMacroSize), resumeOptions, cycleFindings, cycleRows (P2.4)
   timeline.js           The Timeline: timelineModel (lanes in ms) and timelineView (fractions of the window shown), for the tab and the report (P4.2)
   ui/                   The interface (desktop window and web)
@@ -242,6 +243,10 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `macro-record` | `{ on? }` (default true) | Whether recording is on. Turning it on clears what was recorded |
 | `macro-save` | — | `{ events, viewport }`: the recorded events as a checked macro, and the content size of the window at the first one; recording stops |
 | `macro-from-run` | `{ run }` | `{ events, viewport }`: the macro made from the `input` reports the probe saw in that run, and `trace.window` (or null) |
+| `macro-edit` | `{ events, viewport?, op?, i?, ms?, dir?, wait?, patch? }` | The macro editor's one edit (`edit` in `src/macros.js`; `op` is `delay`, `move`, `remove`, `wait`, `set` or `none`): `{ events, rows, steps }`, the checked list, the table's rows (`macroRows`) and the milestone ids a wait can name. A bad value throws the message `normaliseOptions` gives |
+| `macro-play` | `{ events, from?, to? }` | Plays `events[from, to)` into the running course with `playMacro` and returns at once. Refused with "Launch first" when nothing runs, and while another macro plays (`active.playing`, which the launch's own macro sets too). A part played from the middle starts at once |
+| `macro-list`, `macro-load`, `macro-store`, `macro-delete` | `{ name?, events?, viewport? }` | Named macros of the open package, in `<data folder>/macros/<package id>/<name>.json` as version 2 files (the file is `JSON.stringify(macroFile(events, viewport))`, so a saved list is byte for byte what `macroFile` makes). The package id is the package's file name with anything but letters, digits, dot, dash and underscore made `_`: the same name the runs list groups by (`run.package`). `macroName` checks the name (1 to 60 characters of `[\w .-]`, no leading dot) and the resolved path must stay inside the package's folder. `macro-list` gives `[{ name, size, steps }]` |
+| `macro-file`, `macro-parse` | `{ events, viewport }` · `{ text }` | The web interface's Export and Import: the version 2 file object to download, and `readMacro` of a file's text. The desktop app's `macro-export` and `macro-import` use the save and open dialogs instead (desktop only) |
 | `cycle-start` | `{ item, macroSize?, …launch options (the macro too) }` | `true`, at once; progress comes as `cycle` events (see [Save and resume](#save-and-resume-p24)). Throws in WebKit, or if a run, experiment, discovery or drill-down is under way |
 | `cycle-stop` | — | `true`: stops the run in progress and the rest of the cycle |
 | `settings` | — | The settings, as `readSettings` returns them (desktop only, in `DESKTOP_ONLY`) |

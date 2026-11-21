@@ -741,7 +741,7 @@ async function act(fn, busy) {
 }
 function showPackage(p) {
   if (!p) return
-  st.pkg = p; st.sel = null; st.boots = {}; st.files = { list: null, open: null, draft: '', diffs: {}, note: '' }
+  st.pkg = p; mac.pick = ''; mac.saving = false; refreshNames(); st.sel = null; st.boots = {}; st.files = { list: null, open: null, draft: '', diffs: {}, note: '' }
   $('pkg-name').textContent = p.name; $('pkg-name').classList.remove('muted')
   $('item').replaceChildren(...p.items.map(i => h('option', { value: i.index }, `${'· '.repeat(i.depth)}${i.title} (${i.type || '?'})`)))
   const firstSco = p.items.find(i => i.type === 'sco'); if (firstSco) $('item').value = firstSco.index
@@ -881,12 +881,125 @@ const macroSize = () => st.macro.events.length ? st.macro.viewport : null   // w
 const launchOptions = () => ({ macro: st.macro.events, recordInput: $('record-input').checked, expose: $('expose').value, profile: profileOption(), depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
   pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim(), trace: $('trace').checked, storage: $('storage').value, tool: $('tool').value || null,
   browser: $('browser').value, viewport: $('viewport').value === 'custom' ? `${+$('viewport-w').value}x${+$('viewport-h').value}` : $('viewport').value || (macroSize() ? `${macroSize().width}x${macroSize().height}` : null) })
-// The Macro tab of the inspector: how long it is, the clicks the selected run's probe saw, and Clear.
+// The Macro segment of the inspector (E4.2): the steps as a table, an edit form for the selected one, waits, playing parts, and named macros.
+// Every change goes through the macro-edit handler (src/macros.js), which checks it with the launch options' own rules; its message is shown beside the field.
+const mac = { focus: null, focusName: false, loadErr: '', draft: null, sel: null, rowsFor: null, focusRow: false, rows: [], steps: [], names: [], pick: '', saving: false, err: {}, nameErr: '' }
+const FIELDS = { click: ['x', 'y'], move: ['x', 'y'], wheel: ['x', 'y', 'dy'], key: ['key'], text: ['text'] }
+const NUMERIC = new Set(['x', 'y', 'dy', 'ms', 'quiet', 'timeout'])
+const FIELD_LABEL = { x: 'x (0 to 1 across the window)', y: 'y (0 to 1 down the window)', dy: 'Scroll by (pixels, down is positive)', key: 'Key', text: 'Text', ms: 'Wait (ms)', quiet: 'Quiet for (ms)', milestone: 'Step', timeout: 'Give up after (ms)' }
+const macroMsg = e => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+const refreshNames = () => lab.invoke('macro-list').then(l => { mac.names = l }, () => { mac.names = [] }).then(showMacro)
+// Applies one edit and redraws; a refused edit leaves the macro as it was and returns the message.
+// soft: a change of one field redraws the table only, so the form keeps the keyboard focus.
+let macroQ = Promise.resolve()   // edits run one at a time: each reads st.macro when its turn comes
+const macroEdit = (o, soft = false) => macroQ = macroQ.then(() => macroEditNow(o, soft))
+async function macroEditNow(o, soft) {
+  try {
+    const r = await lab.invoke('macro-edit', { events: st.macro.events, viewport: st.macro.viewport, ...o })
+    st.macro = { events: r.events, viewport: st.macro.viewport }; mac.rows = r.rows; mac.rowsFor = r.events; mac.steps = r.steps
+    if (soft) drawTable(); else { mac.err = {}; showMacro() }
+    showOptions(); return null
+  } catch (e) { return macroMsg(e) }
+}
+const setMacro = m => { mac.loadErr = ''; st.macro = m; mac.sel = null; mac.err = {}; showMacro(); showOptions() }
+function macroField(label, key, input, onchange, hint) {
+  const err = h('span', { class: 'field-err', role: 'alert' }, mac.err[key] ?? '')
+  input.addEventListener('change', async () => { const m = await onchange(input.value); mac.err[key] = m ?? ''; err.textContent = m ?? '' })
+  return h('div', { class: 'field' }, h('label', {}, label, ' ', input), err)
+}
+function macroForm(i) {
+  const e = st.macro.events[i], rows = mac.rows[i]
+  const num = v => v.trim() !== '' && Number.isFinite(+v) ? +v : v
+  const patch = (k, v) => macroEdit({ op: 'set', i, patch: { [k]: NUMERIC.has(k) ? (k === 'timeout' && v.trim() === '' ? null : num(v)) : v } }, true)
+  const waitKey = e.type === 'wait' ? ['ms', 'text', 'milestone', 'quiet'].find(k => e[k] !== undefined) : null
+  const keys = e.type === 'wait' ? [waitKey, ...(waitKey === 'ms' ? [] : ['timeout'])] : FIELDS[e.type] ?? []
+  const delay = st.macro.events[i].t - (i ? st.macro.events[i - 1].t : 0)
+  return h('fieldset', { class: 'macro-form' }, h('legend', {}, `Step ${i + 1}: ${rows?.action ?? ''}`),
+    macroField('Delay before (ms)', 't', h('input', { type: 'number', min: '0', step: '100', value: delay, 'aria-label': 'Delay before this step in milliseconds' }), v => macroEdit({ op: 'delay', i, ms: num(v) }, true)),
+    ...keys.map(k => k === 'milestone'
+      ? macroField(FIELD_LABEL[k], k, h('select', { 'aria-label': FIELD_LABEL[k] }, mac.steps.map(id => h('option', { value: id, selected: id === e.milestone }, id))), v => patch(k, v))
+      : macroField(FIELD_LABEL[k], k, h('input', { type: NUMERIC.has(k) ? 'number' : 'text', value: e[k] ?? '', step: k === 'x' || k === 'y' ? '0.01' : 'any', 'aria-label': FIELD_LABEL[k] }), v => patch(k, v))))
+}
+// Plays part of the macro into the running course: events [from, to).
+const macroPlay = (from, to) => act(async () => { await lab.invoke('macro-play', { events: st.macro.events, from, to }); say(`Playing step${to - from === 1 ? '' : 's'} ${from + 1}${to - from === 1 ? '' : ` to ${to}`}.`) })
+// The table of steps (redrawn alone by drawTable when a field changes).
+function macroTable() {
+  const n = st.macro.events.length, sel = mac.sel
+  const btn = (label, text, off, on) => h('button', { type: 'button', class: 'secondary tiny', 'aria-label': label, title: label, disabled: off, onclick: ev => { ev.stopPropagation(); on() } }, text)
+  const pick = (i, focus) => { mac.sel = i; mac.err = {}; mac.focusRow = focus; showMacro() }
+  const body = mac.rows.map((r, i) => h('tr', { tabindex: '0', 'aria-current': sel === i ? 'true' : null, class: sel === i ? 'sel' : null, 'data-step': i + 1,
+    onclick: () => pick(i, false), onkeydown: ev => { if (ev.target === ev.currentTarget && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); pick(i, true) } } },
+    h('td', {}, r.n), h('td', {}, r.when), h('td', {}, r.action), h('td', {}, r.where),
+    h('td', { class: 'nowrap' }, btn(`Move step ${r.n} up`, '↑', i === 0, async () => { if (!await macroEdit({ op: 'move', i, dir: -1 })) { mac.sel = i - 1; mac.focus = [`[aria-label="Move step ${i} up"]`, `[aria-label="Move step ${i} down"]`]; showMacro() } }),
+      btn(`Move step ${r.n} down`, '↓', i === n - 1, async () => { if (!await macroEdit({ op: 'move', i, dir: 1 })) { mac.sel = i + 1; mac.focus = [`[aria-label="Move step ${i + 2} down"]`, `[aria-label="Move step ${i + 2} up"]`]; showMacro() } }),
+      btn(`Delete step ${r.n}`, '✕', false, async () => { if (!await macroEdit({ op: 'remove', i })) { mac.sel = null; mac.focus = [`tr[data-step="${Math.min(i + 1, n - 1)}"]`]; showMacro() } }))))
+  return h('table', { class: 'macro-table', 'aria-label': 'Macro steps' }, h('thead', {}, h('tr', {}, ['#', 'When', 'Action', 'Where', h('span', { class: 'sr' }, 'Move or delete')].map(c => h('th', {}, c)))), h('tbody', {}, body))
+}
+function drawTable() {
+  const t = $('macro').querySelector('.macro-table'); if (t) t.replaceWith(macroTable())
+  const p = $('macro-summary'); if (p) p.textContent = macroSummary()
+}
+function macroSteps() {
+  const n = st.macro.events.length, sel = mac.sel
+  if (!n) return [h('p', { class: 'muted small' }, 'No steps yet. Add a wait, or record some clicks.'), macroWaits()]
+  return [macroTable(), sel != null && sel < n && macroForm(sel), macroWaits(), macroPlayRow()]
+}
+function macroWaits() {
+  const kind = h('select', { id: 'wait-kind', 'aria-label': 'Wait for' }, [['text', 'for text'], ['milestone', 'for a milestone'], ['quiet', 'for the network to go quiet'], ['ms', 'for a time']].map(([v, t]) => h('option', { value: v }, t)))
+  const text = h('input', { id: 'wait-text', type: 'text', placeholder: 'Text on the page', 'aria-label': 'Text to wait for' })
+  const step = h('select', { id: 'wait-step', 'aria-label': 'Step to wait for', hidden: true }, (mac.steps.length ? mac.steps : ['found', 'initialised', 'wrote', 'committed', 'finished']).map(id => h('option', { value: id }, id)))
+  const ms = h('input', { id: 'wait-ms', type: 'number', min: '1', value: '1000', 'aria-label': 'Milliseconds', hidden: true })
+  const err = h('span', { class: 'field-err', role: 'alert' })
+  kind.addEventListener('change', () => { text.hidden = kind.value !== 'text'; step.hidden = kind.value !== 'milestone'; ms.hidden = kind.value !== 'ms' && kind.value !== 'quiet'; ms.value = kind.value === 'quiet' ? 500 : 1000 })
+  const add = async () => {
+    const wait = kind.value === 'text' ? { text: text.value } : kind.value === 'milestone' ? { milestone: step.value } : { [kind.value]: +ms.value }
+    const at = mac.sel == null ? st.macro.events.length : mac.sel + 1
+    const m = await macroEdit({ op: 'wait', i: at, wait }); if (m) err.textContent = m; else { mac.sel = at; showMacro() }
+  }
+  return h('div', { class: 'row wrap macro-wait' }, h('span', {}, 'Add wait'), kind, text, step, ms, h('button', { type: 'button', class: 'secondary', onclick: add }, 'Add wait'), err)
+}
+function macroPlayRow() {
+  const sel = mac.sel, off = !st.running || sel == null || sel >= st.macro.events.length, v = st.macro.viewport
+  return h('div', { class: 'row wrap' }, h('button', { type: 'button', class: 'secondary', disabled: off, title: 'Play the selected step into the running course', onclick: () => macroPlay(sel, sel + 1) }, 'Play step'),
+    h('button', { type: 'button', class: 'secondary', disabled: off, title: 'Play from the selected step to the end', onclick: () => macroPlay(sel, st.macro.events.length) }, 'Play from here'),
+    h('button', { type: 'button', class: 'secondary', disabled: off, title: 'Play from the first step to the selected one', onclick: () => macroPlay(0, sel + 1) }, 'Play to here'),
+    h('span', { class: 'muted small' }, v ? `Recorded at ${v.width}×${v.height}` : 'No recorded size'), !st.running && h('span', { class: 'muted small' }, 'Launch to play steps.'))
+}
+// Saved macros: a select, Save As…, Import…, Export…, Delete.
+function macroSaved() {
+  const n = st.macro.events.length
+  const pick = h('select', { id: 'macro-saved', 'aria-label': 'Saved macros', onchange: ev => { mac.pick = ev.target.value; if (mac.pick) act(async () => { setMacro(await lab.invoke('macro-load', { name: mac.pick })); say(`Loaded ${mac.pick}.`) }); else showMacro() } },
+    h('option', { value: '' }, mac.names.length ? 'Saved macros…' : 'No saved macros'), mac.names.map(m => h('option', { value: m.name, selected: m.name === mac.pick }, `${m.name} (${m.steps} ${m.steps === 1 ? 'step' : 'steps'}${m.size ? `, ${m.size.width}×${m.size.height}` : ''})`)))
+  const name = h('input', { id: 'macro-name', type: 'text', placeholder: 'Name', maxlength: '60', 'aria-label': 'Name for the macro', value: mac.draft ?? mac.pick })
+  const save = () => act(async () => { if (mac.names.some(m => m.name === name.value) && !confirm(`A macro called ${name.value} is already saved. Replace it?`)) return; try { await lab.invoke('macro-store', { name: name.value, events: st.macro.events, viewport: st.macro.viewport }) } catch (e) { mac.nameErr = macroMsg(e); mac.draft = name.value; mac.focusName = true; showMacro(); return }
+    mac.saving = false; mac.draft = null; mac.nameErr = ''; mac.pick = name.value; say(`Saved ${name.value}.`); refreshNames() })
+  const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true, id: 'macro-file', onchange: ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) act(async () => { setMacro(await lab.invoke('macro-parse', { text: await f.text() })); say(`Imported ${f.name}.`) }) } })
+  const imp = () => lab.web ? file.click() : act(async () => { const r = await lab.invoke('macro-import'); if (!r.cancelled) { setMacro(r); say(`Imported ${r.file}.`) } })
+  const exp = () => act(async () => {
+    if (!lab.web) { const r = await lab.invoke('macro-export', { events: st.macro.events, viewport: st.macro.viewport }); say(r.cancelled ? 'Export cancelled.' : `Exported to ${r.file}.`); return }
+    const f = await lab.invoke('macro-file', { events: st.macro.events, viewport: st.macro.viewport })
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([JSON.stringify(f, null, 2)], { type: 'application/json' })), download: `${mac.pick || 'macro'}.json` })
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); say('Downloaded the macro.')
+  })
+  return [h('div', { class: 'row wrap' }, pick, h('button', { type: 'button', class: 'secondary', onclick: () => { mac.saving = !mac.saving; mac.nameErr = ''; mac.draft = null; showMacro(); if (mac.saving) $('macro-name').focus() } }, 'Save As…'),
+      h('button', { type: 'button', class: 'secondary', onclick: imp }, 'Import…'), h('button', { type: 'button', class: 'secondary', disabled: !n, onclick: exp }, 'Export…'), file,
+      h('button', { type: 'button', class: 'secondary', disabled: !mac.pick, onclick: () => act(async () => { if (!confirm(`Delete the saved macro ${mac.pick}?`)) return; await lab.invoke('macro-delete', { name: mac.pick }); mac.pick = ''; refreshNames() }) }, 'Delete')),
+    mac.saving && h('div', { class: 'row wrap' }, name, h('button', { type: 'button', onclick: save }, 'Save'), h('button', { type: 'button', class: 'secondary', onclick: () => { mac.saving = false; showMacro() } }, 'Cancel'), h('span', { class: 'field-err', role: 'alert' }, mac.nameErr))]
+}
+const macroSummary = () => { const m = st.macro, n = m.events.length
+  return n ? `${n} events over ${(m.events.at(-1).t / 1000).toFixed(1)} s${m.viewport ? `, recorded at ${m.viewport.width}×${m.viewport.height}` : ''}. They play at the start of every launch${m.viewport ? ', at that size unless Device size says otherwise' : ''}, and are saved in each run’s options.` : 'None. Record clicks in the Live view (web interface), or take the clicks of a run.' }
 function showMacro() {
-  const r = run(), seen = r ? r.trace.probe.filter(p => p.type === 'input').length : 0, m = st.macro, n = m.events.length
-  $('macro').replaceChildren(h('p', { class: 'muted small' }, n ? `${n} events over ${(m.events.at(-1).t / 1000).toFixed(1)} s${m.viewport ? `, recorded at ${m.viewport.width}×${m.viewport.height}` : ''}. They play at the start of every launch${m.viewport ? ', at that size unless Device size says otherwise' : ''}, and are saved in each run’s options.` : 'None. Record clicks in the Live view (web interface), or take the clicks of a run.'),
-    h('div', { class: 'row' }, h('button', { type: 'button', class: 'secondary', disabled: !seen, title: 'The clicks, keys and typing seen in this run’s course', onclick: () => act(async () => { st.macro = await lab.invoke('macro-from-run', { run: r.id }); showMacro(); showOptions(); say(`Macro made from the selected run: ${st.macro.events.length} events.`) }) }, seen ? `Use this run’s clicks (${seen})` : 'Use this run’s clicks'),
-      h('button', { type: 'button', class: 'secondary', disabled: !n, onclick: () => { st.macro = { events: [], viewport: null }; showMacro(); showOptions() } }, 'Clear')))
+  const r = run(), seen = r ? r.trace.probe.filter(p => p.type === 'input').length : 0, n = st.macro.events.length
+  if (mac.rowsFor !== st.macro.events) { mac.rows = []; mac.rowsFor = st.macro.events; if (n) macroEdit({ op: 'none' }).then(m => { if (m) { mac.loadErr = m; showMacro() } }) }   // the rows come from the handler; the table draws when they arrive
+  if (mac.sel != null && mac.sel >= n) mac.sel = null
+  $('macro').replaceChildren(h('p', { id: 'macro-summary', class: 'muted small' }, macroSummary()), mac.loadErr && h('p', { class: 'field-err', role: 'alert' }, `The steps can’t be shown: ${mac.loadErr}`),
+    ...macroSaved(),
+    h('div', { class: 'row' }, h('button', { type: 'button', class: 'secondary', disabled: !seen, title: 'The clicks, keys and typing seen in this run’s course', onclick: () => act(async () => { setMacro(await lab.invoke('macro-from-run', { run: r.id })); say(`Macro made from the selected run: ${st.macro.events.length} events.`) }) }, seen ? `Use this run’s clicks (${seen})` : 'Use this run’s clicks'),
+      h('button', { type: 'button', class: 'secondary', disabled: !n, onclick: () => setMacro({ events: [], viewport: null }) }, 'Clear')),
+    ...(n && !mac.rows.length ? [] : macroSteps()))
+  if (mac.focusRow) { mac.focusRow = false; $('macro').querySelector('tr[aria-current=true]')?.focus() }
+  if (mac.focus) { const f = mac.focus.map(q => $('macro').querySelector(q)).find(b => b && !b.disabled); mac.focus = null; f?.focus() }
+  if (mac.focusName) { mac.focusName = false; $('macro-name')?.focus() }
 }
 async function showOptions() {
   try {
@@ -1001,7 +1114,7 @@ lab.on('experiment', e => {
   else { x.busy = false; x.note = e.message }
   render()
 })
-lab.on('macro', e => { if (e.state === 'full') { recording(false); say(e.message) } })
+lab.on('macro', e => { if (e.state === 'full') recording(false); if (e.state === 'full' || e.state === 'error') say(e.message) })
 lab.on('cycle', e => {
   const x = st.cyc
   if (e.state === 'start') Object.assign(x, { busy: true, rows: [], findings: [], runs: [], note: 'Run 1: playing the macro and leaving…' })

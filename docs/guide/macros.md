@@ -49,9 +49,37 @@ A macro remembers the window size it was recorded at (“14 events over 12.3 s, 
 
 Timing is the usual reason a macro misses: a button that appears after a slow request isn't there at the moment the click is. A macro file can hold wait steps that block until something has happened, then carry on. A wait is one of: some milliseconds; a piece of text that appears on the page (in any frame of the lesson's origin, or a frame of its own); a step of the run's progress strip (`found`, `initialised`, `wrote`…); or a quiet network (no request pending for that long). Each has a timeout (30 s unless it says otherwise). If it runs out, the macro stops there, the run has the finding “The macro stopped at step 4: waited 30 s for “Next” and it never appeared”, and the run carries on to its end.
 
+## The macro editor
+
+The **Macro** segment of the inspector shows every step of the macro as a table:
+
+| Column | Shows |
+|---|---|
+| # | The step number |
+| When | The time since the step before (`+0.8 s`), or, for a wait, what it waits for (“wait for “Next” (30 s)”) |
+| Action | Click, Key Enter, Type “…”, Scroll, or Wait |
+| Where | The position in pixels at the size the macro was recorded at (`412, 233`), and the element when the step has one (`button#next “Next”`). With no recorded size, the position is a percentage |
+| | **↑** and **↓** move the step, **✕** deletes it |
+
+Choose a row (click it, or Tab to it and press Enter) to change it. The form under the table has the step's delay and its fields. If a value isn't allowed, the message appears beside the field and the step stays as it was. Changing a delay moves every later step by the same amount, so the rest of the macro keeps its timing. Moving a step takes its delay with it. Deleting a step takes its delay out of the macro.
+
+**Add wait** puts a wait after the chosen row (at the end if no row is chosen). Choose what to wait for: text on the page, a step of the run's progress (a milestone), a quiet network, or a time. See [Waits](#waits).
+
+While a run is going, **Play step**, **Play from here** and **Play to here** play part of the macro into the course, so you can try a change without a whole run. A part played from the middle starts at once. Only one part plays at a time. The size under the buttons (“Recorded at 1100×800”) is the window size the macro's positions are across.
+
+### Saved macros
+
+Macros you want to keep are saved for each package, in the data folder (**Help › Show Data Folder**, then `macros`). The select at the top of the segment lists them. Choosing one loads it, replacing the macro in the segment.
+
+- **Save As…** asks for a name: 1 to 60 letters, digits, spaces, dots, dashes or underscores, not starting with a dot. Using a name again replaces that macro.
+- **Delete** removes the one chosen in the select.
+- **Export…** saves the macro to a file you choose (the web interface downloads it). **Import…** reads such a file, or any macro file from [Macros](../cli.md#macros), version 1 or 2 (the web interface asks for the file). Both replace nothing on disk until you use **Save As…**.
+
+A macro saved and loaded again is the same macro, step for step.
+
 ## Keeping the macro
 
-The macro is kept with your other options. The **Macro** segment shows how many events it has, with **Clear**. It is played at the start of every run from then on, and is saved in each run's launch options. **Use this run's clicks**, **Record** and **Record clicks** replace the macro you had. Macros need Chromium: with WebKit chosen, the run says so.
+The macro is kept with your other options until you close the app (save it by name to keep it longer). The **Macro** segment shows how many events it has, with **Clear**. It is played at the start of every run from then on, and is saved in each run's launch options. **Use this run's clicks**, **Record** and **Record clicks** replace the macro you had. Macros need Chromium: with WebKit chosen, the run says so.
 
 ## On the command line
 

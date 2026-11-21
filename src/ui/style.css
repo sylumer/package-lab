@@ -193,3 +193,20 @@ button.info:hover, button.info:focus-visible { color: var(--accent); }
 .gwrap > button.info, .field-help > button.info { position: absolute; right: 0; top: 6px; margin: 0; }
 .field-help > label { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; }
 .field-help > button.info { top: 0; }
+
+/* The macro editor (E4.2) */
+.macro-table { font-size: 11px; margin: 6px 0; }
+.macro-table tbody tr { cursor: pointer; }
+.macro-table tbody tr.sel { background: var(--code); outline: 1px solid var(--accent); }
+.macro-table tbody tr:focus-visible, .macro-form :focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.nowrap { white-space: nowrap; }
+button.tiny { padding: 0 5px; font-size: 11px; line-height: 1.5; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.macro-form { border: 1px solid var(--line); border-radius: 6px; margin: 6px 0; padding: 4px 8px 8px; }
+.macro-form legend { font-size: 12px; font-weight: 600; padding: 0 4px; }
+.macro-form .field { margin-top: 4px; }
+.macro-form label { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: center; font-size: 12px; }
+.macro-form input[type=text], .macro-form input[type=number], .macro-form select { max-width: 100%; }
+.field-err { color: var(--err); font-size: 12px; }
+.field-err:not(:empty)::before { content: "Problem: "; font-weight: 600; }
+.macro-wait { padding-left: 0; padding-right: 0; }

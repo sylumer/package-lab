@@ -12,7 +12,7 @@ import { app, BrowserWindow, ipcMain, dialog, net, protocol, session, Menu, shel
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
-import { basename, extname, join, resolve } from 'node:path'
+import { basename, extname, join, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { unzip } from './zip.js'
@@ -32,7 +32,9 @@ import { comparePackages } from './pkgdiff.js'
 import { batchFiles, staticRows, batchSummary } from './batch.js'
 import { exportFixed, fixedName, applicable } from './fixes.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
-import { cycleFindings, cycleRows, macroFromTrace, resumeOptions, macroDelays, quietFor, withMacroSize, macroSize, cleanTarget } from './cycle.js'
+import { cycleFindings, cycleRows, macroFromTrace, resumeOptions, macroDelays, quietFor, withMacroSize, macroSize, cleanTarget, readMacro, macroFile } from './cycle.js'
+import { edit as editMacro, macroRows, macroName } from './macros.js'
+import { STEPS } from './milestones.js'
 import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
 import { PROFILES, launchProfile } from './profiles.js'
@@ -395,11 +397,15 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, leave = false, macro
 // has happened; if it hasn't by its timeout, a macro-wait note goes in the trace and the macro stops. It also stops when the run ends.
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 async function playMacro(a, events, from = 0, to = events.length) {
+  a.playing = true
+  try { await playEvents(a, events, from, to) } finally { a.playing = false }
+}
+async function playEvents(a, events, from, to) {
   const delays = macroDelays(events)
   let due = Date.now()
   for (let i = from; i < to; i++) {
     const e = events[i]
-    due += delays[i]
+    due += i === from && from > 0 ? 0 : delays[i]   // a part played from the middle starts at once, not after the gap before it
     await sleep(due - Date.now())
     if (active !== a) return
     if (e.type === 'click' && e.target && !e.approx) {
@@ -669,6 +675,17 @@ function runReport({ run, redact }) {
 // Can this port be listened on right now? The web interface of this process counts as free (it is the one using it).
 const portFree = port => web?.server.address()?.port === port ? Promise.resolve(true) : new Promise(r => { const s = createServer().once('error', e => r(e.code !== 'EADDRINUSE')).listen(port, '127.0.0.1', () => s.close(() => r(true))) })
 
+// Where a package's named macros live: <data folder>/macros/<package id>/. The id is the package's file name, as the runs list groups by it.
+function macrosDir() {
+  if (!pkg) throw new Error('Open a package first: macros are kept for each package.')
+  const d = join(app.getPath('userData'), 'macros', pkg.name.replace(/[^\w.-]+/g, '_').replace(/^\.+/, '_').slice(0, 60)); mkdirSync(d, { recursive: true }); return d
+}
+// The file of a named macro. The name is checked, and the path must stay inside the package's macros folder.
+function macroPath(name) {
+  const d = macrosDir(), p = resolve(d, macroName(name) + '.json')
+  if (!p.startsWith(d + sep)) throw new Error('A macro name can’t reach outside the macros folder.')
+  return p
+}
 const handlers = {
   settings: () => ({ ...readSettings(app.getPath('userData')), defaults: { port: DEFAULT_PORT }, path: join(app.getPath('userData'), 'settings.json') }),
   'settings-set': async ({ port }) => { const settings = writeSettings(app.getPath('userData'), { port: +port }); return { settings, free: await portFree(settings.port) } },
@@ -835,6 +852,38 @@ const handlers = {
   // Macros: Record clicks starts keeping live-input events; Save macro stops and returns { events, viewport } (the window size at the first event). 'macro-from-run' returns the clicks and keys the probe saw in a run's content frames, with the run window's size.
   'macro-record': ({ on = true }) => { macro.recording = !!on; if (macro.recording) { macro.events = []; macro.text = 0; macro.viewport = null } return macro.recording },
   'macro-save': () => { macro.recording = false; return { events: normaliseOptions({ macro: macro.events }).macro, viewport: (() => { try { return macroSize(macro.viewport) } catch { return null } })() } },
+  // The macro editor (E4.2). macro-edit: one edit of a list ({ events, viewport, op, … } as macros.js edit), with the table's rows and the step ids a wait can name.
+  'macro-edit': ({ events = [], viewport = null, ...o }) => { const e = editMacro(events, o), v = macroSize(viewport); return { events: e, rows: macroRows(e, v), steps: STEPS.map(x => x[0]) } },
+  // Plays events[from, to) into the run that is running. One part at a time (the launch's own macro counts).
+  'macro-play': ({ events = [], from = 0, to }) => {
+    if (!active) throw new Error('Launch first: a macro plays into a running course.')
+    if (active.playing) throw new Error('A macro is already playing. Wait for it to finish.')
+    if (!Number.isInteger(from) || (to != null && !Number.isInteger(to))) throw new Error('from and to need to be whole step numbers, counted from 0.')
+    const list = normaliseOptions({ macro: events }).macro, f = Math.max(0, from), t = Math.min(list.length, to ?? list.length)
+    if (f >= t) throw new Error('Choose a step to play.')
+    active.playing = true   // set now: the handler returns before playMacro has started
+    playMacro(active, list, f, t).catch(e => emit('macro', { state: 'error', message: `The macro stopped: ${e.message}` }))
+    return true
+  },
+  // Named macros, kept per package in <data folder>/macros/<package id>/<name>.json (version 2 files).
+  'macro-list': () => { const d = macrosDir(); return readdirSync(d).filter(f => f.endsWith('.json')).sort().flatMap(f => { try { const m = readMacro(JSON.parse(readFileSync(join(d, f), 'utf8'))); return [{ name: f.slice(0, -5), size: m.viewport, steps: m.events.length }] } catch { return [] } }) },
+  'macro-load': ({ name }) => { const p = macroPath(name); if (!existsSync(p)) throw new Error(`There is no macro called ${name} for this package.`); return readMacro(JSON.parse(readFileSync(p, 'utf8'))) },
+  'macro-store': ({ name, events = [], viewport = null }) => { const p = macroPath(name), m = readMacro(macroFile(events, viewport)); writeFileSync(p + '.tmp', JSON.stringify(macroFile(m.events, m.viewport))); renameSync(p + '.tmp', p); return { name, size: m.viewport, steps: m.events.length } },
+  'macro-delete': ({ name }) => { const p = macroPath(name); if (!existsSync(p)) throw new Error(`There is no macro called ${name} for this package.`); rmSync(p); return true },
+  // Import and Export: the web interface builds and reads the file in the browser (macro-file, macro-parse); the desktop app uses the dialogs (macro-export, macro-import).
+  'macro-file': ({ events = [], viewport = null }) => { const m = readMacro(macroFile(events, viewport)); return macroFile(m.events, m.viewport) },
+  'macro-parse': ({ text }) => { let j; try { j = JSON.parse(text) } catch { throw new Error('That file isn’t a macro: it isn’t JSON.') } return readMacro(j) },
+  'macro-export': async ({ events = [], viewport = null }) => {
+    const m = readMacro(macroFile(events, viewport)), r = await dialog.showSaveDialog(ui, { title: 'Export macro', defaultPath: join(app.getPath('documents'), `${(pkg?.name ?? 'macro').replace(/\.zip$/i, '')}-macro.json`), filters: [{ name: 'Package Lab macro', extensions: ['json'] }] })
+    if (r.canceled || !r.filePath) return { cancelled: true }
+    writeFileSync(r.filePath, JSON.stringify(macroFile(m.events, m.viewport), null, 2)); return { file: r.filePath }
+  },
+  'macro-import': async () => {
+    const r = await dialog.showOpenDialog(ui, { title: 'Import macro', filters: [{ name: 'Package Lab macro', extensions: ['json'] }], properties: ['openFile'] })
+    if (r.canceled || !r.filePaths[0]) return { cancelled: true }
+    if (statSync(r.filePaths[0]).size > 5 * 1024 ** 2) throw new Error('That file is too big to be a macro (over 5 MB).')
+    return { ...handlers['macro-parse']({ text: readFileSync(r.filePaths[0], 'utf8') }), file: basename(r.filePaths[0]) }
+  },
   'macro-from-run': ({ run }) => { const r = runs.get(+run); if (!r) throw new Error('Choose a run.'); return { events: macroFromTrace(r.trace), viewport: r.trace.window ?? null } },
 }
 for (const [name, fn] of Object.entries(handlers)) ipcMain.handle(name, (_e, arg) => fn(arg ?? {}))

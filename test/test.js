@@ -38,6 +38,7 @@ import { Recorder, shiftTimes, isBlocked, nameAt } from '../src/recorder.js'
 import { launchPlan, serveRequest, WEBKIT_ORIGINS, runAnalysis } from '../src/launch.js'
 import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams, storageMode } from '../src/profiles.js'
 import { originFindings, storageFindings } from '../src/rules.js'
+import { setDelay, move, remove, insertWait, setFields, edit as editMacro, macroRows, macroName } from '../src/macros.js'
 import { cycleFindings, cycleRows, readMacro, macroFile as macroFileOf, macroDelays, quietFor, withMacroSize, macroFromTrace, cleanTarget, resumeOptions } from '../src/cycle.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import './packs.js'
@@ -1141,6 +1142,39 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
     assert.deepEqual(withMacroSize(other, vp), { options: other, note: { type: 'macro-size', recorded: vp, used: { width: 390, height: 844 } } }, 'macro size: the run’s own size wins, with a note')
     assert.equal(withMacroSize(normaliseOptions({ macro: ev, viewport: '800x600' }), vp).note, null, 'macro size: the same size is no note')
     assert.equal(withMacroSize(normaliseOptions({ viewport: 'iphone' }), vp).note, null, 'macro size: no events, no note')
+    // The macro editor's pure parts (E4.2).
+    {
+      const clk = (t, x = 0.5) => ({ t, type: 'click', x, y: 0.5 }), three = [clk(1000, 0.1), clk(3000, 0.2), clk(6000, 0.3)], ts = l => l.map(e => e.t), xs = l => l.map(e => e.x)
+      assert.deepEqual(ts(setDelay(three, 1, 500)), [1000, 1500, 4500], 'editor: setDelay shifts every later step by the difference')
+      assert.deepEqual(ts(setDelay(three, 0, 0)), [0, 2000, 5000], 'editor: the first step’s delay is its own time')
+      assert.deepEqual(ts(setDelay(three, 2, 4000)), [1000, 3000, 7000], 'editor: a longer delay on the last step')
+      assert.throws(() => setDelay(three, 1, -5), /0 or more/, 'editor: a negative delay is refused'); assert.throws(() => setDelay(three, 1, 'x'), /number of milliseconds/); assert.throws(() => setDelay(three, 9, 5), /Choose a step/)
+      assert.deepEqual([xs(move(three, 1, 1)), ts(move(three, 1, 1))], [[0.1, 0.3, 0.2], [1000, 4000, 6000]], 'editor: move swaps the delays with the steps, not the times')
+      assert.deepEqual([xs(move(three, 1, -1)), ts(move(three, 1, -1))], [[0.2, 0.1, 0.3], [2000, 3000, 6000]], 'editor: move up')
+      assert.equal(move(three, 0, -1), three, 'editor: the first step can’t go up'); assert.equal(move(three, 2, 1), three, 'editor: the last step can’t go down')
+      for (let i = 0; i < 3; i++) for (const d of [-1, 1]) assert.ok(ts(move(three, i, d)).every((t, k, l) => !k || t >= l[k - 1]), 'editor: t stays non-decreasing')
+      assert.deepEqual([xs(remove(three, 0)), ts(remove(three, 0))], [[0.2, 0.3], [2000, 5000]], 'editor: remove the first step: the others keep their delays')
+      assert.deepEqual(ts(remove(three, 1)), [1000, 4000], 'editor: remove a middle step'); assert.deepEqual(remove([clk(5)], 0), [], 'editor: remove the only step')
+      const w = insertWait(three, 3, { text: 'Next' })
+      assert.deepEqual(w.map(e => e.type), ['click', 'click', 'click', 'wait'], 'editor: insertWait at the end'); assert.deepEqual([w[3].t, w[3].text], [6000, 'Next'])
+      assert.deepEqual(insertWait(three, 0, { ms: 500 }).map(e => [e.type, e.t]), [['wait', 0], ['click', 1000], ['click', 3000], ['click', 6000]], 'editor: insertWait at the start leaves the rest in place')
+      assert.deepEqual(insertWait(three, 1, { quiet: 300 })[1], { t: 1000, type: 'wait', quiet: 300 }, 'editor: a wait in the middle has its neighbour’s time')
+      assert.throws(() => insertWait(three, 1, { text: '' }), /text/, 'editor: an empty wait is refused'); assert.throws(() => insertWait(three, 1, { milestone: 'nope' }), /milestone/); assert.throws(() => insertWait(three, 9, { ms: 5 }), /where/)
+      assert.deepEqual(setFields(three, 0, { x: 0.9 })[0], clk(1000, 0.9), 'editor: setFields changes a field'); assert.throws(() => setFields(three, 0, { x: 2 }), /x to be a number from 0 to 1/, 'editor: a bad value says what to fix')
+      assert.equal(setFields([{ t: 1, type: 'wait', text: 'a', timeout: 5000 }], 0, { timeout: null })[0].timeout, undefined, 'editor: null takes a field out')
+      assert.deepEqual(editMacro(three, { op: 'remove', i: 0 }), remove(three, 0), 'editor: edit routes to the pure functions'); assert.deepEqual(editMacro(three), three, 'editor: no op checks the list')
+      const edited = insertWait(setDelay(three, 1, 400), 1, { text: 'Next', timeout: 5000 }), rt = normaliseOptions({ macro: JSON.parse(JSON.stringify(macroFileOf(edited, vp))).events }).macro
+      assert.deepEqual(rt, edited, 'editor: an edited list survives a file and normaliseOptions'); assert.deepEqual(readMacro(macroFileOf(edited, vp)), { events: edited, viewport: vp }, 'editor: and readMacro')
+      const rows = macroRows([clk(800), { t: 800, type: 'wait', text: 'Next' }, { t: 900, type: 'wait', quiet: 500, timeout: 5000 }, { t: 900, type: 'wait', ms: 2000 }, { t: 1000, type: 'wait', milestone: 'wrote' },
+        { t: 1100, type: 'key', key: 'Enter' }, { t: 1200, type: 'text', text: 'hello' }, { t: 1300, type: 'wheel', x: 0.5, y: 0.5, dy: -120 }, { t: 1400, type: 'click', x: 0.375, y: 0.25, target: { sel: 'button#next', text: 'Next' } }], { width: 1100, height: 800 })
+      assert.deepEqual(rows.map(r => r.when), ['+0.8 s', 'wait for “Next” (30 s)', 'wait for the network to be quiet for 0.5 s (5 s)', 'wait 2 s', 'wait for step wrote (30 s)', '+0.1 s', '+0.1 s', '+0.1 s', '+0.1 s'], 'editor rows: When')
+      assert.deepEqual(rows.map(r => r.action), ['Click', 'Wait', 'Wait', 'Wait', 'Wait', 'Key Enter', 'Type “hello”', 'Scroll up', 'Click'], 'editor rows: Action')
+      assert.deepEqual([rows[0].where, rows[7].where, rows[8].where], ['550, 400', '550, 400', '413, 200 button#next “Next”'], 'editor rows: Where in pixels, with the element')
+      assert.equal(macroRows([clk(0)])[0].where, '50%, 50%', 'editor rows: no size, so percentages')
+      assert.equal(macroName('next'), 'next'); assert.equal(macroName('Step 2.v-1_a'), 'Step 2.v-1_a', 'editor: a good name')
+      for (const bad of ['', ' ', '../x', '.hidden', 'a/b', 'a\\b', 'x'.repeat(61), 'tab\t', null, 'é']) assert.throws(() => macroName(bad), /name|dot|characters|letters/, `editor: the name ${JSON.stringify(bad)} is refused`)
+      assert.equal(macroName('x'.repeat(60)).length, 60, 'editor: 60 characters is fine')
+    }
     const launch = { kind: 'package', itemType: 'sco', expose: '1.2' }
     const sized = runFindings(trace({ probe: [{ type: 'macro-size', recorded: vp, used: { width: 390, height: 844 }, t: 5 }] }), launch).find(f => /recorded at/.test(f.title))
     assert.deepEqual([sized.sev, sized.title], ['info', 'The macro was recorded at 800×600 and played at 390×844: clicks may miss'], 'macro size: the finding')
@@ -2415,6 +2449,32 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     assert.equal(list.length, 1, 'web: run saved')
     assert.equal((await invoke('load-run', { file: list[0].file }))[0].kind, 'package', 'web: saved run loads')
     await assert.rejects(invoke('load-run', { file: '../../etc/passwd' }), /No such saved run/, 'web: load-run stays in the runs folder')
+    // Named macros over the handlers (E4.2): store, list, load, delete; names that could leave the folder or aren't names are refused; nothing plays without a run.
+    {
+      const evs2 = [{ t: 400, type: 'wait', text: 'Next' }, { t: 400, type: 'click', x: 0.631, y: 0.328, target: { sel: 'button#next', text: 'Next' } }], vp2 = { width: 1100, height: 800 }
+      assert.deepEqual(await invoke('macro-list'), [], 'web: no saved macros yet')
+      assert.deepEqual(await invoke('macro-store', { name: 'next', events: evs2, viewport: vp2 }), { name: 'next', size: vp2, steps: 2 }, 'web: macro-store')
+      assert.equal(readFileSync(join(data, 'macros', 'good.zip', 'next.json'), 'utf8'), JSON.stringify(macroFileOf(evs2, vp2)), 'web: the saved file is the version 2 file of the edited list, byte for byte')
+      await invoke('macro-store', { name: 'Second one.v2', events: [evs2[1]] })
+      assert.deepEqual((await invoke('macro-list')).map(m => [m.name, m.size, m.steps]), [['Second one.v2', null, 1], ['next', vp2, 2]], 'web: macro-list gives names, sizes and step counts')
+      assert.deepEqual(await invoke('macro-load', { name: 'next' }), { events: evs2, viewport: vp2 }, 'web: macro-load')
+      assert.deepEqual(await invoke('macro-edit', { events: evs2, viewport: vp2, op: 'move', i: 0, dir: 1 }).then(r => r.rows.map(x => x.action)), ['Click', 'Wait'], 'web: macro-edit gives the rows')
+      await assert.rejects(invoke('macro-edit', { events: evs2, op: 'set', i: 1, patch: { x: 9 } }), /x to be a number from 0 to 1/, 'web: macro-edit refuses a bad value')
+      await assert.rejects(invoke('macro-store', { name: 'bad', events: [{ t: 1, type: 'click' }] }), /x to be a number/, 'web: a bad macro isn’t stored')
+      for (const bad of ['../x', '.hidden', 'a/b', 'x'.repeat(61), '']) {
+        await assert.rejects(invoke('macro-store', { name: bad, events: evs2 }), /name|dot|characters|letters/, `web: macro-store refuses ${JSON.stringify(bad)}`)
+        await assert.rejects(invoke('macro-load', { name: bad }), /./, `web: macro-load refuses ${JSON.stringify(bad)}`); await assert.rejects(invoke('macro-delete', { name: bad }), /./, `web: macro-delete refuses ${JSON.stringify(bad)}`)
+      }
+      assert.equal(existsSync(join(data, 'macros', 'x.json')) || existsSync(join(data, 'macros', 'good.zip', '.hidden.json')), false, 'web: nothing was written outside the name')
+      await assert.rejects(invoke('macro-load', { name: 'nothing' }), /no macro called nothing/, 'web: loading a name that isn’t there')
+      assert.equal(await invoke('macro-delete', { name: 'Second one.v2' }), true); assert.deepEqual((await invoke('macro-list')).map(m => m.name), ['next'], 'web: macro-delete')
+      assert.deepEqual(await invoke('macro-file', { events: evs2, viewport: vp2 }), macroFileOf(evs2, vp2), 'web: macro-file is what Export saves')
+      assert.deepEqual(await invoke('macro-parse', { text: JSON.stringify(macroFileOf(evs2, vp2)) }), { events: evs2, viewport: vp2 }, 'web: macro-parse is what Import reads')
+      await assert.rejects(invoke('macro-parse', { text: 'not json' }), /isn’t JSON/, 'web: Import refuses a file that isn’t JSON'); await assert.rejects(invoke('macro-parse', { text: '{"a":1}' }), /list of events/, 'web: or one that isn’t a macro')
+      await assert.rejects(invoke('macro-export', {}), /./, 'web: Export… (dialog) is desktop only'); await assert.rejects(invoke('macro-import', {}), /./, 'web: Import… (dialog) is desktop only')
+      await assert.rejects(invoke('macro-play', { events: evs2 }), /Launch first/, 'web: macro-play with no run is refused')
+      await invoke('macro-delete', { name: 'next' })
+    }
     // An experiment through the handlers: two runs (default and one variant), announced as 'experiment' events.
     const evs = await fetch(base + '/api/events', { headers: H }), evReader = evs.body.getReader()
     let evText = ''
@@ -2544,6 +2604,24 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
       assert.equal((cText.match(/"state":"run"/g) ?? []).length, 2, 'web: an event for each run')
       await assert.rejects(invoke('cycle-start', { item: 0, browser: 'webkit' }), /Chromium only/, 'web: the cycle refuses WebKit')
       await assert.rejects(invoke('launch', { item: 0, browser: 'webkit', macro: rec }), /Chromium only/, 'web: a macro refuses WebKit')
+      // macro-play (E4.2): from step 2 of two steps on a running course plays only Save and exit; one part plays at a time.
+      {
+        const two = [{ t: 400, type: 'click', x: 0.631, y: 0.328 }, { t: 900, type: 'click', x: 0.73, y: 0.328 }], nRuns = (await invoke('state')).runs.length
+        await invoke('launch', { item: 0, auto: 8 })
+        await new Promise(r => setTimeout(r, 1500))
+        await assert.rejects(invoke('macro-play', { events: two, from: 5 }), /Choose a step/, 'web: macro-play needs a step that exists')
+        await assert.rejects(invoke('macro-play', { events: two, from: 1.5 }), /whole step numbers/, 'web: macro-play refuses a fraction'); await assert.rejects(invoke('macro-play', { events: two, from: 0, to: '2' }), /whole step numbers/, 'web: and a string')
+        assert.equal(await invoke('macro-play', { events: [{ t: 0, type: 'wait', text: 'never on this page', timeout: 3000 }, two[0]], from: 0, to: 1 }), true, 'web: macro-play starts')
+        await assert.rejects(invoke('macro-play', { events: two, from: 1 }), /already playing/, 'web: one part at a time')
+        await new Promise(r => setTimeout(r, 3800))   // the wait times out at 3 s
+        assert.equal(await invoke('macro-play', { events: two, from: 1 }), true, 'web: macro-play from step 2')
+        await new Promise(r => setTimeout(r, 1500))
+        await invoke('stop')
+        const r2 = (await invoke('state')).runs[nRuns], calls = r2.trace.probe.filter(p => p.type === 'api').map(a => a.call + ' ' + a.el)
+        assert.equal(calls.filter(c => c === 'LMSSetValue cmi.core.lesson_location').length, 1, 'web: only the start set the location, so Next wasn’t played: ' + calls)
+        assert.ok(calls.includes('LMSSetValue cmi.core.exit') && calls.includes('LMSFinish '), 'web: Save and exit was played: ' + calls)
+        assert.ok(r2.trace.probe.some(p => p.type === 'macro-wait'), 'web: the first part’s wait timed out and was noted')
+      }
     }
     // A WebKit run over the handlers (slow, with Playwright): the options line, the run through the CLI's Node path, and Stop.
     if (slow && !forced && wkReady) {
