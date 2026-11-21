@@ -1339,7 +1339,9 @@ by eye in review.
   default) is unchanged.
 - **Signing on Windows.** It isn't required: an unsigned build runs after SmartScreen's "More info, Run anyway". The
   route to try first is **SignPath Foundation**, which signs open-source projects free. It needs:
-  - a public repository with an OSI-approved licence;
+  - a public repository with an OSI-approved licence. The owner expects to license Package Lab under AGPL-3.0, which
+    qualifies. The repository has no `LICENSE` file or `license` field in `package.json` yet. Adding them is the
+    owner's step: no work package adds them;
   - builds made by CI from that repository (the E6.3 workflow is the starting point);
   - an application to SignPath.
 
