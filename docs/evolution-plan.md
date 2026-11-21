@@ -130,7 +130,7 @@ needs no remote: `git worktree add` works on the local repository.
 | Lane | Checkout | Branch | Packages, in order |
 |---|---|---|---|
 | A, app | `~/github/package-lab` | `evolve` | E2.5, E4.1, E4.2 |
-| B, docs | `~/github/package-lab-docs` (a worktree) | `evolve-docs` | E3.1, E3.2, E3.3 |
+| B, docs | `~/github/package-lab-docs` (a worktree) | `evolve-docs` | E3.1, E3.2, E3.3, E3.4 |
 | C, Concierge | `~/github/concierge` | `package-lab-evolve` | E5.1's Concierge part (version 2 macro files, minor version bump) |
 
 Phase 5 then runs in order on `evolve` once all three lanes are merged: the rest of E5.1, then E5.2, then E5.3.
@@ -190,14 +190,14 @@ After that merge, lane A writes to `docs/guide/`.
 **End of phases.**
 
 - Phase 2 ends when E2.5 is committed.
-- Phase 3 ends when E3.3 is merged into `evolve`.
+- Phase 3 ends when E3.4 is merged into `evolve`.
 - Phase 4 ends when E4.2 is committed.
 
 Each phase end runs the slow suite under the lock, then the fast-forward to `main` as before. When lane B is ahead,
 phase 4 can end before phase 3. In that case, fast-forward `main` to the `evolve` commit at that point.
 
-**Expected saving.** Lane B takes about 3 hours (E3.1 large, E3.2 medium, E3.3 small, about an hour each). Lane A
-takes about the same. Run side by side, they save about 3 hours, minus about 20 minutes per merge. Lane C saves
+**Expected saving.** Lane B takes about 4 hours (E3.1 large, E3.2 medium, E3.3 and E3.4 small, about an hour each). Lane A
+takes about 3. Run side by side, they save about 3 hours, minus about 20 minutes per merge. Lane C saves
 about 30 minutes in Phase 5. This plan's usage limit is a 5-hour window. Two lanes at once use it about twice as fast,
 so watch `get_usage` more often: stop starting new packages above 85%.
 
@@ -273,7 +273,7 @@ review round being likely to fail:**
 | Model | Use for | In this plan |
 |---|---|---|
 | **haiku** | The spec decides everything; mechanical edits; moving text; scripts with a clear recipe; documentation | E1.3, E2.4, E2.5, E3.1, E3.3, E5.2. Reviews of doc-only work packages, apart from checking them against the code |
-| **sonnet** | Judgement in Electron, CDP, the probe or the UI's structure; anything touching replay, privacy or the window; every code review | E0.1, E1.1, E1.2, E2.1, E2.2, E2.3, E3.2, E4.1, E4.2, E5.1, E5.3, the orchestrator, and reviews of all code work packages and of E3.1's accuracy |
+| **sonnet** | Judgement in Electron, CDP, the probe or the UI's structure; anything touching replay, privacy or the window; every code review | E0.1, E1.1, E1.2, E2.1, E2.2, E2.3, E3.2, E3.4, E4.1, E4.2, E5.1, E5.3, the orchestrator, and reviews of all code work packages and of E3.1's accuracy |
 | **opus** | Only as the escalation after a Sonnet work package fails review twice | — |
 
 **Why so little Opus.** The hard parts here (element anchors across frames, the replay player) are well specified
@@ -301,6 +301,7 @@ types and docs that ship there) before searching the web.
 | E3.1 | Split the user guide; docs link check | haiku | sonnet (accuracy) | E2.3 | L |
 | E3.2 | Docs search, contents and context help | sonnet | sonnet | E3.1 | M |
 | E3.3 | Screenshots by script; images in the docs panel | haiku | sonnet | E3.1, E0.1 | S |
+| E3.4 | Light, dark or follow the system | sonnet | sonnet | E3.3 | S |
 | E4.1 | The live view in the desktop app, with coordinates | sonnet | sonnet | E1.2, E2.2 | M |
 | E4.2 | The macro editor | sonnet | sonnet | E4.1 | L |
 | E5.1 | CLI, web, Alfred and Concierge in step | sonnet | sonnet | Phases 1–4 | S |
@@ -863,6 +864,75 @@ opens.
 **Acceptance.**
 - The images are under 2 MB in total.
 - The link check covers image paths.
+
+### E3.4 Light, dark or follow the system (sonnet)
+
+Added 2026-11-21. **Goal.** People can choose the app's appearance: follow the system (the default), always light, or
+always dark. Today the window only follows macOS. `style.css` has the dark tokens under
+`@media (prefers-color-scheme: dark)`, and Settings has no choice.
+
+**Why lane B, after E3.3.** E3.3 adds `PACKAGE_LAB_THEME` and sets `nativeTheme.themeSource` for screenshots. This
+work package builds on that, and E3.3's light and dark screenshots show both themes.
+
+**Files.** `src/settings.js`, `src/main.js` (startup, the `settings` handlers, run windows), `src/preload.cjs` if
+needed, `src/ui/style.css`, `src/ui/app.js` and `src/ui/index.html` (the Settings dialog), `test/test.js`,
+`test/ui.js`, `docs/guide/run-settings.md` or the page that documents Settings, and `developer-guide.md`.
+
+**Spec.**
+
+- **The setting.** `settings.json` gains `theme`: `'system'`, `'light'` or `'dark'`, defaulting to `'system'`.
+  - `readSettings` returns the default for a missing or invalid value, as it does for `port`.
+  - `writeSettings` refuses an invalid value, and its message names the three choices.
+- **Settings dialog.** Add an **Appearance** row: a segmented control or radio group with System, Light and Dark. It
+  has a label, can be used from the keyboard, and applies at once, without a restart.
+- **Desktop.**
+  - At startup, and whenever the setting is saved, main sets `nativeTheme.themeSource` to the setting. That way the
+    traffic-light area, vibrancy, menus, dialogs, scrollbars and form controls all match.
+  - `PACKAGE_LAB_THEME` (E3.3) still wins when it is set, for the screenshot script only.
+- **The CSS.** Restructure the tokens so that an explicit choice wins in any browser:
+  - The dark values go under `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { … } }` and
+    again under `:root[data-theme="dark"]`.
+  - `app.js` sets `document.documentElement.dataset.theme` to `light` or `dark`, or removes it for System.
+  - Add `color-scheme: light dark` on `:root`, narrowed by `[data-theme]`, so built-in controls follow.
+  - Check every token added since E2.1 (`--sidebar`, the verdict and severity colours, the inspector, the sidebar
+    groups) has a dark value.
+- **The course is never themed by this setting.** Package Lab is a diagnostic tool: a course in a run window must see
+  the real system appearance, not the app's choice. Setting `themeSource` would change `prefers-color-scheme` in run
+  windows too. So:
+  - When the setting isn't `system`, every run window's CDP session gets
+    `Emulation.setEmulatedMedia({ features: [{ name: 'prefers-color-scheme', value: <OS> }] })`.
+  - The OS value on macOS is `systemPreferences.getUserDefault('AppleInterfaceStyle', 'string') === 'Dark'`. It
+    reads the system setting whatever `themeSource` is.
+  - Update it on `systemPreferences.subscribeNotification('AppleInterfaceThemeChangedNotification')`.
+  - Off macOS, use `nativeTheme.shouldUseDarkColors` before the override is applied, and log it as a
+    `ponytail:` ceiling.
+  - Leave run windows alone when the setting is `system`.
+  - A run's own `viewport` or device emulation must not reset this. Apply it after them, or merge it into the same
+    `setEmulatedMedia` call when the code already makes one.
+- **Web interface.** The appearance is per browser, not per server. The setting is kept in `localStorage`, wrapped in
+  try/catch like `store`. It never writes `settings.json` and never sets `nativeTheme`, and it defaults to System.
+  The Settings dialog in the web interface shows the same control.
+
+**Tests.**
+- Unit:
+  - `readSettings` with no theme, `'dark'`, and an invalid value (which gives `'system'`).
+  - `writeSettings` refuses `'blue'` with a message naming the choices.
+- `test/ui.js`:
+  1. Choose Dark: `<html data-theme="dark">`, and the computed `--bg` is the dark value.
+     `electronApp.evaluate(({ nativeTheme }) => nativeTheme.themeSource)` gives `'dark'`.
+  2. Restart the app: it is still dark.
+  3. Choose System: the attribute is gone, and `themeSource` is `'system'`.
+  4. Choose Light while `PACKAGE_LAB_THEME` is unset: the light `--bg`.
+  5. The web interface: choosing Dark sets the attribute and survives a reload, and `settings.json` is unchanged.
+- Slow: with the setting the opposite of the OS appearance, a run of `good` evaluates
+  `matchMedia('(prefers-color-scheme: dark)').matches` in the run window and gets the OS value, not the app's.
+
+**Acceptance.**
+- All three choices apply without a restart, and the choice survives a restart.
+- Run windows always report the real system appearance.
+- The web interface's choice stays in that browser.
+- No token is missing a dark value. Check with the light and dark screenshots from E3.3: rerun
+  `npm run screenshots` with the app set to each choice.
 
 ---
 
