@@ -109,12 +109,103 @@ that justified Opus in plan.md, so the orchestrator is the cheaper model too. It
 7. **Never push**, and never ask the owner anything else. Decide with the
    [defaults](#decisions-without-the-owner) and log the decision.
 
-**Where agents work.** Work sequentially in this one checkout, on `evolve`, without worktree isolation (there is no
-remote for worktrees to branch from). Parallel work is allowed only in these cases:
+**Where agents work.** Packages run in two lanes from E2.5 on, as set out in [Parallel lanes](#parallel-lanes).
+Before that, everything ran in order in this one checkout, on `evolve`. Read-only research subagents can run at any
+time.
 
-- read-only research subagents;
-- Phase 3's documentation work packages, which may run alongside a Phase 4 work package because they touch only
-  `docs/`, `src/docs.js` and `src/ui/markdown.js`, and Phase 4 doesn't touch those.
+### Parallel lanes
+
+Added 2026-11-21, after E2.4. The first version of this plan said Phase 3 touched only `docs/`, `src/docs.js` and
+`src/ui/markdown.js`. That was wrong:
+
+- E3.1 also changes `src/ui/app.js` (the `openDoc` targets) and `test/test.js`.
+- E3.2 also changes `app.js`, `index.html`, `style.css` and `test/ui.js`.
+- E3.3 also changes `src/main.js`.
+
+So the two lanes each get their own checkout and branch, and the orchestrator merges between them. A git worktree
+needs no remote: `git worktree add` works on the local repository.
+
+**Lanes.** After E2.4, the remaining packages split into two chains with no dependency between them:
+
+| Lane | Checkout | Branch | Packages, in order |
+|---|---|---|---|
+| A, app | `~/github/package-lab` | `evolve` | E2.5, E4.1, E4.2 |
+| B, docs | `~/github/package-lab-docs` (a worktree) | `evolve-docs` | E3.1, E3.2, E3.3 |
+| C, Concierge | `~/github/concierge` | `package-lab-evolve` | E5.1's Concierge part (version 2 macro files, minor version bump) |
+
+Phase 5 then runs in order on `evolve` once all three lanes are merged: the rest of E5.1, then E5.2, then E5.3.
+
+- **C can start straight away.** It needs only E1.1's file format, and it touches another repository. Its builder is
+  Haiku: the spec decides everything. Stage only the files it touches, never `git add -A`. The rest of E5.1 (the CLI
+  `macro show` and completion, which need E4.2's table, and the web checks) stays in Phase 5.
+- **Why not more lanes.** E2.5 and E4.1 both change `main.js`, `preload.cjs`, `app.js` and `test/ui.js`, and E4.2
+  needs E4.1, so lane A stays in order. In lane B, E3.2 and E3.3 both need E3.1, and both change `markdown.js`, so
+  lane B stays in order too. Each of E5.1, E5.2 and E5.3 needs everything before it.
+
+**Setting up.** Do this once, at a clean point, with E2.4 committed:
+
+```bash
+git worktree add -b evolve-docs ../package-lab-docs evolve
+cd ../package-lab-docs && npm ci --prefer-offline
+```
+
+If `npm ci` can't run offline, symlink `node_modules` from the main checkout instead, and log the decision.
+
+**Running the lanes.**
+
+- **One builder per lane at a time.** The orchestrator gives each lane its next package as soon as the one before it
+  is committed. It doesn't wait for the other lane. Reviews follow the same per-lane rule.
+- **Each builder works only in its lane's checkout.** The builder prompt names the checkout path and branch in place
+  of `~/github/package-lab` and `evolve`.
+- **One slow suite at a time.** `npm test -- --slow` has timing checks (trace overhead, `latebutton`'s 3 s) that can
+  fail under load.
+  - Before a slow run, take the lock with `mkdir /tmp/package-lab-slow.lock`. If that fails, wait for the other run.
+  - Remove the lock when the run finishes.
+  - The default `npm test`, `--unit` and `test:ui` can run in both lanes at once. Their data and ports are per run:
+    `PACKAGE_LAB_DATA` is a temporary folder, and test servers listen on port 0.
+- **The status file is edited only in lane A.** The orchestrator records lane B's state and commits in the
+  `evolve` copy of `evolution-status.md` and `decisions.md`. Lane B's builders write their decisions in their report,
+  not in the file, and the orchestrator adds them.
+
+**Merging lane B.** After each lane B package is committed on `evolve-docs`:
+
+1. Wait for lane A to reach a clean point: nothing uncommitted on `evolve`.
+2. Run `git merge --no-ff evolve-docs` on `evolve`. The no-ff merge commit keeps the lane visible.
+3. Resolve conflicts:
+   - `style.css`, `test/ui.js` and `test/test.js` are usually both sides' additions, so keep both.
+   - `app.js` needs reading.
+4. Run `npm test` (and `--slow` under the lock if either side touched `main.js`), then commit the merge.
+5. In the worktree, run `git merge evolve` (a fast-forward from lane B's side), so lane B's next package starts from
+   lane A's work.
+
+**Docs written in lane A before E3.1 is merged.** Lane A packages document user-facing changes in `user-guide.md`, as
+before. When E3.1 is merged, the orchestrator does two things:
+
+1. It moves into the matching `docs/guide/` page every `user-guide.md` change made on `evolve` since the fork, which
+   it finds with `git diff <fork point> evolve -- docs/user-guide.md`.
+2. It puts back the new `user-guide.md` from E3.1, which is the index.
+
+After that merge, lane A writes to `docs/guide/`.
+
+**End of phases.**
+
+- Phase 2 ends when E2.5 is committed.
+- Phase 3 ends when E3.3 is merged into `evolve`.
+- Phase 4 ends when E4.2 is committed.
+
+Each phase end runs the slow suite under the lock, then the fast-forward to `main` as before. When lane B is ahead,
+phase 4 can end before phase 3. In that case, fast-forward `main` to the `evolve` commit at that point.
+
+**Expected saving.** Lane B takes about 3 hours (E3.1 large, E3.2 medium, E3.3 small, about an hour each). Lane A
+takes about the same. Run side by side, they save about 3 hours, minus about 20 minutes per merge. Lane C saves
+about 30 minutes in Phase 5. This plan's usage limit is a 5-hour window. Two lanes at once use it about twice as fast,
+so watch `get_usage` more often: stop starting new packages above 85%.
+
+**Removing the worktree.** At the end of Phase 3, once `evolve-docs` is fully merged:
+
+```bash
+git worktree remove ../package-lab-docs && git branch -d evolve-docs
+```
 
 ### Decisions without the owner
 
@@ -218,8 +309,8 @@ types and docs that ship there) before searching the web.
 
 Sizes are as in plan.md: S up to about 300 lines with tests and docs, M up to about 800, L up to about 1,500.
 
-Run them in table order. The only reordering allowed is skipping past something skipped, plus the parallel
-documentation work described under [Where agents work](#how-to-run-this-plan).
+Up to E2.4, run them in table order. From E2.5 on, run them in the [parallel lanes](#parallel-lanes). In both cases
+the only other reordering allowed is skipping past something skipped.
 
 ---
 
