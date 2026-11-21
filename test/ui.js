@@ -254,8 +254,52 @@ async function checks() {
   console.log('ui: working copy dialog ok')
   assert.deepEqual(await longTitles(win), [], 'no title attribute is longer than 100 characters')
   assert.deepEqual(errors, [], 'no uncaught errors in the window')
+  await themeChecks()
   await webChecks()
   console.log('ui: web toolbar ok')
+}
+
+// Appearance (E3.4): the choice in Settings sets data-theme and nativeTheme.themeSource at once, is still there after a restart, and never reaches a
+// run window: the course sees the Mac's own appearance (the opposite of the choice here).
+const BG = { light: '#fff', dark: '#1c1c1e' }
+const themeState = w => w.evaluate(() => ({ attr: document.documentElement.dataset.theme ?? null, bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() }))
+async function chooseTheme(name) {
+  await menu('Settings…'); await win.locator('#settings[open]').waitFor()
+  await win.getByRole('radio', { name }).check()
+  await win.keyboard.press('Escape'); await win.locator('#settings:not([open])').waitFor({ state: 'attached' })
+}
+const themeSource = () => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)
+async function themeChecks() {
+  assert.equal(await themeSource(), 'system', 'theme: the default is System')
+  await chooseTheme('Dark')
+  assert.deepEqual(await themeState(win), { attr: 'dark', bg: BG.dark }, 'theme: Dark sets the attribute and the dark --bg')
+  assert.equal(await themeSource(), 'dark', 'theme: Dark sets nativeTheme.themeSource')
+  await start()   // same data folder: the choice is kept
+  assert.deepEqual(await themeState(win), { attr: 'dark', bg: BG.dark }, 'theme: still dark after a restart')
+  assert.equal(await themeSource(), 'dark', 'theme: and nativeTheme follows it at startup')
+  await chooseTheme('System')
+  assert.equal((await themeState(win)).attr, null, 'theme: System removes the attribute')
+  assert.equal(await themeSource(), 'system', 'theme: System sets themeSource back')
+  await chooseTheme('Light')
+  assert.deepEqual(await themeState(win), { attr: 'light', bg: BG.light }, 'theme: Light gives the light --bg')
+  // Keyboard: the group is native radios, so the arrow keys move between them.
+  await menu('Settings…'); await win.locator('#settings[open]').waitFor()
+  await win.getByRole('radio', { name: 'Light' }).focus(); await win.keyboard.press('ArrowRight')
+  assert.equal((await themeState(win)).attr, 'dark', 'theme: the arrow keys change the choice')
+  await win.keyboard.press('Escape')
+  console.log('ui: theme ok')
+  // The course sees the real system appearance: with the choice opposite to the Mac's, a run of `good` still reports the Mac's.
+  const osDark = await app.evaluate(({ systemPreferences }) => systemPreferences.getUserDefault('AppleInterfaceStyle', 'string') === 'Dark')
+  await chooseTheme(osDark ? 'Light' : 'Dark')
+  await open(goodZip())
+  assert.equal(await themeSource(), osDark ? 'light' : 'dark', 'theme: the app is set opposite to the Mac')
+  await launch()
+  const run = await runWindow()
+  await run.waitForLoadState('domcontentloaded')
+  assert.equal(await run.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches), osDark, 'theme: the run window reports the Mac’s appearance, not the app’s')
+  await stop()
+  await chooseTheme('System')
+  console.log('ui: theme in run windows ok')
 }
 
 // The grouped view list (E2.3), after a run of `good`: every group, the table filter, ⌘1, arrow keys, and every visible view drawn without an error.
@@ -366,6 +410,17 @@ async function webChecks() {
     await p.getByRole('button', { name: 'Inspector', exact: true }).click()
     assert.ok(await p.locator('#summary').isVisible(), 'web: the chip shows for non-default settings')
     assert.deepEqual(problems, [], 'web: no errors after the settings were changed: ' + problems.join(' | '))
+    // E3.4: the appearance is this browser's: Dark sets the attribute and survives a reload, and the server's settings.json is untouched.
+    const settingsFile = join(dir(), 'web-data', 'settings.json'), prior = existsSync(settingsFile) ? readFileSync(settingsFile, 'utf8') : null
+    await p.getByRole('button', { name: 'Settings', exact: true }).click()
+    await p.locator('#settings[open]').waitFor()
+    assert.ok(await p.locator('#set-port').isHidden(), 'web: the port is not offered')
+    await p.getByRole('radio', { name: 'Dark' }).check()
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), 'dark', 'web: Dark sets the attribute')
+    await p.reload(); await p.locator('#toolbar').waitFor()
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), 'dark', 'web: the choice survives a reload')
+    assert.equal(await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()), BG.dark, 'web: the dark --bg')
+    assert.equal(existsSync(settingsFile) ? readFileSync(settingsFile, 'utf8') : null, prior, 'web: settings.json is unchanged')
   })
 }
 

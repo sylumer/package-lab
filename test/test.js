@@ -17,7 +17,7 @@ import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
 import { bootGraph, resolveRef } from '../src/bootpath.js'
 import { renderReport, verdict, runVerdict, timelineHtml, experimentHtml } from '../src/report.js'
 import { COMMANDS, zshCompletion } from '../src/completion.js'
-import { DEFAULT_PORT, validPort, readSettings, writeSettings } from '../src/settings.js'
+import { DEFAULT_PORT, validPort, validTheme, readSettings, writeSettings } from '../src/settings.js'
 import { OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB } from '../scripts/alfred-scripts.js'
 import { redactRun, kept } from '../src/redact.js'
 import { timelineModel, timelineView } from '../src/timeline.js'
@@ -1570,11 +1570,19 @@ console.log('redact: unit ok')
 console.log('completion and experiment report: unit ok')
 {
   const d = mkdtempSync(join(tmpdir(), 'pl-settings-'))
-  assert.deepEqual(readSettings(join(d, 'none')), { port: DEFAULT_PORT }, 'settings: defaults with no file')
+  assert.deepEqual(readSettings(join(d, 'none')), { port: DEFAULT_PORT, theme: 'system' }, 'settings: defaults with no file')
   writeFileSync(join(d, 'settings.json'), '{nope'); assert.equal(readSettings(d).port, 4880, 'settings: corrupt JSON falls back')
   writeFileSync(join(d, 'settings.json'), '{"port":80}'); assert.equal(readSettings(d).port, 4880, 'settings: an invalid saved port falls back')
   for (const bad of [80, 70000, 'abc', 4880.5]) { assert.ok(!validPort(bad)); assert.throws(() => writeSettings(d, { port: bad }), /1024 to 65535/, 'settings: rejects ' + bad) }
-  assert.deepEqual(writeSettings(join(d, 'sub'), { port: 5123 }), { port: 5123 }); assert.deepEqual(readSettings(join(d, 'sub')), { port: 5123 }, 'settings: round trip')
+  assert.deepEqual(writeSettings(join(d, 'sub'), { port: 5123 }), { port: 5123, theme: 'system' }); assert.deepEqual(readSettings(join(d, 'sub')), { port: 5123, theme: 'system' }, 'settings: round trip')
+  // The appearance (E3.4): system, light or dark; anything else reads as system and is refused on write.
+  writeFileSync(join(d, 'settings.json'), '{"theme":"dark"}'); assert.equal(readSettings(d).theme, 'dark', 'settings: a saved theme is read')
+  writeFileSync(join(d, 'settings.json'), '{"theme":"blue"}'); assert.equal(readSettings(d).theme, 'system', 'settings: an invalid saved theme falls back')
+  assert.ok(validTheme('light') && !validTheme('blue'), 'settings: validTheme')
+  const media = dark => new Recorder({ debugger: {} }, { dark }).media().features   // E3.4: what a run window is told about the colour scheme
+  assert.deepEqual(media(true), [{ name: 'prefers-color-scheme', value: 'dark' }], 'recorder: dark is pinned'); assert.equal(media(false)[0].value, 'light', 'recorder: light is pinned'); assert.deepEqual(media(undefined), [], 'recorder: system leaves it alone')
+  assert.throws(() => writeSettings(d, { theme: 'blue' }), /system, light or dark/, 'settings: rejects a theme that is not one of the three')
+  assert.equal(writeSettings(join(d, 'sub'), { theme: 'light' }).port, 5123, 'settings: a theme change keeps the port')
   rmSync(d, { recursive: true })
 }
 console.log('settings: unit ok')

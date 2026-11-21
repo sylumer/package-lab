@@ -16,6 +16,7 @@
 <symbol id="i-record" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2.5" fill="currentColor"/></symbol>
 <symbol id="i-test-saving" viewBox="0 0 16 16"><path d="M13.25 7A5.25 5.25 0 0 0 3.6 5M2.75 9A5.25 5.25 0 0 0 12.4 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3 2.5V5.25h2.75M13 13.5v-2.75h-2.75" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 <symbol id="i-sidebar-right" viewBox="0 0 16 16"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v10" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+<symbol id="i-settings" viewBox="0 0 16 16"><path d="M2 4.5h12M2 11.5h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="10.5" cy="4.5" r="1.75" fill="var(--bg)" stroke="currentColor" stroke-width="1.5"/><circle cx="5.5" cy="11.5" r="1.75" fill="var(--bg)" stroke="currentColor" stroke-width="1.5"/></symbol>
 <symbol id="i-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.25 6.25a1.75 1.75 0 1 1 2.5 1.6C8.25 8.1 8 8.5 8 9.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.4" r=".9" fill="currentColor"/></symbol>
 <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.25 14.25 13H1.75z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.5v3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.3" r=".8" fill="currentColor"/></symbol>
 <symbol id="i-error" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m5.5 5.5 5 5m0-5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
@@ -41,6 +42,7 @@
     <button id="show-live" type="button" class="link" hidden>Show in Package Lab</button>
     <span id="status" role="status"></span>
     <button id="inspector-toggle" type="button" aria-pressed="false" title="Show or hide the inspector on the right." aria-label="Inspector"><svg class="icon" aria-hidden="true"><use href="#i-sidebar-right"/></svg><span class="tb-label">Inspector</span></button>
+    <button id="open-settings" type="button" hidden title="Appearance." aria-label="Settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span class="tb-label">Settings</span></button>
     <button id="help" type="button" title="Show or hide the documentation beside the window." aria-label="Help"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span class="tb-label">Help</span></button>
 </header>
 <div class="main">
@@ -128,10 +130,13 @@
 </div>
 <dialog id="saved"><h2>Saved runs</h2><p class="muted small">Runs saved on the Mac running Package Lab, newest first.</p><ul id="saved-list"></ul><form method="dialog"><button class="secondary">Close</button></form></dialog>
 <dialog id="settings"><h2>Settings</h2>
-  <p><label>Web interface port <input id="set-port" type="number" min="1024" max="65535" step="1"></label> <button type="button" class="link" id="set-reset">Reset to default</button></p>
-  <p class="muted small">Used when the web interface starts: package-lab serve, Alfred’s packageweb, and the desktop app’s --serve. Takes effect the next time it starts. Default 4880.</p>
+  <fieldset id="set-theme"><legend>Appearance</legend>
+    <label><input type="radio" name="theme" value="system"> System</label> <label><input type="radio" name="theme" value="light"> Light</label> <label><input type="radio" name="theme" value="dark"> Dark</label></fieldset>
+  <p class="muted small" id="set-theme-note"></p>
+  <p id="set-port-row"><label>Web interface port <input id="set-port" type="number" min="1024" max="65535" step="1"></label> <button type="button" class="link" id="set-reset">Reset to default</button></p>
+  <p class="muted small" id="set-port-help">Used when the web interface starts: package-lab serve, Alfred’s packageweb, and the desktop app’s --serve. Takes effect the next time it starts. Default 4880.</p>
   <p class="muted small" id="set-status" role="status"></p>
-  <form method="dialog"><button class="secondary" id="set-cancel">Cancel</button> <button type="button" id="set-save">Save</button></form></dialog>
+  <form method="dialog"><button class="secondary" id="set-cancel">Close</button> <button type="button" id="set-save">Save port</button></form></dialog>
 <dialog id="record-dialog" aria-labelledby="record-title"><h2 id="record-title"></h2><p id="record-note" class="muted small"></p>
   <div class="row"><button type="button" class="secondary" id="record-discard">Discard</button> <button type="button" id="record-save">Save</button></div></dialog>
 <dialog id="ref-dialog" aria-labelledby="ref-title"><h2 id="ref-title">Record a working copy</h2>
