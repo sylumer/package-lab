@@ -1,6 +1,6 @@
 {
   "name": "package-lab",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Find out why an e-learning package (SCORM, cmi5, xAPI) doesn't work: check its files, run it under the debugger, and get findings with causes and fixes.",
   "private": true,
   "type": "module",

@@ -868,12 +868,12 @@ itself fails. The checks:
 
 ```json
 {
-  "version": "0.2.0", "ok": true,
+  "version": "0.3.0", "ok": true,
   "checks": [{ "id": "electron", "label": "Electron, to run packages", "ok": true, "detail": "/path/to/Electron" }, "…"],
   "capabilities": { "analyze": true, "run": true, "webkit": false },
   "profiles": ["generic", "moodle", "…"], "tools": ["xyleme", "…"], "viewports": ["iphone", "ipad", "android-phone"],
   "presets": ["standard", "api", "…"], "fixes": [{ "id": "manifest-case", "label": "Rename the manifest to imsmanifest.xml" }, "…"],
-  "app": { "path": "/Applications/Package Lab.app", "version": "0.2.0" }
+  "app": { "path": "/Applications/Package Lab.app", "version": "0.3.0" }
 }
 ```
 

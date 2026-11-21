@@ -506,3 +506,5 @@ the choice, and why.
 - 2026-11-21 · E5.2 · choice · The web interface's Settings is described as Appearance only, and the port is desktop-only in the docs · `settings-set` port is refused in the web interface, and the web dialog hides the port row
 - 2026-11-21 · E5.2 · choice · The developer guide lists every export of `test/ui.js`, and says the Actions buttons sit under Actions, not Package · the list had gone stale as the helpers grew
 - 2026-11-21 · E5.2 · choice · The dark screenshots are kept although no page links them yet · `scripts/screenshots.js` writes both themes (E3.3), and the dark images are the check that every token has a dark value (E3.4)
+- 2026-11-21 · E5.3 · choice · The packaged-app check used its own small script (not `start()` from test/ui.js) · `start()` launches Electron with the repo as its argument and has no `executablePath` option, and `runWindow` and `clickCourse` read its private app handle, so the script has its own copies of those two
+- 2026-11-21 · E5.3 · choice · The version example in docs/cli.md (`doctor --json`) was changed to 0.3.0 with the bump · it is the real output
