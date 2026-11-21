@@ -1,0 +1,57 @@
+# Windows check. Added in E6.3. It runs the suite on a Windows runner, builds the portable zip and uploads it.
+# Nothing here has run yet: the first run is the first look at Package Lab on Windows. Read the log of each step.
+name: Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No .nvmrc or engines field in the repo; the README asks for Node.js 20 or later. 22 is an LTS line.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # ponytail: the tests make fixture zips with `zip` and check them with `unzip -t` (test/test.js: fixture(), unzipT).
+      # The Windows runner may not have either on PATH, so they come from Chocolatey. Not yet checked on a real runner.
+      - name: Install Info-ZIP
+        run: choco install zip unzip -y
+
+      - name: Unit tests
+        run: node test/test.js --unit
+
+      - name: Full suite
+        run: npm test
+
+      # Runs even when a test failed, so the first run still gives a build and a UI result.
+      - name: Build the portable Windows zip
+        if: ${{ !cancelled() }}
+        run: node scripts/package.js --platform win32
+
+      - name: Upload the zip
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-lab-win32
+          path: dist/*.zip
+          if-no-files-found: error
+
+      # Allowed to fail. The UI tests drive Electron through the desktop session, which a hosted runner may not give
+      # them, and they were written for the Mac. A failure here is information for the owner, not a broken build.
+      # Runs even when a test failed, so the UI result is still reported.
+      - name: UI tests (may fail)
+        if: ${{ !cancelled() }}
+        run: npm run test:ui
+        continue-on-error: true

@@ -50,6 +50,33 @@ To move from one to the other, close Package Lab and copy the folder: from `%APP
 - WebKit runs work through Playwright, but WebKit on Windows is a weaker stand-in for Safari than on a Mac.
 - No installer, code signing or auto-update.
 
+## Trying it on Windows
+
+For whoever has a Windows PC. Write down what you see at each step, and send the notes to the owner with the Windows
+version. Steps 6 and 7 also need Node.js and a copy of this repository on the PC, after `npm ci`, because the command
+line and the web interface run from the repository. The repository also has a workflow, `.github/workflows/windows.yml`,
+that runs the suite on a Windows runner once it is pushed.
+
+1. **Unzip and run.** Unzip `Package Lab-<version>-win32-<arch>.zip` and run `Package Lab.exe`. Note: any unknown-publisher
+   warning, whether the window opens, and whether the menu bar, toolbar and tabs fit.
+2. **Open `good.zip` and run it.** Make it from the files inside `test/fixtures/base` (the files, not the folder): select
+   them, right-click, Send to, Compressed (zipped) folder, and name it `good.zip`. These are the same files the test
+   suite zips as its good package. Note: whether it opens, what the findings say, and any error about file names or paths.
+3. **Record a macro.** On `good.zip`, open **Live**, choose **Record clicks**, click two or three things in the course,
+   then **Save macro** (see [Macros](guide/macros.md)). Run it again. Note: whether the clicks land where you made them.
+4. **Test saving.** Use **Test saving** with that macro set up. It runs the course, plays the macro, then checks that the
+   course saves and resumes (see [Macros](guide/macros.md)). Note: whether it reports success, and where the saved runs go (expected: `%APPDATA%\Package Lab`).
+5. **Settings → Appearance.** Try Light, Dark and System (see [Appearance](guide/run-settings.md#appearance)). Note:
+   whether the colours and the window frame follow, and whether anything is hard to read.
+6. **The web interface from a phone.** From the repository on the PC, run
+   `node bin/package-lab.js serve --host 0.0.0.0`. It prints the PC's network address when it can find one; if the
+   address it prints says `localhost` or `127.0.0.1`, replace that part with the PC's IPv4 address from `ipconfig`.
+   Open the result on a phone on the same Wi-Fi (see [Web interface](web.md)). Windows Firewall may ask first. Note: whether the page loads, whether the address's token
+   gets you in, and whether the course opens.
+7. **The CLI's `doctor`.** In PowerShell, from the repository, run
+   `$env:PACKAGE_LAB_APP = "<full path to Package Lab.exe>"`, then `node bin/package-lab.js doctor`. Note: each line
+   of its output, especially the Electron, Playwright and WebKit lines and the data folder.
+
 ## Not yet tried on Windows
 
 This build has been made and checked on a Mac, but never started on Windows.
