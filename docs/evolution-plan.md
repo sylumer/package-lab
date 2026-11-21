@@ -1219,6 +1219,15 @@ machine and run.
   unpacked folder `dist/Package Lab-win32-<arch>/` plus a zip of it, `dist/Package Lab-<version>-win32-<arch>.zip`.
   This is a portable app: unzip it and run `Package Lab.exe`. Make the zip with the project's own `src/zip.js` if it
   can write; otherwise use `ditto -c -k` on the Mac, and log it.
+- **Portable, by the owner's choice (2026-11-21).** There is no installer, and nothing is written to the registry.
+  - The app never registers itself for `.zip` files on Windows: that is too broad. Packages are opened with Open,
+    by dropping them on the window (E2.5), or with the CLI.
+  - By default, data goes to `%APPDATA%\Package Lab`, where Electron puts it.
+  - For a fully portable copy, such as one on a USB stick: when a folder named `Package Lab Data` sits next to
+    `Package Lab.exe`, `main.js` uses it as the data folder, with `app.setPath('userData', …)` before `ready`.
+    `PACKAGE_LAB_DATA` still wins. Check this on the Mac with a unit test of the pure function that picks the folder:
+    give it the exe's folder, the environment and whether the folder exists. `src/platform.js` is the place for it.
+  - `docs/windows.md` explains both, and how to move from one to the other: copy the folder.
 - **The icon.** Write `build/icon.ico` from the existing rendered PNG in plain Node. An ICO file holding PNG images
   (16, 32, 48 and 256) is a short header plus the PNG bytes, so it needs no dependency; resize with Electron's
   `nativeImage` in `icon.cjs`.
@@ -1234,9 +1243,8 @@ machine and run.
     - Never run `rcedit` or Wine.
   - The window's own icon is set at runtime with `BrowserWindow`'s `icon` option off the Mac, so the taskbar shows
     it either way.
-- **Not in this work package:** an installer (Squirrel, NSIS or MSIX), code signing, the `.zip` file association and
-  auto-update. Each needs a new runtime-side dependency, a certificate or a Windows machine. Add them to Not planned, with what
-  each would need.
+- **Not in this work package:** an installer (Squirrel, NSIS or MSIX), code signing and auto-update. They are
+  covered under Not planned.
 - **`docs/windows.md`**: how to build, how to copy the build to Windows and run it, and the `PACKAGE_LAB_APP` and data
   folder locations. It also lists what differs from the Mac: no Alfred, no vibrancy, no accent colour, Ctrl for ⌘,
   and WebKit runs that work through Playwright but are a weaker stand-in for Safari than on a Mac. It ends with "Not
@@ -1323,13 +1331,20 @@ by eye in review.
 - **Thumbnails per macro step.** The element label and Copy cover identifying a step. Add them if steps without a
   target prove hard to tell apart.
 - **Drag to reorder steps.** Up and Down buttons cover it and work from the keyboard.
-- **A Windows installer, signing, the `.zip` file association and auto-update** (E6.2). An installer needs a new
-  devDependency (electron-winstaller or NSIS) and is best built on Windows. Signing isn't required: unsigned
-  builds run after SmartScreen's "More info, Run anyway". Paid certificates are costly, so if signing is wanted
-  later, try the free routes first: SignPath Foundation's free signing for open-source projects (it needs a public
-  repository and a CI build), or Azure Trusted Signing (about US$10 a month).
-  The file association needs the installer. Auto-update needs a release server. Add them once a portable build has
-  been tried on Windows and is worth shipping.
+- **A Windows installer and auto-update** (E6.2). The owner chose a portable app. An installer would need a new
+  devDependency (electron-winstaller or NSIS) and is best built on Windows. Auto-update needs a release server and,
+  in practice, an installer.
+- **A `.zip` file association on Windows.** The owner ruled it out as too broad. The Mac app's Finder **Open With**
+  entry for `.zip` (`CFBundleDocumentTypes` in `scripts/package.js`, `LSHandlerRank: 'Alternate'`, never the
+  default) is unchanged.
+- **Signing on Windows.** It isn't required: an unsigned build runs after SmartScreen's "More info, Run anyway". The
+  route to try first is **SignPath Foundation**, which signs open-source projects free. It needs:
+  - a public repository with an OSI-approved licence;
+  - builds made by CI from that repository (the E6.3 workflow is the starting point);
+  - an application to SignPath.
+
+  The fallback is Azure Trusted Signing, at about US$10 a month. Do neither until a portable build has been tried on
+  Windows and is worth handing out.
 
 ## Prompt templates
 
