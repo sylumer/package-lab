@@ -152,7 +152,7 @@ This starts the web interface. See [Web interface](docs/web.md) for reaching it 
 
 ## Documentation
 
-- [User guide](docs/user-guide.md): the desktop app, tab by tab and button by button.
+- [User guide](docs/user-guide.md): the desktop app, one task to a page, from getting started to the views and the settings.
 - [Recipes](docs/recipes.md): step-by-step diagnoses, from a package that works in the authoring tool but not in an LMS to
   one that works in Chrome but not in Safari.
 - [Findings](docs/findings.md): every finding, what it means and what to try.

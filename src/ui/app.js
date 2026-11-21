@@ -576,7 +576,11 @@ grip.addEventListener('keydown', e => { const d = { ArrowLeft: 20, ArrowRight: -
 // back: going back, so the page left isn't added to the history again.
 const openDoc = (name, anchor = '', back) => act(async () => {
   showInspector(true, 'help')
-  if (!docs.list) { docs.list = await lab.invoke('docs'); $('doc-pick').replaceChildren(...docs.list.map(d => h('option', { value: d.name }, d.title))) }
+  if (!docs.list) {   // the list under its groups (src/docs.js), in its order
+    docs.list = await lab.invoke('docs')
+    const groups = [...new Set(docs.list.map(d => d.group))]
+    $('doc-pick').replaceChildren(...groups.map(g => h('optgroup', { label: g }, ...docs.list.filter(d => d.group === g).map(d => h('option', { value: d.name }, d.title)))))
+  }
   if (!docs.list.some(d => d.name === name)) name = docs.cur ?? docs.list[0]?.name
   if (!name) return
   const text = docs.text[name] ??= await lab.invoke('doc', { name })

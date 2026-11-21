@@ -354,4 +354,4 @@ When you have a diagnosis, send the author or the vendor a report without the co
 package-lab report course.zip --run --wait 20 --redact --out report.html
 ```
 
-The redaction rules and what they keep are in the [user guide](user-guide.md#sending-a-report-without-the-course-content).
+The redaction rules and what they keep are in the [user guide](guide/changing-and-exporting.md#sending-a-report-without-the-course-content).

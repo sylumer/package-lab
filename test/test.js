@@ -8,7 +8,7 @@ import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import { unzip, zip, crc32, crc32Table } from '../src/zip.js'
 import { FIXES, FIX_IDS, correct, exportFixed, fixedName, prove, staticAll } from '../src/fixes.js'
 import { analyze, pkgPath } from '../src/analyze.js'
@@ -24,7 +24,8 @@ import { timelineModel, timelineView } from '../src/timeline.js'
 import { normaliseOptions, cliCommand, VIEWPORTS, viewportName, optionsSummary } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
-import { markdown } from '../src/ui/markdown.js'
+import { markdown, slugOf } from '../src/ui/markdown.js'
+import { DOCS } from '../src/docs.js'
 import { comparePackages, compareFiles, compareManifests, compareBoots, compareFindings, compareBehaviour } from '../src/pkgdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
 import { pinPathProblem, matcher, answerFor, buildAnswer, pinPrefix, userAgentPin, lexicalDeclaration, pinFindings, parsePinFlag, parseAnswerFlag } from '../src/pins.js'
@@ -1592,6 +1593,35 @@ console.log('settings: unit ok')
 }
   assert.ok(markdown('## settings', 'doc-').includes('id="doc-settings"'), 'markdown: heading ids take the prefix')
 console.log('markdown: unit ok')
+{   // The docs' links (E3.1): every relative link in a doc in DOCS names a file that exists, and every #anchor is a heading there, slugged as the panel slugs them. The guide pages and the index link only to docs the panel can open. Code blocks are not read for links.
+  const docsDir = new URL('../docs/', import.meta.url).pathname
+  const names = new Set(DOCS.map(d => d.name))
+  const anchorsOf = file => {
+    const seen = {}, out = new Set()
+    let fence = false
+    for (const l of readFileSync(file, 'utf8').split('\n')) {
+      if (/^\s*```/.test(l)) fence = !fence
+      else if (!fence && /^#{1,6}\s/.test(l)) out.add(slugOf(l.replace(/^#{1,6}\s+(.*?)\s*#*$/, '$1'), seen))
+    }
+    return out
+  }
+  const broken = []
+  for (const d of DOCS) {
+    const file = join(docsDir, d.name), inPanel = d.name.startsWith('guide/') || d.name === 'user-guide.md'
+    const text = readFileSync(file, 'utf8').replace(/^\s*```[\s\S]*?^\s*```/gm, '')
+    for (const [, , href] of text.matchAll(/\[([^\]]+)\]\(([^)\s]+)\)/g)) {
+      if (/^[a-z][a-z0-9+.-]*:/i.test(href)) continue   // web addresses and mailto: are not checked here
+      const [path, anchor = ''] = href.split('#')
+      const target = path ? join(dirname(file), path) : file
+      if (!existsSync(target)) { broken.push(`${d.name}: ${href} (no such file)`); continue }
+      if (anchor && target.endsWith('.md') && !anchorsOf(target).has(anchor)) broken.push(`${d.name}: ${href} (no such heading)`)
+      const name = relative(docsDir, target).split(sep).join('/')
+      if (inPanel && target.endsWith('.md') && !names.has(name)) broken.push(`${d.name}: ${href} (not a doc in the panel)`)
+    }
+  }
+  assert.deepEqual(broken, [], 'docs: every link in DOCS points to a file and a heading that exist, and the guide links only to panel docs')
+  console.log('docs links: unit ok')
+}
 console.log('unit: ok')
 
 // ---- End to end ----
