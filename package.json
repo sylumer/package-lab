@@ -18,7 +18,8 @@
   "devDependencies": {
     "@electron/packager": "^18.4.4",
     "electron": "^45.3.2",
-    "playwright": "^1.65.1"
+    "playwright": "^1.65.1",
+    "resedit": "3.1.0"
   },
   "productName": "Package Lab",
   "bin": {

@@ -32,3 +32,10 @@ export const installHint = platform => platform === 'darwin' ? 'npm run install-
 
 // The command that shows a file in its usual program (the report, with --open): [command, args].
 export const openCommand = (platform, target) => platform === 'darwin' ? ['open', [target]] : platform === 'win32' ? ['explorer.exe', [target]] : ['xdg-open', [target]]
+
+// A portable copy keeps its data in a folder with this name beside the program.
+export const PORTABLE_DIR = 'Package Lab Data'
+
+// The data folder to set before the app is ready, or null to leave Electron's own. PACKAGE_LAB_DATA wins; then, on Windows only,
+// the portable folder beside the program (exeDir) when it exists (hasPortable).
+export const dataOverride = (platform, env, exeDir, hasPortable) => env.PACKAGE_LAB_DATA || (platform === 'win32' && hasPortable ? win32.join(exeDir, PORTABLE_DIR) : null)

@@ -12,10 +12,11 @@ import { app, BrowserWindow, ipcMain, dialog, net, protocol, session, Menu, shel
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
-import { basename, extname, join, resolve, sep } from 'node:path'
+import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { unzip } from './zip.js'
+import { dataOverride, PORTABLE_DIR } from './platform.js'
 import { analyze } from './analyze.js'
 import { Recorder, shiftTimes, markAnswers } from './recorder.js'
 import { compare } from './diff.js'
@@ -62,7 +63,10 @@ const SHOW_RUNS = WINDOW || flag('show-runs') !== undefined
 // Headless runs use a throwaway profile, so they never touch the desktop app's saved runs or its lock.
 if (JOB) app.setPath('userData', join(tmpdir(), `package-lab-run-${process.pid}`))
 // PACKAGE_LAB_DATA moves everything else (saved runs, the web token, sign-ins for references): for tests and side-by-side setups.
-else if (process.env.PACKAGE_LAB_DATA) app.setPath('userData', process.env.PACKAGE_LAB_DATA)
+// A Windows copy with a "Package Lab Data" folder beside Package Lab.exe keeps its data there (portable use).
+else { const exeDir = dirname(process.execPath), isDir = p => { try { return statSync(p).isDirectory() } catch { return false } }, dir = dataOverride(process.platform, process.env, exeDir, process.platform === 'win32' && isDir(join(exeDir, PORTABLE_DIR))); if (dir) app.setPath('userData', dir) }
+// The window's own icon off the Mac (the .exe carries one too); the Windows build keeps build/icon.ico for it.
+const WIN_ICON = process.platform === 'darwin' || !existsSync(join(import.meta.dirname, '..', 'build', 'icon.ico')) ? {} : { icon: join(import.meta.dirname, '..', 'build', 'icon.ico') }
 
 let ui = null, web = null, pkg = null, config = {}, active = null, nextId = 1
 let served = null   // the files the running content is served from: the package's, with any overrides on top
@@ -173,7 +177,7 @@ async function begin({ kind, label, url, launch, partition, lrs: lrsConfig, caug
   lrs = null
   answers = { responses: responses ?? [], log: [] }
   tracing = trace ? { files: new Map(), untraced: new Map(), sites: pkg.sites } : null
-  const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
+  const win = new BrowserWindow({ width: 1100, height: 800, show: SHOW_RUNS, ...WIN_ICON, title: `${kind === 'reference' ? 'Reference' : 'Run'}: ${label}`,
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
   // A device size (P2.3): the window is that size too, so the live view shows (and clicks land on) the emulated page.
   if (viewport) win.setContentSize(viewport.width, viewport.height)
@@ -930,7 +934,7 @@ if (process.platform === 'darwin') systemPreferences.subscribeNotification('Appl
 // macOS only: the toolbar is the title bar (E2.1), with the traffic lights inset and the sidebar's translucency showing the desktop.
 const MAC_WINDOW = process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' } : {}
 function createWindow() {
-  ui = new BrowserWindow({ width: 1400, height: 900, title: 'Package Lab', ...MAC_WINDOW, webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, sandbox: true } })
+  ui = new BrowserWindow({ width: 1400, height: 900, title: 'Package Lab', ...MAC_WINDOW, ...WIN_ICON, webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, sandbox: true } })
   ui.loadFile(join(import.meta.dirname, 'ui', 'index.html'))
   // Links in the docs panel open in the user's browser; the window never navigates away from the app page.
   ui.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' } })

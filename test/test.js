@@ -26,7 +26,8 @@ import { normaliseOptions, cliCommand, VIEWPORTS, viewportName, optionsSummary }
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
 import { markdown, slugOf, headings, searchDocs, keysFor } from '../src/ui/markdown.js'
-import { dataDir, appBinaries, executable, openCommand, installHint } from '../src/platform.js'
+import { dataDir, appBinaries, executable, openCommand, installHint, dataOverride, PORTABLE_DIR } from '../src/platform.js'
+import icoWriter from '../scripts/ico.cjs'
 import { DOCS, MAX_IMAGE, inlineImages } from '../src/docs.js'
 import { comparePackages, compareFiles, compareManifests, compareBoots, compareFindings, compareBehaviour } from '../src/pkgdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
@@ -1737,6 +1738,29 @@ console.log('markdown: unit ok')
   assert.equal(keysFor(false, '⌘1 to ⌘5, ⌘, and ⌘.'), 'Ctrl+1 to Ctrl+5, Ctrl+, and Ctrl+.', 'keys: digits and punctuation')
   assert.equal(keysFor(false, '# ⌘R\n`⌘R` and ⌘R\n```\n⌘R\n```\n⌘R'), '# ⌘R\n`⌘R` and Ctrl+R\n```\n⌘R\n```\nCtrl+R', 'keys: headings, inline code and fenced code are left alone')
   assert.equal(keysFor(false, '**⇧↩** and ⌘ alone and ⌘Cmd'), '**⇧↩** and ⌘ alone and ⌘Cmd', 'keys: only a modifier followed by a key is changed')
+  // E6.2: the portable data folder is picked by a pure function; PACKAGE_LAB_DATA wins everywhere; only Windows uses the folder.
+  assert.equal(PORTABLE_DIR, 'Package Lab Data')
+  assert.equal(dataOverride('win32', {}, 'E:\\Lab', true), 'E:\\Lab\\Package Lab Data', 'dataOverride: win32 with the folder')
+  assert.equal(dataOverride('win32', {}, 'E:\\Lab', false), null, 'dataOverride: win32 without it')
+  for (const [pl, dir] of [['darwin', '/x/Contents/MacOS'], ['linux', '/x'], ['win32', 'E:\\Lab']]) {
+    assert.equal(dataOverride(pl, { PACKAGE_LAB_DATA: '/d' }, dir, true), '/d', `dataOverride: PACKAGE_LAB_DATA wins on ${pl}`)
+    if (pl !== 'win32') assert.equal(dataOverride(pl, {}, dir, true), null, `dataOverride: ${pl} ignores the folder`)
+  }
+  // E6.2: the ICO writer: a header for 4 images, the right offsets, PNG signatures there.
+  {
+    const png = n => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(n, 7)]), sizes = [16, 32, 48, 256], datas = sizes.map((s, i) => png(10 + i))
+    const f = icoWriter(sizes.map((size, i) => ({ size, data: datas[i] })))
+    assert.deepEqual([f.readUInt16LE(0), f.readUInt16LE(2), f.readUInt16LE(4)], [0, 1, 4], 'ico: header (reserved, type 1, 4 images)')
+    let at = 6 + 16 * 4
+    sizes.forEach((size, i) => {
+      const e = 6 + 16 * i
+      assert.equal(f[e], size === 256 ? 0 : size, `ico: width of image ${i}`); assert.equal(f[e + 1], size === 256 ? 0 : size, `ico: height of image ${i}`)
+      assert.equal(f.readUInt32LE(e + 8), datas[i].length, `ico: size of image ${i}`); assert.equal(f.readUInt32LE(e + 12), at, `ico: offset of image ${i}`)
+      assert.ok(f.subarray(at, at + 8).equals(datas[i].subarray(0, 8)), `ico: PNG signature at image ${i}`)
+      at += datas[i].length
+    })
+    assert.equal(f.length, at, 'ico: nothing after the last image')
+  }
   // The lint: no .pathname on a URL built from import.meta.url, and no Mac paths outside src/platform.js and `// darwin-only` lines.
   const lint = [], top = fileURLToPath(new URL('..', import.meta.url)), P = '(?:[^()]|\\([^()]*\\))*'   // P: text with one level of nested parentheses
   const urlPath = new RegExp(`new URL\\(${P}import\\.meta\\.url${P}\\)\\.pathname`)

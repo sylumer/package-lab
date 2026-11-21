@@ -10,6 +10,7 @@ For people using it:
 - [Web interface](web.md): using Package Lab from another device, with the live view; security.
 - [Alfred](alfred.md): the workflow's keywords and File Actions.
 - [Concierge](concierge.md): the Concierge dashboard module.
+- [Windows](windows.md): building the portable Windows app on a Mac, running it, and where its data goes.
 
 For people changing it:
 
