@@ -1,6 +1,6 @@
 # Package Lab user guide
 
-This guide covers the desktop app. The [web interface](web.md) is the same app in a browser, with an extra **Live** tab.
+This guide covers the desktop app. The [web interface](web.md) is the same app in a browser, with an extra **Live** view.
 
 - [Opening Package Lab](#opening-package-lab)
 - [The start screen](#the-start-screen)
@@ -89,14 +89,19 @@ On the desktop, the menu bar has the toolbar's actions and a few more. Reload is
   The buttons show an icon and a label when the window is 1,100 pixels wide or more, and only the icon when it is
   narrower. Drag the empty part of the toolbar to move the window. On a Mac the controls use your system accent colour.
 - **Inspector** (right, ⌥⌘I): the run settings, the macro and the docs. See [The inspector](#the-inspector).
-- **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the tabs.
-  The **R** and **F** buttons are for comparing. Under the list, **Package** has **Compare packages…**, **Record a
-  working copy…**, **Check a folder…** (desktop only) and **Export corrected package…**.
-- **Tabs:** Findings, Boot path, API and Lookups always show, and so do the tabs you start things from: Experiments,
-  Test saving, Server needs, Drill-down, Folder check and, in the web interface, Live. (The web interface has a
-  **Live** tab instead of Folder check.) The result tabs (Package, Files, xAPI, Network, Scripts, Console, Errors,
-  Frames, Execution, Timeline, Compare, Package diff) show only when the selected run has something for them. A small
-  gap separates the tool tabs from the result tabs. The **Filter** box filters whichever table is showing.
+- **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the views.
+  The **R** and **F** buttons are for comparing.
+- **Views** (left, under Runs): the views are in five groups: **Summary** (Findings, Timeline), **Package** (Boot path,
+  Files, Package), **What happened** (API, xAPI, Network, Errors, Console, Frames, Lookups, Scripts), **Deep dive**
+  (Execution, Drill-down, Experiments) and **Tools** (Compare, Package diff, Folder check, Test saving, Server needs
+  and, in the web interface, Live). Click one to show it; the chosen one is highlighted. With the list focused, **↑**
+  and **↓** move through the views, and **⌘1** to **⌘5** (Ctrl+1 to Ctrl+5 off a Mac) jump to the first view of each group. Findings, Boot path, API
+  and Lookups always show, and so do the views you start things from: Experiments, Test saving, Server needs,
+  Drill-down, Folder check and Live. The others (Package, Files, xAPI, Network, Scripts, Console, Errors, Frames,
+  Execution, Timeline, Compare, Package diff) show only when the selected run has something for them, and a group with
+  nothing to show is left out. The **Filter** box above the view filters whichever table is showing.
+- **Actions** (left, at the bottom): **Compare packages…**, **Record a working copy…**, **Check a folder…** (desktop
+  only) and **Export corrected package…**.
 - **Help** at the right end of the toolbar opens the docs in the inspector; see [The docs panel](#the-docs-panel).
 
 ### The inspector
@@ -119,12 +124,12 @@ wide to start with. Drag its left edge to resize it, or focus the edge and use t
 
 ### Record a working copy
 
-**File → Record a Working Copy…** (also **Record a working copy…** under **Package**, and a button at the top of the
+**File → Record a Working Copy…** (also **Record a working copy…** under **Actions**, and a button at the top of the
 **Compare** view when there is no reference yet) opens a small dialog. Enter the address of the course where it works
 and choose **Record**. See [Comparing with a working copy](#comparing-with-a-working-copy-optional).
 
-When no run is selected, the tabs show the package as read from its files. When a run is selected, they show that run.
-[The tabs and buttons, one by one](#the-tabs-and-buttons-one-by-one) says what each one is for.
+When no run is selected, the views show the package as read from its files. When a run is selected, they show that run.
+[The tabs and buttons, one by one](#the-tabs-and-buttons-one-by-one) says what each view is for.
 
 ## The docs panel
 
@@ -150,9 +155,9 @@ line shows and sets them too: see [cli.md](cli.md#settings).
 
 ## The tabs and buttons, one by one
 
-Each tab below says what it shows and what its buttons do. Where a feature has a section of its own, the tab links to it.
+Each view below says what it shows and what its buttons do. Where a feature has a section of its own, the view links to it.
 
-**Tabs**
+**Views**
 
 - **Findings**: the problems, worst first, with the **Milestones** strip above them. **Save report…** (with **Take the
   course content out** ticked for a redacted report) is at the top of the tab. See [Reading a run](#reading-a-run) and
@@ -206,10 +211,10 @@ Each tab below says what it shows and what its buttons do. Where a feature has a
 | **Compare packages…** | Compares this package with another `.zip` | [Comparing two packages](#comparing-two-packages) |
 | **Check a folder…** | Checks every package in a folder (desktop only) | [Checking a folder](#checking-a-folder-of-packages) |
 | **Export corrected package…** | Saves a corrected `.zip` | [Exporting a corrected package](#exporting-a-corrected-package) |
-| **Record a working copy…** (File menu, Package list, Compare view) | Records a working copy for comparison | [Comparing with a working copy](#comparing-with-a-working-copy-optional) |
+| **Record a working copy…** (File menu, Actions list, Compare view) | Records a working copy for comparison | [Comparing with a working copy](#comparing-with-a-working-copy-optional) |
 | **Record caught errors** | Records errors the content catches itself | [Errors](#reading-a-run) |
 | **Stop and analyse** | Ends the run and analyses it | [Launching an item](#launching-an-item) |
-| **Filter** | Narrows the table in the tab you're on | [The window](#the-window) |
+| **Filter** | Narrows the table in the view you're on | [The window](#the-window) |
 | **R** and **F** (in Runs), **Compare** | Chooses a reference and a failing run and compares them | [Comparing with a working copy](#comparing-with-a-working-copy-optional) |
 | **Open saved…** | Opens a saved run | [Saved runs](#saved-runs) |
 | **Inspector** (Settings, Macro, Help) | Every launch option, the profile fields, pins, answers and macro | [Testing a theory](#testing-a-theory-launch-settings) |

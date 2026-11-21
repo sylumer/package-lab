@@ -48,7 +48,8 @@
     <p class="muted small">Click a run to see it. To compare, choose a reference (R) and a run (F), then Compare.</p>
     <ol id="runs"></ol>
     <div class="row"><button id="compare" type="button" disabled>Compare</button><button id="open-run" type="button" class="secondary">Open saved…</button></div>
-    <h2>Package</h2>
+    <div id="views"></div>
+    <h2>Actions</h2>
     <div class="stack">
       <button id="compare-pkg" type="button" class="secondary" disabled title="Compare this package with another one: files, manifest, loading path and findings, from the files alone.">Compare packages…</button>
       <button id="ref" type="button" class="secondary" title="Record the course where it works (a hosted preview, an LMS, SCORM Cloud), to compare a run of this package against it.">Record a working copy…</button>
@@ -58,7 +59,6 @@
     </div>
   </aside>
   <section>
-    <nav id="tabs" role="tablist"></nav>
     <div class="row"><input id="filter" type="search" placeholder="Filter" aria-label="Filter the table" spellcheck="false"></div>
     <div id="code-pane" hidden></div>
     <div id="view"></div>

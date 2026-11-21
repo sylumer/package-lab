@@ -40,9 +40,10 @@ aside h2 { font-size: 13px; margin: 4px 0; }
 #runs input { margin: 2px 0 0; }
 .tag { font-size: 10px; color: var(--muted); }
 section { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-nav { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 4px 8px 0; flex-wrap: wrap; }
-nav button { border: 0; background: transparent; color: var(--fg); border-radius: 5px 5px 0 0; padding: 5px 10px; }
-nav button[aria-selected=true] { background: var(--code); font-weight: 600; }
+#views h2 { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 2px; }
+#views nav { display: flex; flex-direction: column; }
+#views nav button { border: 0; background: transparent; text-align: left; border-radius: 5px; padding: 3px 8px; }
+#views nav button[aria-current=page] { background: var(--code); font-weight: 600; }
 .row { display: flex; gap: 6px; padding: 6px 8px; align-items: center; }
 .row.wrap { flex-wrap: wrap; gap: 6px 14px; }
 #view { flex: 1; overflow: auto; padding: 0 8px 20px; }
@@ -161,7 +162,6 @@ ol.chain li { margin: .35em 0; }
 @keyframes flash { from { background: color-mix(in srgb, var(--warn) 40%, transparent); } to { background: transparent; } }
 .welcome { max-width: 760px; padding: 16px 8px; }
 .welcome h2 { font-size: 15px; margin: 16px 0 6px; }
-nav button.gap { margin-left: 16px; }
 @media (max-width: 800px) { #inspector { width: auto !important; border-left: 0; border-top: 1px solid var(--line); max-height: 60vh; } #inspector-resize { display: none; } }
 .welcome td:last-child { white-space: nowrap; }
 #set-port { width: 10ch; }

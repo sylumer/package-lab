@@ -1,4 +1,4 @@
-// Package Lab's window: toolbar, runs list and the tabs that show a run.
+// Package Lab's window: toolbar, runs list and the views (grouped in the sidebar) that show a run.
 import { markdown } from './markdown.js'
 const $ = id => document.getElementById(id)
 const runBtn = $('run')
@@ -20,6 +20,10 @@ const secs = t => (t / 1000).toFixed(2)
 
 const st = { macro: { events: [], viewport: null }, cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
 const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'xAPI', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', ...(lab.web ? [] : ['Folder check']), 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
+// The sidebar's view lists. Every name in TABS is in exactly one group; a name that isn't in TABS (Live on the desktop, Folder check on the web) is left out when the lists are drawn.
+const GROUPS = [['Summary', ['Findings', 'Timeline']], ['Package', ['Boot path', 'Files', 'Package']], ['What happened', ['API', 'xAPI', 'Network', 'Errors', 'Console', 'Frames', 'Lookups', 'Scripts']],
+  ['Deep dive', ['Execution', 'Drill-down', 'Experiments']], ['Tools', ['Compare', 'Package diff', 'Folder check', 'Test saving', 'Server needs', 'Live']]]
+console.assert(TABS.every(t => GROUPS.flat(2).filter(n => n === t).length === 1) && new Set(GROUPS.flatMap(g => g[1])).size === GROUPS.flatMap(g => g[1]).length, 'every view is in exactly one group')
 
 // ---- The code view: every file:line in evidence opens it (src/ui/codeview.js draws it, the code-view handler fills it) ----
 const codePane = $('code-pane')
@@ -506,7 +510,7 @@ VIEWS.Timeline = () => {
 }
 VIEWS.Live = () => st.running ? livePanel : h('p', { class: 'muted' }, 'Run an item to see it here. It runs on the Mac; this view lets you watch and use it from here.')
 
-// Tabs with nothing to show are left out of the tab bar (never the chosen one, and never the ones the user starts things from:
+// Views with nothing to show are left out of the sidebar (never the chosen one, and never the ones the user starts things from:
 // Lookups holds the pins, and Experiments, Test saving, Server needs, Drill-down, Folder check and Live are not listed here).
 const HIDE = {
   Package: () => !st.pkg, Files: () => !st.pkg,
@@ -635,14 +639,29 @@ try {
   if (m?.open && seg === 'help') openDoc(typeof doc === 'string' ? doc : 'README.md'); else showInspector(!!m?.open, seg)
 } catch { /* nothing remembered */ }
 
+// Views with nothing to show are left out (never the chosen one). Groups keep their place even when empty, so ⌘1 to ⌘5 stay the same.
+const visibleGroups = () => GROUPS.map(([g, names]) => [g, names.filter(t => TABS.includes(t) && (t === st.tab || !HIDE[t]?.()))])
+// ↑ and ↓ move through the visible views with the list focused; ⌘1 to ⌘5 jump to the first view of a group.
+$('views').addEventListener('keydown', e => {
+  const names = visibleGroups().flatMap(g => g[1]), j = { ArrowDown: 1, ArrowUp: -1 }[e.key]
+  if (!j || e.metaKey || e.ctrlKey || e.altKey) return
+  e.preventDefault(); const t = names[names.indexOf(st.tab) + j]; if (t) { st.tab = t; render() }
+})
+const isMac = navigator.platform.startsWith('Mac')
+document.addEventListener('keydown', e => {
+  const g = (isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && !e.shiftKey && /^[1-5]$/.test(e.key) && !$('views').hidden ? visibleGroups()[+e.key - 1]?.[1][0] : null
+  if (g) { e.preventDefault(); document.activeElement?.blur?.(); st.tab = g; render() }   // blur: render() keeps #view while the file editor or a pins field has focus, which would leave it on the old view
+})
+
 function render() {
   if (!codePane.hidden && codePane.dataset.run !== '' && +codePane.dataset.run !== st.sel) { codePane.hidden = true; codePane.replaceChildren() }   // its run isn't the chosen one any more
   if (lab.web) liveWatch(st.tab === 'Live' && !!st.running)
   const welcome = !st.pkg && !st.runs.length && !st.live.length && !st.batch && !st.running
-  $('tabs').hidden = $('filter').parentElement.hidden = welcome
-  const tabs = TABS.filter(t => t === st.tab || !HIDE[t]?.())
-  const firstTool = tabs.find(t => t === 'Folder check' || t === 'Experiments')
-  $('tabs').replaceChildren(...tabs.map(t => h('button', { type: 'button', role: 'tab', class: t === firstTool ? 'gap' : null, 'aria-selected': String(t === st.tab), onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))
+  $('views').hidden = $('filter').parentElement.hidden = welcome
+  const hadFocus = $('views').contains(document.activeElement)
+  $('views').replaceChildren(...visibleGroups().filter(g => g[1].length).flatMap(([g, names]) => [h('h2', {}, g), h('nav', { 'aria-label': g }, names.map(t => h('button', { type: 'button', 'aria-current': t === st.tab ? 'page' : null, tabindex: t === st.tab ? 0 : -1, onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))]))
+  if (!$('views').querySelector('[tabindex="0"]')) $('views').querySelector('button')?.setAttribute('tabindex', '0')   // the chosen view isn't listed: the list stays reachable with Tab
+  if (hadFocus) $('views').querySelector('[aria-current]')?.focus()
   // Not while the file editor has focus: a redraw (a run or state event) would lose the cursor and scroll position.
   if (!(st.tab === 'Files' && document.activeElement?.classList.contains('code')) && !document.activeElement?.matches?.('#view .pins-form input, #view .answer-form input, #view .answer-form textarea')) $('view').replaceChildren(...[welcome ? startScreen() : VIEWS[st.tab]()].flat(Infinity).filter(x => x != null && x !== false))
   $('runs').replaceChildren(...st.runs.map(r => h('li', { class: r.id === st.sel ? 'sel' : null, onclick: () => { st.sel = r.id; render() } },

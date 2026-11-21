@@ -30,6 +30,7 @@ export async function start(zip) {
   app = await _electron.launch({ args: zip ? [root, zip] : [root], env: { ...process.env, PACKAGE_LAB_DATA: join(dir(), 'data') } })
   win = await app.firstWindow()
   win.on('pageerror', e => errors.push(e.message))
+  win.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
   await win.waitForLoadState('domcontentloaded')
   return win
 }
@@ -43,7 +44,7 @@ export const open = async zip => { await start(zip); await win.locator('#pkg-nam
 // Run and Stop are one toolbar button: its name is Run until a run is live, then Stop.
 export async function launch() { await win.getByRole('button', { name: 'Run', exact: true }).click(); await win.getByRole('button', { name: 'Stop', exact: true }).waitFor() }
 export async function stop() { await win.getByRole('button', { name: 'Stop', exact: true }).click(); await win.locator('#runs li').first().waitFor() }
-export const view = name => win.getByRole('tab', { name, exact: true }).click()
+export const view = (name, p = win) => p.locator('#views').getByRole('button', { name, exact: true }).click()
 export const text = selector => win.locator(selector).innerText()
 // A menu item is clicked from the main process: Playwright's keyboard doesn't reach the native menu's shortcuts. `under` names the
 // top-level menu to look in (Run has an item called Run); it returns the item's accelerator.
@@ -57,11 +58,12 @@ export const menu = (label, under) => app.evaluate(({ Menu }, [l, u]) => {
 async function checks() {
   await start()
   await win.getByText('Something is wrong? Start here').waitFor()
-  await win.locator('#tabs').waitFor({ state: 'attached' })
-  assert.ok(await win.locator('#tabs').isHidden(), 'start screen: the tab bar is hidden')
+  await win.locator('#views').waitFor({ state: 'attached' })
+  assert.ok(await win.locator('#views').isHidden(), 'start screen: the view list is hidden')
+  assert.equal(await win.locator('#tabs').count(), 0, 'there is no tab bar any more')
   // The toolbar (E2.1): the controls by accessible name, the Mac chrome, the Run button's label.
   for (const [role, name] of [['button', 'Open package'], ['combobox', 'Item'], ['button', 'Run'], ['button', 'Test saving'], ['button', 'Inspector'], ['button', 'Help']])
-    assert.ok(await win.getByRole(role, { name, exact: true }).isVisible(), `the toolbar has ${name}`)
+    assert.ok(await win.locator('#toolbar').getByRole(role, { name, exact: true }).isVisible(), `the toolbar has ${name}`)
   assert.ok(await win.getByRole('button', { name: 'Record macro' }).isHidden(), 'Record shows only while a run is going')
   assert.equal((await win.locator('#toolbar').boundingBox()).height, 52, 'the toolbar is 52 px high')
   assert.equal(await win.evaluate(() => document.body.classList.contains('mac')), process.platform === 'darwin', 'body.mac on macOS only')
@@ -95,6 +97,7 @@ async function checks() {
   await win.locator('#view .finding').first().waitFor()
   assert.ok(await win.locator('#view .finding').count() >= 1, 'Findings shows at least one finding')
   console.log('ui: launch, stop, findings ok')
+  await viewChecks()
 
   await win.getByRole('button', { name: 'Help', exact: true }).click()
   await win.locator('#docs:not([hidden])').waitFor()
@@ -171,6 +174,36 @@ async function checks() {
   console.log('ui: web toolbar ok')
 }
 
+// The grouped view list (E2.3), after a run of `good`: every group, the table filter, ⌘1, arrow keys, and every visible view drawn without an error.
+const GROUPS = ['Summary', 'Package', 'What happened', 'Deep dive', 'Tools']
+async function viewChecks() {
+  const trace = on => win.locator('#trace').evaluate((e, on) => { e.checked = on; e.dispatchEvent(new Event('change', { bubbles: true })) }, on)
+  await trace(true); await launch(); await win.waitForTimeout(2000); await stop(); await trace(false)   // a traced run, so Execution and the code views have something
+  const views = win.locator('#views'), names = () => views.getByRole('button').allInnerTexts()
+  assert.deepEqual(await views.locator('h2').allTextContents(), GROUPS, 'every group shows after a run of good')
+  assert.ok(!(await names()).includes('Compare'), 'Compare is hidden until a comparison exists')
+  assert.ok(!(await names()).includes('Live'), 'Live is web only')
+  await view('Network')
+  assert.equal(await views.locator('[aria-current=page]').innerText(), 'Network', 'the chosen view is aria-current')
+  await win.locator('#view table').waitFor()
+  assert.ok(await win.locator('#filter').isVisible(), 'the filter box shows over a table')
+  await view('Boot path')
+  await win.keyboard.press('Meta+1')
+  assert.equal(await views.locator('[aria-current=page]').innerText(), 'Findings', '⌘1 selects Findings')
+  await views.locator('[aria-current=page]').focus()
+  await win.keyboard.press('ArrowDown')
+  const all = await names()
+  assert.equal(await views.locator('[aria-current=page]').innerText(), all[all.indexOf('Findings') + 1], '↓ moves to the next visible view')
+  assert.ok(await views.locator('[aria-current=page]').evaluate(e => e === document.activeElement), 'and keeps the focus')
+  await win.keyboard.press('ArrowUp')
+  assert.equal(await views.locator('[aria-current=page]').innerText(), 'Findings', '↑ moves back')
+  // Every visible view renders, with nothing in the console.
+  const seen = errors.length
+  for (const n of all) { await view(n); await win.waitForTimeout(100); assert.ok(await win.locator('#view').evaluate(e => e.children.length > 0), `${n} draws something`) }
+  assert.equal(errors.length, seen, 'no error while visiting every view: ' + errors.slice(seen).join(' | '))
+  console.log(`ui: ${all.length} views ok`)
+}
+
 // Starts the web interface (npm run serve) and Playwright's Chromium, and gives fn a page on it plus the list of console problems.
 export async function withWeb(fn) {
   const srv = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, PACKAGE_LAB_DATA: join(dir(), 'web-data') }, stdio: ['ignore', 'pipe', 'ignore'] })
@@ -210,7 +243,7 @@ export async function everyChoice(p) {
   for (const [id, v] of [['expose', '2004'], ['depth', '2'], ['opener', true], ['resume', true], ['caught', false], ['auto', '30'], ['launch-params', 'a=1&b=2'], ['trace', true], ['storage', 'blocked'], ['tool', 'storyline'],
     ['browser', 'webkit'], ['viewport', 'custom'], ['viewport-w', '500'], ['viewport-h', '700'], ['record-input', true]]) await set(id, v)
   // A pin, through the Lookups tab's form.
-  await p.getByRole('tab', { name: 'Lookups', exact: true }).click()
+  await view('Lookups', p)
   await p.locator('#view').getByLabel('Name to pin').fill('previewMode'); await p.locator('#view').getByLabel('Value as JSON').fill('false')
   await p.locator('#view').getByRole('button', { name: 'Add pin', exact: true }).click()
   await set('item', await p.evaluate(() => document.getElementById('item').value))
@@ -222,7 +255,7 @@ export async function everyChoice(p) {
 async function webChecks() {
   await withWeb(async (p, problems) => {
     for (const [role, name] of [['button', 'Open package'], ['combobox', 'Item'], ['button', 'Run'], ['button', 'Test saving'], ['button', 'Inspector'], ['button', 'Help']])
-      assert.ok(await p.getByRole(role, { name, exact: true }).isVisible(), `web: the toolbar has ${name}`)
+      assert.ok(await p.locator('#toolbar').getByRole(role, { name, exact: true }).isVisible(), `web: the toolbar has ${name}`)
     for (const id of ['ref', 'compare-pkg', 'export']) assert.ok(await p.locator('#' + id).isVisible(), `web: #${id} is visible`)
     assert.ok(await p.locator('#check-folder').isHidden(), 'web: Check a folder is desktop only')
     assert.ok(await p.getByRole('button', { name: 'Record macro' }).isHidden(), 'web: no Record button')
@@ -235,6 +268,10 @@ async function webChecks() {
     // the same choices before the controls moved into the inspector.
     const before = JSON.parse(readFileSync(join(root, 'test', 'fixtures', 'launch-options-before.json'), 'utf8'))
     assert.deepEqual(await everyChoice(p), before, 'web: the same choices make the same launch options and CLI line as before the inspector')
+    // A package is open now, so the view list shows.
+    assert.deepEqual(await p.locator('#views nav[aria-label=Tools] button').allInnerTexts(), ['Test saving', 'Server needs', 'Live'], 'web: Tools has Live and no Folder check')
+    await view('Live', p)
+    assert.equal(await p.locator('#views [aria-current=page]').innerText(), 'Live', 'web: Live can be chosen')
     await p.getByRole('button', { name: 'Inspector', exact: true }).click()
     assert.ok(await p.locator('#summary').isVisible(), 'web: the chip shows for non-default settings')
     assert.deepEqual(problems, [], 'web: no errors after the settings were changed: ' + problems.join(' | '))
