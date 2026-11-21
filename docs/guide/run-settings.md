@@ -65,7 +65,9 @@ WebKit needs Playwright, which is optional. If it isn't installed, Package Lab s
 
 Each one also turns on touch, tells the content it is on a phone or tablet (the touch and mobile flags, and that device's user agent), and makes the content's page take its `<meta name="viewport">` into account. **Custom size…** takes a width and height with none of those. A user agent you pin overrides the device's. The live view shows the page at that size, and the run's label names the size, and the saved run keeps it.
 
-**Storage** sets what the content's frames get from the browser:
+### Storage
+
+This sets what the content's frames get from the browser:
 
 | Storage | What happens |
 |---|---|

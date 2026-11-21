@@ -449,3 +449,14 @@ the choice, and why.
 - 2026-11-21 · E4.1 · choice · The "Show in Package Lab" link is a toolbar button before the status, not text inside the status · the status is plain text that every message replaces.
 - 2026-11-21 · E4.1 review · choice · `requestFrom` in src/drilldown.js lets a request count as before a decision when it is stamped up to 100 ms after it · the recorder stamps both when it handles the message, and they can arrive out of order by a few ms, so the drill-down sometimes lost the link to data/config.json (also on the tree without E4.1: 3 of 14 runs failed).
 - 2026-11-21 · E4.1 review · choice · A macro wait's `waited` is capped at its timeout · the last check could run past it on a busy machine and the finding then said 2.1 s for a 2 s timeout, which made `wait: a wait that times out stops the macro` fail now and then.
+- 2026-11-21 · E3.2 · choice · `searchDocs` takes `[{ name, title, text }]` and returns the first match per line · the spec's `(texts, query)` needs the doc title, and this is the simplest shape that carries it.
+- 2026-11-21 · E3.2 · choice · Settings ⓘ buttons sit on the four group headings plus the Storage field · the spec's own example (`Help: Storage`) isn't a group heading, so the Storage field gets one too.
+- 2026-11-21 · E3.2 · choice · The bold "Storage" paragraph in guide/run-settings.md becomes `### Storage` · a help button needs a heading anchor to open.
+- 2026-11-21 · E3.2 · choice · Sidebar group ⓘ targets are views.md#summary, #package, #what-happened, #deep-dive and #tools; the verdict ⓘ targets reading-a-run.md#findings · those pages already explain them.
+- 2026-11-21 · E3.2 · choice · The link check reads `data-help` in index.html, the second argument of `infoBtn(` and the `GROUP_HELP` values · every help target is then checked against a real heading.
+- 2026-11-21 · E3.2 · choice · Contents is a collapsed `<details>` above the body, and its links scroll in place without touching history · keeps it small and keeps Back for real navigation.
+- 2026-11-21 · E3.2 · choice · Clicking a search hit clears the field and hides the results · it goes straight to the heading.
+- 2026-11-21 · E3.2 · choice · The snippet's character offsets come from the lowercased line · fine for the repo's docs; noted in a `ponytail:` comment.
+- 2026-11-21 · E3.2 · choice · The ⓘ for a group sits in a `.gwrap` beside its `<details>`, and Storage's in `.field-help` beside its label · interactive content can't be inside `<summary>` or the label that owns the select.
+- 2026-11-21 · E3.2 · choice · Stale search results are dropped by comparing the captured query with the field after the docs load · simplest guard against out-of-order searches.
+- 2026-11-21 · E3.2 · choice · "Nothing found." is announced in `#doc-status` · screen readers hear an empty search.

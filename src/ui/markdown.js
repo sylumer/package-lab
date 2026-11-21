@@ -72,3 +72,38 @@ export function markdown(text, prefix = '') {
   }
   return blocks(String(text).replace(/\r\n?/g, '\n').split('\n'))
 }
+
+// The headings of a document, with the ids markdown() gives them (no prefix). Heading lines inside code fences are not headings.
+export function headings(md) {
+  const seen = {}, out = []
+  let fence = false
+  for (const l of String(md).replace(/\r\n?/g, '\n').split('\n')) {
+    let m
+    if (/^\s*```/.test(l)) fence = !fence
+    else if (!fence && (m = l.match(/^(#{1,6})\s+(.*?)\s*#*$/))) out.push({ level: m[1].length, text: m[2].replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[`*]/g, ''), id: slugOf(m[2], seen) })
+  }
+  return out
+}
+
+// Case-insensitive search over docs [{ name, title, text }]: up to 20 hits, the first in each line, as
+// { name, title, heading, id, html }. heading and id are the nearest heading above (or ''). html is ~80 characters
+// around the match with the match in <mark>; everything is escaped before the tag goes in, so doc text never becomes markup.
+export function searchDocs(texts, query, max = 20) {
+  const q = String(query).trim().toLowerCase(), out = []
+  if (!q) return out
+  for (const { name, title, text } of texts) {
+    const seen = {}
+    let fence = false, heading = '', id = ''
+    for (const raw of String(text).replace(/\r\n?/g, '\n').split('\n')) {
+      let line = raw, m
+      if (/^\s*```/.test(raw)) fence = !fence
+      else if (!fence && (m = raw.match(/^(#{1,6})\s+(.*?)\s*#*$/))) { line = m[2]; heading = headings(raw)[0].text; id = slugOf(m[2], seen) }
+      const i = line.toLowerCase().indexOf(q)   // ponytail: offsets assume lowercasing keeps lengths (true outside a few odd letters)
+      if (i < 0) continue
+      const a = Math.max(0, i - 40), b = Math.min(line.length, i + q.length + 40)
+      out.push({ name, title, heading, id, html: esc(line.slice(a, i)).replace(/^/, a ? '…' : '') + '<mark>' + esc(line.slice(i, i + q.length)) + '</mark>' + esc(line.slice(i + q.length, b)) + (b < line.length ? '…' : '') })
+      if (out.length >= max) return out
+    }
+  }
+  return out
+}

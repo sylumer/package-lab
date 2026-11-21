@@ -1,5 +1,5 @@
 // Package Lab's window: toolbar, runs list and the views (grouped in the sidebar) that show a run.
-import { markdown } from './markdown.js'
+import { markdown, headings, searchDocs } from './markdown.js'
 const $ = id => document.getElementById(id)
 const runBtn = $('run')
 function h(tag, props = {}, ...kids) {
@@ -28,6 +28,9 @@ const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'xAPI', 'Looku
 // The sidebar's view lists. Every name in TABS is in exactly one group; a name that isn't in TABS (Folder check on the web) is left out when the lists are drawn.
 const GROUPS = [['Summary', ['Findings', 'Timeline']], ['Package', ['Boot path', 'Files', 'Package']], ['What happened', ['API', 'xAPI', 'Network', 'Errors', 'Console', 'Frames', 'Lookups', 'Scripts']],
   ['Deep dive', ['Execution', 'Drill-down', 'Experiments']], ['Tools', ['Compare', 'Package diff', 'Folder check', 'Test saving', 'Server needs', 'Live']]]
+// The ⓘ beside a heading: data-help names a guide page and heading (E3.2); one listener, near the docs panel, opens it.
+const infoBtn = (name, target) => h('button', { type: 'button', class: 'info', 'data-help': target, 'aria-label': 'Help: ' + name, title: 'Help: ' + name }, h('span', { 'aria-hidden': 'true' }, 'ⓘ'))
+const GROUP_HELP = { Summary: 'guide/views.md#summary', Package: 'guide/views.md#package', 'What happened': 'guide/views.md#what-happened', 'Deep dive': 'guide/views.md#deep-dive', Tools: 'guide/views.md#tools' }
 console.assert(TABS.every(t => GROUPS.flat(2).filter(n => n === t).length === 1) && new Set(GROUPS.flatMap(g => g[1])).size === GROUPS.flatMap(g => g[1]).length, 'every view is in exactly one group')
 
 // ---- The code view: every file:line in evidence opens it (src/ui/codeview.js draws it, the code-view handler fills it) ----
@@ -70,7 +73,7 @@ const VIEWS = {
     if (!r) return [h('h3', { class: 'section' }, 'Package'), findingsList(st.pkg?.findings ?? [])]
     const redact = h('input', { type: 'checkbox', id: 'report-redact' })
     const v = r.verdict
-    return [v && h('div', { class: 'verdict ' + v.sev }, icon(SEV[v.sev][0]), h('b', {}, SEV[v.sev][1]), h('span', {}, v.text)),
+    return [v && h('div', { class: 'verdict ' + v.sev }, icon(SEV[v.sev][0]), h('b', {}, SEV[v.sev][1]), h('span', {}, v.text), infoBtn('the verdict', 'guide/reading-a-run.md#findings')),
       h('p', { class: 'muted small' }, `${r.label}. Saved to ${r.file || '(not saved)'}.`),
       r.milestones && h('p', { class: 'milestones' }, r.milestones.map(s => h('span', { class: s.reached ? 'ok' : 'bad', title: s.evidence }, `${s.reached ? '✓' : '✗'} ${s.label}`))),
       findingsList(r.findings),
@@ -616,6 +619,9 @@ const openDoc = (name, anchor = '', back) => act(async () => {
   if (docs.cur && !back) docs.hist.push([docs.cur, docs.anchor])
   Object.assign(docs, { cur: name, anchor })
   docBody.innerHTML = markdown(text, 'doc-')
+  const toc = headings(text).filter(x => x.level === 2 || x.level === 3)   // "On this page"
+  $('doc-toc').hidden = !toc.length; $('doc-toc').open = false
+  $('doc-toc').querySelector('ul').replaceChildren(...toc.map(x => h('li', { class: 'l' + x.level }, h('a', { href: '#' + x.id, onclick: e => { e.preventDefault(); docBody.querySelector('#' + CSS.escape('doc-' + x.id))?.scrollIntoView() } }, x.text))))
   $('doc-pick').value = name; $('doc-back').disabled = !docs.hist.length
   let target = null
   try { target = anchor && docBody.querySelector('#' + CSS.escape('doc-' + decodeURIComponent(anchor))) } catch { /* bad escape: top */ }
@@ -653,6 +659,23 @@ docBody.addEventListener('click', e => {
   const to = !/^[a-z][a-z0-9+.-]*:/i.test(href) && docLink(href)
   if (to) openDoc(...to)
 })
+// Search (E3.2): every doc's text is loaded once into docs.text, then searchDocs runs over it.
+let searchTimer
+const clearSearch = () => { $('doc-search').value = ''; $('doc-results').hidden = true; $('doc-results').replaceChildren(); $('doc-status').textContent = '' }
+$('doc-search').addEventListener('keydown', e => { if (e.key === 'Escape') { clearTimeout(searchTimer); clearSearch() } })
+$('doc-search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => act(async () => {
+  const q = $('doc-search').value, box = $('doc-results')
+  if (!q.trim() || !docs.list) return clearSearch()
+  await Promise.all(docs.list.map(async d => { docs.text[d.name] ??= await lab.invoke('doc', { name: d.name }) }))
+  if ($('doc-search').value !== q) return   // typed on, or cleared, while the docs loaded: a newer search owns the list
+  const hits = searchDocs(docs.list.map(d => ({ ...d, text: docs.text[d.name] })), q)
+  box.replaceChildren(...hits.map(r => { const li = h('li', {}, h('button', { type: 'button', class: 'link', 'data-doc': r.name, 'data-id': r.id }, h('b', {}, r.title + (r.heading ? ' › ' + r.heading : '')), h('span', { class: 'snip' }))); li.querySelector('.snip').innerHTML = r.html; return li }))
+  $('doc-status').textContent = hits.length ? `${hits.length} result${hits.length === 1 ? '' : 's'}` : 'Nothing found.'
+  box.hidden = !hits.length
+}), 150) })
+$('doc-results').addEventListener('click', e => { const b = e.target.closest('[data-doc]'); if (!b) return; clearSearch(); openDoc(b.dataset.doc, b.dataset.id) })
+// Context help: any [data-help] element opens that heading in the Help segment.
+document.addEventListener('click', e => { const b = e.target.closest('[data-help]'); if (!b) return; e.preventDefault(); const [n, a] = b.dataset.help.split('#'); openDoc(n, a) })
 $('doc-pick').onchange = () => openDoc($('doc-pick').value)
 $('doc-back').onclick = () => { const [n, a] = docs.hist.pop(); openDoc(n, a, true) }
 $('doc-close').onclick = () => showInspector(false)
@@ -700,8 +723,8 @@ function render() {
   const welcome = !st.pkg && !st.runs.length && !st.live.length && !st.batch && !st.running
   $('views').hidden = $('filter').parentElement.hidden = welcome
   const hadFocus = $('views').contains(document.activeElement)
-  $('views').replaceChildren(...visibleGroups().filter(g => g[1].length).flatMap(([g, names]) => [h('h2', {}, g), h('nav', { 'aria-label': g }, names.map(t => h('button', { type: 'button', 'aria-current': t === st.tab ? 'page' : null, tabindex: t === st.tab ? 0 : -1, onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))]))
-  if (!$('views').querySelector('[tabindex="0"]')) $('views').querySelector('button')?.setAttribute('tabindex', '0')   // the chosen view isn't listed: the list stays reachable with Tab
+  $('views').replaceChildren(...visibleGroups().filter(g => g[1].length).flatMap(([g, names]) => [h('h2', {}, g, infoBtn(g, GROUP_HELP[g])), h('nav', { 'aria-label': g }, names.map(t => h('button', { type: 'button', 'aria-current': t === st.tab ? 'page' : null, tabindex: t === st.tab ? 0 : -1, onclick: () => { st.tab = t; render() } }, t === 'Files' && overrides().length ? `Files (${overrides().length})` : t)))]))
+  if (!$('views').querySelector('[tabindex="0"]')) $('views').querySelector('nav button')?.setAttribute('tabindex', '0')   // the chosen view isn't listed: the list stays reachable with Tab
   if (hadFocus) $('views').querySelector('[aria-current]')?.focus()
   // Not while the file editor has focus: a redraw (a run or state event) would lose the cursor and scroll position.
   if (!(st.tab === 'Files' && document.activeElement?.classList.contains('code')) && !document.activeElement?.matches?.('#view .pins-form input, #view .answer-form input, #view .answer-form textarea')) $('view').replaceChildren(...[welcome ? startScreen() : VIEWS[st.tab]()].flat(Infinity).filter(x => x != null && x !== false))

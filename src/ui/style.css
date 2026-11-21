@@ -178,3 +178,18 @@ ol.chain li { margin: .35em 0; }
 @media (max-width: 800px) { #inspector { width: auto !important; border-left: 0; border-top: 1px solid var(--line); max-height: 60vh; } #inspector-resize { display: none; } }
 .welcome td:last-child { white-space: nowrap; }
 #set-port { width: 10ch; }
+
+/* Context help, docs search and contents (E3.2) */
+button.info { border: 0; background: transparent; color: var(--muted); padding: 0 3px; margin-left: 2px; font-size: 12px; line-height: 1; cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 400; }
+button.info:hover, button.info:focus-visible { color: var(--accent); }
+.verdict button.info { margin-left: auto; }
+.docs-search { padding: 6px 8px 0; } .docs-search input { width: 100%; box-sizing: border-box; }
+#doc-results { list-style: none; margin: 0; padding: 4px 8px; max-height: 40%; overflow: auto; border-bottom: 1px solid var(--line); }
+#doc-results button { display: block; text-align: left; width: 100%; padding: 3px 0; }
+#doc-results .snip { display: block; color: var(--muted); font-size: 12px; }
+#doc-results mark { background: var(--code); color: inherit; font-weight: 600; }
+#doc-toc { padding: 4px 14px; border-bottom: 1px solid var(--line); font-size: 12px; } #doc-toc ul { list-style: none; margin: 4px 0; padding: 0; max-height: 30vh; overflow: auto; } #doc-toc .l3 { padding-left: 14px; }
+.gwrap, .field-help { position: relative; }
+.gwrap > button.info, .field-help > button.info { position: absolute; right: 0; top: 6px; margin: 0; }
+.field-help > label { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; }
+.field-help > button.info { top: 0; }
