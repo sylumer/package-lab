@@ -103,6 +103,12 @@ Closed to begin with. It holds the options the next launch will use, and everyth
 
 The desktop app remembers these between sessions: **API**, **Profile**, **Frame depth**, **In a new window**, **Stop after**, **Record caught errors**, **Storage**, **Browser**, **Device size** and **Trace the code**. The web interface remembers them in each browser. **Item**, **Resume last run's data**, pins, answers and the macro are not remembered.
 
+## Appearance
+
+**Package Lab › Settings…** (⌘,) has an **Appearance** choice: **System** (the default), **Light** or **Dark**. It applies at once and is kept between sessions. System follows the Mac. The web interface has the same choice behind its **Settings** button, and keeps it in that browser only: another browser, or the Mac's own window, can use a different one.
+
+The course never sees this choice. A course in a run window is shown the Mac's own appearance, so you test what a learner on this Mac would see, whichever way Package Lab looks.
+
 ## On the command line
 
 Each setting has a flag, and **Copy as CLI command** writes one out for you. The table in [the app's settings as flags](../cli.md#the-apps-settings-as-flags) lists them, with the profile fields in [Profiles](../cli.md#profiles).

@@ -682,11 +682,21 @@ $('doc-close').onclick = () => showInspector(false)
 $('inspector-toggle').onclick = toggleInspector
 $('help').onclick = () => !inspEl.hidden && insp.seg === 'help' ? showInspector(false) : openInspector('help')
 $('summary').onclick = () => openInspector('settings')
-// Settings (desktop only: the menu sends it, and the handlers refuse the web interface).
+// Settings. The port is desktop only (the menu opens the dialog, and the handlers refuse the web interface). The appearance (E3.4) is in both:
+// the desktop app keeps it in settings.json and nativeTheme follows it; the web interface keeps it in this browser (localStorage 'pl.theme').
 let settingsDefault = 4880
 const setNote = t => { $('set-status').textContent = t }
+const setTheme = t => { if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme }
+const THEME_NOTE = 'System follows the Mac. Run windows always show the course the Mac’s own appearance.'
+const showTheme = t => { setTheme(t); const r = document.querySelector(`input[name=theme][value=${t === 'light' || t === 'dark' ? t : 'system'}]`); if (r) r.checked = true }
+if (lab.web) showTheme(store.get('pl.theme')); else lab.invoke('settings').then(s => showTheme(s.theme)).catch(() => {})
+for (const r of document.querySelectorAll('input[name=theme]')) r.onchange = () => { setTheme(r.value); if (lab.web) store.set('pl.theme', r.value); else act(() => lab.invoke('settings-set', { theme: r.value })) }
+$('set-theme-note').textContent = lab.web ? 'Kept in this browser only. System follows this device.' : THEME_NOTE
+for (const id of ['set-port-row', 'set-port-help', 'set-save']) $(id).hidden = !!lab.web
+$('open-settings').hidden = !lab.web; $('open-settings').onclick = () => openSettings()
 function openSettings() {
-  act(async () => { const s = await lab.invoke('settings'); settingsDefault = s.defaults.port; $('set-port').value = s.port; setNote(`Kept in ${s.path}`); $('settings').showModal() })
+  if (lab.web) { showTheme(store.get('pl.theme')); setNote(''); return $('settings').showModal() }
+  act(async () => { const s = await lab.invoke('settings'); settingsDefault = s.defaults.port; $('set-port').value = s.port; showTheme(s.theme); setNote(`Kept in ${s.path}`); $('settings').showModal() })
 }
 $('set-reset').onclick = () => { $('set-port').value = settingsDefault }
 $('set-save').onclick = async () => {

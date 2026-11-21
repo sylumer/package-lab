@@ -42,6 +42,10 @@ The port is the one in **Package Lab › Settings…** (⌘,), 4880 unless you c
 `package-lab settings port <n>` does the same. `--port` overrides the setting for one start. The default port is
 recorded in `~/github/PORTS.md`.
 
+The web interface's **Settings** button has only the **Appearance** choice (System, Light or Dark). It is kept in that
+browser and doesn't change the desktop app's setting. It applies to the window only: a report you save or download
+follows the device's own light or dark setting.
+
 ## Signing in
 
 The address includes an access token. Opening it once sets a cookie (for a year) and drops the token from the

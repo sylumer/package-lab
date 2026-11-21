@@ -1,5 +1,7 @@
-:root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d9d9de; --panel: #f5f5f7; --accent: #0a66d8; --err: #c4281c; --warn: #a15c00; --info: #4b5563; --good: #1e7d32; --code: #f0f0f3; --sidebar: var(--panel); }
-@media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #3a3a3c; --panel: #2c2c2e; --accent: #4c9bff; --err: #ff6b5e; --warn: #ffb340; --info: #b0b0b8; --good: #4cd964; --code: #2a2a2d; } }
+:root { color-scheme: light dark; --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d9d9de; --panel: #f5f5f7; --accent: #0a66d8; --err: #c4281c; --warn: #a15c00; --info: #4b5563; --good: #1e7d32; --code: #f0f0f3; --sidebar: var(--panel); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #3a3a3c; --panel: #2c2c2e; --accent: #4c9bff; --err: #ff6b5e; --warn: #ffb340; --info: #b0b0b8; --good: #4cd964; --code: #2a2a2d; } }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; --bg: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #3a3a3c; --panel: #2c2c2e; --accent: #4c9bff; --err: #ff6b5e; --warn: #ffb340; --info: #b0b0b8; --good: #4cd964; --code: #2a2a2d; }
 body.mac { --sidebar: color-mix(in srgb, var(--panel) 55%, transparent); }
 /* Vibrancy (macOS only): the page is see-through and only the content areas are opaque, so just the sidebar shows the desktop. */
 html:has(body.mac), body.mac { background: transparent; }

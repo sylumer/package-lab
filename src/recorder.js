@@ -50,8 +50,8 @@ export class Recorder {
   // storage: the run's effective mode (profiles.js storageMode); 'blocked' puts a line ahead of the probe that makes it block storage.
   // trace (a traced run, P1.4) puts trace-probe.js ahead of the probe too; its reports go to trace.exec.
   // viewport (P2.3): a device size, applied through Emulation to the page, and its user agent to every frame (a pinned user agent wins).
-  constructor(wc, { label, caught = true, pins = [], responses = [], trace = false, storage = 'normal', viewport = null, recordInput = false } = {}) {
-    this.wc = wc; this.dbg = wc.debugger; this.caught = caught; this.t0 = Date.now(); this.sessions = new Set([''])
+  constructor(wc, { label, caught = true, pins = [], responses = [], trace = false, storage = 'normal', viewport = null, recordInput = false, dark } = {}) {
+    this.dark = dark; this.wc = wc; this.dbg = wc.debugger; this.caught = caught; this.t0 = Date.now(); this.sessions = new Set([''])
     this.probe = probeSource({ pins, responses, trace, storage, recordInput }); this.userAgent = userAgentPin(pins) ?? (viewport?.userAgent || undefined); this.viewport = viewport; this.responses = responses; this.answered = new Map()
     this.traced = trace; this.execCount = 0
     this.trace = { label, browser: 'chromium', started: new Date().toISOString(), targets: [], scripts: [], requests: [], navigations: [], console: [], exceptions: [],
@@ -64,6 +64,9 @@ export class Recorder {
   push(list, item) { if (this.trace[list].length < CAP[list]) this.trace[list].push(item); else this.trace.truncated[list] = true }
   send(method, params = {}, sid) { return this.dbg.sendCommand(method, params, sid || undefined) }
 
+  // The colour scheme the content sees (E3.4): true or false pins it to the system's, undefined leaves it alone. Applies to every frame now and later.
+  media() { return { features: this.dark === undefined ? [] : [{ name: 'prefers-color-scheme', value: this.dark ? 'dark' : 'light' }] } }
+  setDark(dark) { this.dark = dark; return Promise.all([...this.sessions].map(sid => this.send('Emulation.setEmulatedMedia', this.media(), sid).catch(() => {}))) }
   async start() {
     this.dbg.attach('1.3')
     this.dbg.on('message', (_e, method, params, sid) => this.onEvent(method, params, sid || '').catch(() => {}))
@@ -84,6 +87,7 @@ export class Recorder {
       await s('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor, mobile })
       await s('Emulation.setTouchEmulationEnabled', { enabled: touch })
     }
+    if (this.dark !== undefined) await s('Emulation.setEmulatedMedia', this.media())   // after the device size and user agent
     if (this.responses.length) await s('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] })
     if (type === 'page' || type === 'iframe') { await s('Page.enable'); await s('Page.addScriptToEvaluateOnNewDocument', { source: this.probe }) }
     await s('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true })

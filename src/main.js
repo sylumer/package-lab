@@ -151,7 +151,7 @@ function addRun(kind, label, launch, trace, boot) {
 // Popups (window-opener profiles, or content that opens itself in a new window) get their own recorder, merged at the end.
 function watchPopups(wc, extra, ropts, wins, top = true) {
   wc.on('did-create-window', child => {
-    const rec = new Recorder(child.webContents, ropts)
+    const rec = new Recorder(child.webContents, { ...ropts, dark: courseDark() })   // the setting now, not the run's start
     if (ropts.viewport) child.setContentSize(ropts.viewport.width, ropts.viewport.height)
     rec.onProbe = p => emit('probe', p)
     extra.push(rec); wins.push(child)
@@ -177,7 +177,7 @@ async function begin({ kind, label, url, launch, partition, lrs: lrsConfig, caug
     webPreferences: { partition, sandbox: true, contextIsolation: true, backgroundThrottling: false } })
   // A device size (P2.3): the window is that size too, so the live view shows (and clicks land on) the emulated page.
   if (viewport) win.setContentSize(viewport.width, viewport.height)
-  const ropts = { caught, pins, responses, trace: !!trace, storage, viewport, recordInput }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
+  const ropts = { caught, pins, responses, trace: !!trace, storage, viewport, recordInput, dark: courseDark() }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
   rec.onProbe = p => emit('probe', p)
   rec.setWindow(...win.getContentSize()); win.on('resize', () => { if (!win.isDestroyed()) rec.setWindow(...win.getContentSize()) })   // trace.window: what a macro made from the run is recorded at
   if (lrsConfig) lrs = createLrs({ ...lrsConfig, now: () => rec.t() })   // its times are on the run's clock, like the probe's
@@ -688,7 +688,10 @@ function macroPath(name) {
 }
 const handlers = {
   settings: () => ({ ...readSettings(app.getPath('userData')), defaults: { port: DEFAULT_PORT }, path: join(app.getPath('userData'), 'settings.json') }),
-  'settings-set': async ({ port }) => { const settings = writeSettings(app.getPath('userData'), { port: +port }); return { settings, free: await portFree(settings.port) } },
+  'settings-set': async ({ port, theme }) => {   // either one alone is fine: the appearance applies at once (E3.4), the port when the web interface next starts
+    const settings = writeSettings(app.getPath('userData'), { ...(port !== undefined && { port: +port }), ...(theme !== undefined && { theme }) })
+    applyTheme(); return { settings, free: await portFree(settings.port) }
+  },
   docs: () => DOCS,
   doc: ({ name }) => {   // name comes from a browser in the web interface: only the bundled docs. Their PNG images come inline (docs.js inlineImages).
     if (!DOCS.some(d => d.name === name)) throw new Error('No such document.')
@@ -912,6 +915,18 @@ if (WINDOW) {
 const accent = () => { try { const c = systemPreferences.getAccentColor(); return /^[0-9a-f]{6}/i.test(c) ? '#' + c.slice(0, 6) : '' } catch { return '' } }
 ipcMain.handle('accent', accent)
 if (process.platform === 'darwin') systemPreferences.on('accent-color-changed', () => { if (ui && !ui.isDestroyed()) ui.webContents.send('accent', accent()) })
+// Appearance (E3.4): the window follows the setting through nativeTheme.themeSource (PACKAGE_LAB_THEME, for the screenshots, wins). That would also
+// change what a course in a run window sees, so while the setting isn't 'system' the run windows are told the real system appearance.
+// ponytail: off macOS the system appearance is read once at startup, so a change while the app is open isn't followed (use nativeTheme 'updated' if it matters).
+const osDark0 = nativeTheme.shouldUseDarkColors
+const osDark = () => { try { return process.platform === 'darwin' ? systemPreferences.getUserDefault('AppleInterfaceStyle', 'string') === 'Dark' : osDark0 } catch { return osDark0 } }
+const courseDark = () => nativeTheme.themeSource === 'system' ? undefined : osDark()
+const syncCourseTheme = () => { if (active) for (const r of [active.rec, ...active.extra]) r.setDark(courseDark()) }
+function applyTheme() {
+  nativeTheme.themeSource = ['light', 'dark'].includes(process.env.PACKAGE_LAB_THEME) ? process.env.PACKAGE_LAB_THEME : readSettings(app.getPath('userData')).theme
+  syncCourseTheme()
+}
+if (process.platform === 'darwin') systemPreferences.subscribeNotification('AppleInterfaceThemeChangedNotification', () => setTimeout(syncCourseTheme, 200))
 // macOS only: the toolbar is the title bar (E2.1), with the traffic lights inset and the sidebar's translucency showing the desktop.
 const MAC_WINDOW = process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' } : {}
 function createWindow() {
@@ -956,8 +971,7 @@ function buildMenu() {
 
 app.whenReady().then(async () => {
   if (WINDOW) buildMenu()
-  // The screenshots (scripts/screenshots.js) pick the theme with PACKAGE_LAB_THEME; otherwise the window follows the system.
-  if (['light', 'dark'].includes(process.env.PACKAGE_LAB_THEME)) nativeTheme.themeSource = process.env.PACKAGE_LAB_THEME
+  applyTheme()   // the setting, or PACKAGE_LAB_THEME (the screenshots, scripts/screenshots.js)
   const lab = session.fromPartition('lab')
   lab.protocol.handle('lab', serve)
   // The content sees https://lms.lab.invalid/ and https://cdn.content.invalid/ (WEBKIT_ORIGINS); they are served as lab://run and lab://content. Any other
