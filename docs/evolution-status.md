@@ -5,7 +5,7 @@ commit. The states are `todo`, `in progress`, `done` and `skipped` (with the rea
 
 ## Summary
 
-Phase 0 in progress.
+Phase 0 done: `test/ui.js` drives the real app through Playwright's Electron driver (`npm run test:ui`, also in `--slow`); slow suite passed and merged into main. Phase 1 in progress.
 
 Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
 
@@ -13,8 +13,8 @@ Each commit column is filled in by the following work package's commit, since a 
 
 | # | Work package | Model | State | Commit | Notes |
 |---|---|---|---|---|---|
-| E0.1 | UI smoke test harness | sonnet | done | | Playwright `_electron` works with Electron 45; no fallback needed. One review round. |
-| E1.1 | Macro format 2: window size and wait steps | sonnet | todo | | |
+| E0.1 | UI smoke test harness | sonnet | done | 5736ac5 | Playwright `_electron` works with Electron 45; no fallback needed. One review round. |
+| E1.1 | Macro format 2: window size and wait steps | sonnet | done | | One review round: wait text now counts toward the 100 KB text cap; out-of-order events were already sorted by `check.macro`. The 800×600 test uses latebutton, not good (see decisions.md). |
 | E1.2 | Clicks tied to the element clicked | sonnet | todo | | |
 | E1.3 | Record from the desktop app | haiku | todo | | |
 | E2.1 | Window chrome and one toolbar | sonnet | todo | | |

@@ -98,7 +98,7 @@ src/
   redact.js             Redacted reports (P4.4): redactRun, the copy of a run with the course content taken out
   fixes.js              Corrected package export: FIXES (the six autofixes, in run order), correct, prove, exportFixed (P3.1)
   experiments.js        Experiments: PRESETS (api, frames, standard, lms, storage, browsers), planVariants, runResult, summarise, experimentFindings (P0.3)
-  cycle.js              Save and resume: macros (readMacro, macroFile), resumeOptions, cycleFindings, cycleRows (P2.4)
+  cycle.js              Save and resume: macros (readMacro, macroFile, macroDelays, quietFor, withMacroSize), resumeOptions, cycleFindings, cycleRows (P2.4)
   timeline.js           The Timeline: timelineModel (lanes in ms) and timelineView (fractions of the window shown), for the tab and the report (P4.2)
   ui/                   The interface (desktop window and web)
     index.html, style.css, app.js (an ES module)
@@ -185,7 +185,7 @@ and a line in the guides. The shape:
   files: { path: { content } | { base64 } },
   pins: [{ path, value (JSON), frames: 'content'|'all', mode: 'force' } | { path, frames, mode: 'watch' }],
   responses: [{ match, method?, status, headers, body }], launchParams: 'a=1&b=2', storage: 'normal'|'blocked'|'partitioned' (see Storage), trace: false,
-  macro: [{ t (ms), type: 'click'|'move'|'wheel'|'key'|'text', x, y, dy, key, text }] (see Save and resume) }
+  macro: [{ t (ms), type: 'click'|'move'|'wheel'|'key'|'text'|'wait', x, y, dy, key, text, ms, milestone, quiet, timeout }] (see Save and resume) }
 ```
 
 The UI keeps the remembered launch options (the ones listed in the [user guide](user-guide.md#testing-a-theory-launch-settings)) in localStorage under `pl.launch`; in the web interface that is per browser. The docs panel's state is under `pl.docs`.
@@ -232,9 +232,9 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `source` | `{ run, url }` or `{ run, path }` | A script's source from a run, by address; or by package path (the Execution tab): the script as recorded, or for a page, the file the run was served (its changed file, or the open package's if it is that package), else `''` |
 | `live-input` | an input event | `true` if delivered |
 | `macro-record` | `{ on? }` (default true) | Whether recording is on. Turning it on clears what was recorded |
-| `macro-save` | — | The recorded events as a checked macro (`[{ t, type, … }]`); recording stops |
-| `macro-from-run` | `{ run }` | The macro made from the `input` reports the probe saw in that run |
-| `cycle-start` | `{ item, …launch options (the macro too) }` | `true`, at once; progress comes as `cycle` events (see [Save and resume](#save-and-resume-p24)). Throws in WebKit, or if a run, experiment, discovery or drill-down is under way |
+| `macro-save` | — | `{ events, viewport }`: the recorded events as a checked macro, and the content size of the window at the first one; recording stops |
+| `macro-from-run` | `{ run }` | `{ events, viewport }`: the macro made from the `input` reports the probe saw in that run, and `trace.window` (or null) |
+| `cycle-start` | `{ item, macroSize?, …launch options (the macro too) }` | `true`, at once; progress comes as `cycle` events (see [Save and resume](#save-and-resume-p24)). Throws in WebKit, or if a run, experiment, discovery or drill-down is under way |
 | `cycle-stop` | — | `true`: stops the run in progress and the rest of the cycle |
 | `settings` | — | The settings, as `readSettings` returns them (desktop only, in `DESKTOP_ONLY`) |
 | `settings-set` | `{ port }` | `{ settings, free }`: the saved settings and whether the port was free. A bad port is refused (desktop only) |
@@ -419,7 +419,7 @@ auto-attached target too). It reports through the `__labReport` binding:
 | `{ type: 'input', kind, x, y, key, text }` | P2.4, content frames only: a trusted `pointerdown` (left button; `kind: 'click'`, `x` and `y` 0–1 across the top frame, the frames' offsets added up where they can be reached), a `keydown` of a named key (`kind: 'key'`, `key` in the names `live-input` takes) or an `input` event with text (`kind: 'text'`). A click whose frames can't all be reached (another origin) has `approx: true`. Text is reported only when the run has `recordInput` (the probe prefix `window.__labText`), and for a target (`composedPath()[0]`) that is a password field or has `autocomplete` `current-password`, `new-password`, `cc-…` or `one-time-code` it is `{ kind: 'text', length, redacted: true }`, and its `keydown`s aren't reported at all. At most 2,000 per frame. `macroFromTrace` (`src/cycle.js`) turns them into macro events |
 | `{ type: 'unload', event, listeners, props }` | P2.4, content frames only: once, when the first of `beforeunload`, `pagehide` and `unload` reaches the window (a capture listener, added first). `listeners` counts the listeners the content added on its window for each of the three (by the `addEventListener` hook); `props` lists the `on…` handlers it has (also those of `<body onunload>`). Later ones aren't reported: a page that is going away may not get a report out |
 | `{ type: 'cmi-now', values }` | From the test LMS's page (`host.js`), only when the page's config has `snapshots` (a run that will leave like a learner: `launchItem` sets it from `leave`), after each call that can change the data model (`SetValue`, `Commit`, `Finish`, `Terminate`): at most every 250 ms, and at once once the page is hiding. The recorder keeps only the last as `lastCmi` and does not put it in `trace.probe`; WebKit never gets them |
-| `{ type: 'leave' }`, `{ type: 'dialog', kind, message, leaving }`, `{ type: 'macro-skipped', count, message }` | Made by the main process through the recorder, not by the probe. `leave`: where the learner-style leave starts (`cycle.js` reads the unload reports and API calls after the last one). `dialog`: a JavaScript dialog opened (a `beforeunload` prompt is accepted only while `leaving`; otherwise it is left as before). `macro-skipped`: approximate clicks a macro didn't replay |
+| `{ type: 'leave' }`, `{ type: 'dialog', kind, message, leaving }`, `{ type: 'macro-skipped', count, message }`, `{ type: 'macro-size', recorded, used }`, `{ type: 'macro-wait', event, waited, for }` | Made by the main process through the recorder, not by the probe. `leave`: where the learner-style leave starts (`cycle.js` reads the unload reports and API calls after the last one). `dialog`: a JavaScript dialog opened (a `beforeunload` prompt is accepted only while `leaving`; otherwise it is left as before). `macro-skipped`: approximate clicks a macro didn't replay |
 | `{ type: 'dom', readyState, text, sample, visible, media, frames, loader, hidden, elements, w, h }` | What the frame shows. Sent at DOMContentLoaded, load, page hide, and 1–60 s after start, only when it changes. Not sent from Package Lab's host pages |
 
 The recorder adds `t` (ms since start), `sid` and `frame` (the frame's URL). Its `t` and `sid` win over any the
@@ -466,15 +466,30 @@ isn't recorded as a caught error). The lists are capped (5,000 scripts,
 
 ## Save and resume (P2.4)
 
-`src/cycle.js` is pure: `readMacro`, `macroFromTrace`, `resumeOptions`, `cycleFindings`, `cycleRows` (and `summarise`, what
+`src/cycle.js` is pure: `readMacro`, `macroFile`, `macroDelays`, `quietFor`, `withMacroSize`, `macroFromTrace`, `resumeOptions`, `cycleFindings`, `cycleRows` (and `summarise`, what
 one run did, from its `api` and `unload` probe reports). `main.js`, the CLI and the apps run the two launches.
 
 **Macros.** `options.macro` is `[{ t, type, … }]` (see the [CLI guide](cli.md#macros) for the events); `normaliseOptions`
 checks every event and sorts by `t`, with caps (2,000 events, 100 KB of text, `t` within an hour). `launchItem` plays
-it: each event is `live.input(e, true)` at `t` ms after the launch, through the same code as the live view (to the newest
-window of the run, with `sendInputEvent`), as long as the same run is still active. `live.input` also records its events
+it with `playMacro(a, events, from = 0, to)` (`main.js`), one async function: each event is `live.input(e, true)` after
+the sleep `macroDelays(events)` gives (the gap since the event before; the first, its own `t`), through the same code as
+the live view (to the newest window of the run, with `sendInputEvent`), as long as the same run is still active. The player
+keeps to a clock (each event is due at the start plus the delays added up, reset after a wait) so timers' lateness doesn't
+add up. An `approx` click is skipped. A `wait` event blocks in `waitMet`, checked every 250 ms until `timeout` (default
+30 s; `ms` waits just sleep): `text` is a `Runtime.evaluate` in every attached session of the run's recorders (`rec.sessions`),
+walking `document` and the same-origin `iframe`/`frame` `contentDocument`s (nothing is thrown, so nothing is recorded as a
+caught error); `milestone` is `milestones(rec.trace, boot)` and its `reached`; `quiet` is `quietFor(rec.req values, rec.t())`
+(no pending request, and the last one ended that long ago). On timeout the player pushes `{ type: 'macro-wait', event: i
+(0-based), waited, for: { text } | { milestone } | { quiet } }` and stops; `runFindings` turns it into a warning, and
+`redact.js` cuts `for.text`. `from` and `to` are for playing part of a macro (the macro editor). `launchItem` also takes
+`macroSize` (`{ width, height }`: a macro file's `viewport`; the headless job's `macroSize` is the same): `withMacroSize` sets
+the run's `viewport` to it when the run has none, or returns a `macro-size` note when the run's own size differs, which
+`launchItem` pushes into the trace and `runFindings` turns into an info finding. The CLI and the UI also set `viewport` from
+the macro in the options they build, so the options JSON and the CLI line show it. `live.input` also records its events
 (with `t` from the start of the run) while `macro.recording` is on: the `macro-record` handler starts it and `macro-save`
-stops it and returns them. The interface keeps the macro (`st.macro`) with its other options and sends it with every
+stops it and returns them with the window's content size at the first one (`macro.viewport`). `Recorder.setWindow` keeps
+`trace.window = { width, height }`, the run window's content size at the start and after each resize (the last value stays);
+`macro-from-run` returns it as the macro's `viewport`. The interface keeps the macro (`st.macro = { events, viewport }`) with its other options and sends it with every
 launch, as it does pins; `macro-from-run` returns the macro for a run made from its `input` reports. Macros and
 the cycle are refused in WebKit (`webkitMacro`, in `main.js` and the CLI): there is no input to replay.
 
@@ -1295,7 +1310,7 @@ Every file or object the tools read and write, and where each is described:
 | Discovery (`package-lab-discovery`, version 1) | `discoveries/` in the data folder; `discover --out` | [Saved discovery](#saved-discovery-package-lab-discovery-version-1) |
 | Experiment result (`experiment.json`) | `experiment --out`; the Experiments tab | [below](#experiment-result-experimentjson) |
 | Cycle result | `cycle --json`; `cycle --out` keeps the two runs | [below](#cycle-result) |
-| Macro (`package-lab-macro`, version 1) | A macro file; the `macro` option | [below](#macro-package-lab-macro-version-1) |
+| Macro (`package-lab-macro`, version 2) | A macro file; the `macro` option | [below](#macro-package-lab-macro-version-2) |
 | Profile | The `profile` option (a name or an object); `--profile-file` | [LMS profiles](#lms-profiles) |
 | Rule pack | `src/packs/<tool>.js` | [Rule packs](#rule-packs-p32) |
 | Boot graph | `analysis.boot`; a run's `boot` | [The boot graph](#the-boot-graph) |
@@ -1331,6 +1346,7 @@ Every file or object the tools read and write, and where each is described:
     coverage:   [{ sid, id, url, hash, fns: [[name, [start, end, count, …]]] }],
     sources:    { url: source },
     truncated:  { list: true },                            // exec: true when trace events were dropped
+    window:     { width, height } | undefined,             // E1.1: the run window's content size at the start and after its last resize (Chromium runs; a macro made from the run is recorded at it)
     cmi:        { '1.2'?: { element: value }, '2004'?: { … } } | null,
     lrs:        lrsRecord | undefined                      // P4.5, cmi5 and Tin Can runs: see The LRS record (launch.format is then 'cmi5' | 'tincan', launch.expose 'none')
   }
@@ -1378,14 +1394,16 @@ A frame is `{ fn, url, line, col }`. Older runs without `format` (from before ve
 its own list, `CMI5_STEPS` or `TINCAN_STEPS` in `src/milestones.js` (`stepsFor(format)` picks it), so read `id`s
 against that list, not against `STEPS`.
 
-### Macro (`package-lab-macro`, version 1)
+### Macro (`package-lab-macro`, version 2)
 
-A macro file is a list of events, or this object (`macroFile(events)` in `src/cycle.js` writes it; `readMacro` reads
-either form):
+A macro file is a list of events, or this object (`macroFile(events, viewport)` in `src/cycle.js` writes it; `readMacro` reads
+version 1, version 2 and a bare list, and returns `{ events, viewport }`, with `viewport: null` when the file has none):
 
 ```js
-{ format: 'package-lab-macro', version: 1,
-  events: [{ t, type: 'click' | 'move' | 'wheel' | 'key' | 'text', x, y, dy, key, text, approx? }] }
+{ format: 'package-lab-macro', version: 2,
+  viewport: { width, height },            // the window the positions are across (version 1: none)
+  events: [{ t, type: 'click' | 'move' | 'wheel' | 'key' | 'text' | 'wait', x, y, dy, key, text, approx?,
+             ms | text | milestone | quiet, timeout? }] }   // the last line is for `wait`: exactly one of the four
 ```
 
 `t` is the time in milliseconds from the start of the run (0 to 3,600,000). Limits: 2,000 events and 100 KB of typed text

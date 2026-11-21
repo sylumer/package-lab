@@ -59,6 +59,8 @@ export class Recorder {
     this.req = new Map(); this.scriptUrl = new Map()   // sid:scriptId → url, for blocked lookups' stacks
   }
   t() { return Date.now() - this.t0 }
+  // The run window's content size (E1.1): now, and again whenever it changes; the trace keeps the last. A macro made from the run plays at it.
+  setWindow(width, height) { this.trace.window = { width, height } }
   push(list, item) { if (this.trace[list].length < CAP[list]) this.trace[list].push(item); else this.trace.truncated[list] = true }
   send(method, params = {}, sid) { return this.dbg.sendCommand(method, params, sid || undefined) }
 

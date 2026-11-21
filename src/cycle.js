@@ -3,13 +3,32 @@
 // Running the two launches is up to the caller (src/main.js in the apps, bin/package-lab.js headless).
 import { normaliseOptions } from './options.js'
 
-// A macro file is a list of events, or { format: 'package-lab-macro', version: 1, events }. Returns the checked events.
+// A macro's recorded window size: { width, height } in whole pixels (100 to 10000), or null. Throws on a size that isn't one.
+const macroSize = v => { if (v == null) return null; const { width, height } = normaliseOptions({ viewport: v }).viewport; return { width, height } }
+// A macro file is a list of events, or { format: 'package-lab-macro', version: 1 or 2, viewport?, events }. Returns the checked
+// events and the window size they were recorded at ({ width, height }, or null: version 1 files and bare lists have none).
 export function readMacro(json) {
   const events = Array.isArray(json) ? json : json && typeof json === 'object' && Array.isArray(json.events) ? json.events : null
   if (!events) throw new Error('A macro file holds a list of events, or { "events": [ … ] }.')
-  return normaliseOptions({ macro: events }).macro
+  return { events: normaliseOptions({ macro: events }).macro, viewport: Array.isArray(json) ? null : macroSize(json.viewport) }
 }
-export const macroFile = events => ({ format: 'package-lab-macro', version: 1, events })
+export const macroFile = (events, viewport = null) => ({ format: 'package-lab-macro', version: 2, ...(viewport ? { viewport: macroSize(viewport) } : {}), events })
+export { macroSize }
+
+// The sleep before each event: the time since the one before (the first: its own time).
+export const macroDelays = events => events.map((e, i) => Math.max(0, e.t - (i ? events[i - 1].t : 0)))
+
+// How long no request has been pending, in ms at time `now` on the run's clock; 0 while one is. requests: the recorder's (t, end).
+export const quietFor = (requests, now) => requests.some(r => r.end === undefined) ? 0 : now - Math.max(0, ...requests.map(r => r.end))
+
+// A macro recorded at a size plays at that size when the run has none; with another size the run's wins, and the note says so
+// (rules.js turns it into a finding). recorded: { width, height } or null.
+export function withMacroSize(options, recorded) {
+  if (!recorded || !options.macro.length) return { options, note: null }
+  if (!options.viewport) return { options: { ...options, viewport: normaliseOptions({ viewport: `${recorded.width}x${recorded.height}` }).viewport }, note: null }
+  const used = { width: options.viewport.width, height: options.viewport.height }
+  return { options, note: used.width === recorded.width && used.height === recorded.height ? null : { type: 'macro-size', recorded, used } }
+}
 
 // The clicks, keys and typing the probe saw in the content's frames (probe.js, type 'input'), as macro events.
 // Text kept only with the recordInput option, and never from password-like fields (the probe reports those by length only, and they are left out here).

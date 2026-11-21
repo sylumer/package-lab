@@ -32,7 +32,7 @@ import { renderReport, verdict, counts, screens, experimentHtml } from '../src/r
 import { COMMANDS, zshCompletion } from '../src/completion.js'
 import { launchPlan, runAnalysis, savedRun, WEBKIT_ORIGINS } from '../src/launch.js'
 import { comparePackages, compareBehaviour } from '../src/pkgdiff.js'
-import { readMacro, cycleFindings, cycleRows, resumeOptions } from '../src/cycle.js'
+import { readMacro, withMacroSize, cycleFindings, cycleRows, resumeOptions } from '../src/cycle.js'
 import { availableParallelism } from 'node:os'
 import { batchFiles, staticRows, runRow, failedRun, batchSummary, summaryText, batchTable, batchCsv, batchHtml } from '../src/batch.js'
 
@@ -96,7 +96,7 @@ Options for run (and report --run)
   --viewport <size>         A device size: iphone, ipad, android-phone, or WIDTHxHEIGHT like 390x844. Default: the window as it is.
   --storage <mode>          Storage in the content's frames: normal (default), blocked (what Safari does for content in another site's
                             page) or partitioned (empty at the start of the run).
-  --macro <file.json>       Clicks, keys and typing to play during the run, at their times (a list of events; see docs/cli.md). Chromium only.
+  --macro <file.json>       Clicks, keys, typing and waits to play during the run, at their times, at the size they were recorded at (see docs/cli.md). Chromium only.
   --record-input            Keep the text typed in the content in the run (never from password fields), to make a macro from it.
   --trace                   Record which functions ran and which way each decision went (the saved run's trace.exec).
   --out <run.json>          Keep the full run (open it in the desktop app with Open saved…).
@@ -339,8 +339,13 @@ function overrideFiles(list = []) {
   }
   return Object.fromEntries(files)
 }
-// --macro file.json: a list of events, or { events }.
+// --macro file.json: a list of events, or { events, viewport? } (format 1 or 2). Returns { events, viewport }; each file is read once.
+const macroFiles = new Map()
 function macroFile(path) {
+  if (!macroFiles.has(path)) macroFiles.set(path, readMacroFile(path))
+  return macroFiles.get(path)
+}
+function readMacroFile(path) {
   if (typeof path !== 'string' || !path) fail('--macro needs a JSON file of events.')
   if (!existsSync(path)) fail(`No such file: ${path}`)
   let j
@@ -359,7 +364,7 @@ function flagOptions(o) {
   if (o.storage !== undefined) f.storage = o.storage
   if (o.browser !== undefined) f.browser = o.browser
   if (o.viewport !== undefined) f.viewport = o.viewport
-  if (o.macro !== undefined) f.macro = macroFile(o.macro)
+  if (o.macro !== undefined) f.macro = macroFile(o.macro).events
   if (o['record-input']) f.recordInput = true
   if (o.tool !== undefined) f.tool = o.tool
   // --profile-file holds a custom profile: { base?, …fields }. With --profile too, that name is its base unless it names one.
@@ -381,7 +386,12 @@ function buildOptions(o) {
     const a = asFail(() => parseAnswerFlag(x))
     return a.file !== undefined ? { match: a.match, body: readText(a.file) } : a
   })]
-  try { return normaliseOptions({ ...f, ...flags }) } catch (e) { fail(e.message) }
+  let options
+  try { options = normaliseOptions({ ...f, ...flags }) } catch (e) { fail(e.message) }
+  // A macro recorded at a size plays at that size unless --viewport (or the options file) says otherwise.
+  const size = o.macro !== undefined && !options.viewport && options.macro.length ? macroFile(o.macro).viewport : null
+  if (size) { options = withMacroSize(options, size).options; if (!o.json) process.stderr.write(`Playing the macro at ${options.viewport.width}x${options.viewport.height}, the size it was recorded at.\n`) }
+  return options
 }
 
 // Runs one item headless and returns the saved run. Options as for the run command.
@@ -392,7 +402,7 @@ function runPackage(pkg, o, options) {
   const wait = options.wait
   if (options.browser === 'webkit' && (options.macro.length || o.close)) { rmSync(dir, { recursive: true, force: true }); fail('Macros and the save-and-resume test run in Chromium only: WebKit runs have no input to replay.') }
   if (options.browser === 'webkit') return runWebkit(pkg, item, o, options, dir, out)
-  const job = { zip: pkg.path, item: item.index, options, resumeFrom: o['resume-from'] ? resolve(o['resume-from']) : null, close: !!o.close, out, live: o.live ? resolve(o.live) : null }
+  const job = { zip: pkg.path, item: item.index, options, macroSize: o.macro !== undefined ? macroFile(o.macro).viewport : null, resumeFrom: o['resume-from'] ? resolve(o['resume-from']) : null, close: !!o.close, out, live: o.live ? resolve(o.live) : null }
   writeFileSync(join(dir, 'job.json'), JSON.stringify(job))
   const [bin, pre] = electron(), log = join(dir, 'electron.log'), fd = openSync(log, 'w')
   const r = spawnSync(bin, [...pre, `--run=${join(dir, 'job.json')}`, ...(o.show ? ['--show-runs'] : [])], { stdio: ['ignore', 'ignore', fd], timeout: (wait + 120) * 1000 })

@@ -12,7 +12,7 @@ const short = u => (u || '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
 const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
-const st = { macro: [], cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
+const st = { macro: { events: [], viewport: null }, cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
 const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'xAPI', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', ...(lab.web ? [] : ['Folder check']), 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
 
 // ---- The code view: every file:line in evidence opens it (src/ui/codeview.js draws it, the code-view handler fills it) ----
@@ -338,7 +338,7 @@ VIEWS['Test saving'] = () => {
   return [h('p', { class: 'muted small' }, 'Runs the item with the settings above and plays the macro (More options). Then it leaves the way a learner closing the window does, and runs the item again with the data that was saved, to see whether the content saved its place and went back to it. Each run lasts as long as “Stop after” (10 s if that is “I stop it”). Chromium only.'),
     h('div', { class: 'row' }, h('button', { type: 'button', disabled: off, onclick: startCycle }, 'Test saving'),
       h('button', { type: 'button', class: 'secondary', disabled: !x.busy, onclick: () => act(() => lab.invoke('cycle-stop')) }, 'Stop'),
-      h('span', { class: 'muted small' }, `${x.note} Macro: ${st.macro.length ? st.macro.length + ' events' : 'none (nothing will be clicked)'}.`)),
+      h('span', { class: 'muted small' }, `${x.note} Macro: ${st.macro.events.length ? st.macro.events.length + ' events' : 'none (nothing will be clicked)'}.`)),
     x.rows.length ? h('table', {}, h('thead', {}, h('tr', {}, ['', 'Run 1: leaves', 'Run 2: resumes'].map(c => h('th', {}, c)))),
       h('tbody', {}, x.rows.map(r => h('tr', {}, h('th', {}, r.label), h('td', {}, r.a), h('td', {}, r.b))), h('tr', {}, h('td', {}), h('td', {}, open(x.runs[0])), h('td', {}, open(x.runs[1]))))) : null,
     x.findings.length ? [h('h3', { class: 'section' }, 'Findings'), findingsList(x.findings)] : null]
@@ -347,7 +347,7 @@ function startCycle() {
   const x = st.cyc
   act(async () => {
     Object.assign(x, { busy: true, note: 'Starting…', rows: [], findings: [], runs: [] }); st.tab = 'Test saving'; render()
-    try { await lab.invoke('cycle-start', { item: +$('item').value, ...launchOptions(), wait: +$('auto').value || 10 }) } catch (e) { x.busy = false; x.note = ''; throw e }
+    try { await lab.invoke('cycle-start', { item: +$('item').value, ...launchOptions(), macroSize: macroSize(), wait: +$('auto').value || 10 }) } catch (e) { x.busy = false; x.note = ''; throw e }
   })
 }
 
@@ -430,7 +430,7 @@ const livePanel = h('div', { class: 'live' },
   liveImg, liveInfo,
   h('div', { class: 'row' }, liveText, h('button', { type: 'button', onclick: () => { if (liveText.value) { liveInput({ type: 'text', text: liveText.value }); liveText.value = '' } } }, 'Type'),
     ...['Enter', 'Tab', 'Escape', 'Backspace', 'Space', 'Up', 'Down', 'Left', 'Right'].map(k => h('button', { type: 'button', class: 'secondary', onclick: () => liveInput({ type: 'key', key: k }) }, k))),
-  h('div', { class: 'row' }, recordBtn, h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => { st.macro = await lab.invoke('macro-save'); recording(false); showMacro(); showOptions(); say(`Macro saved: ${st.macro.length} events. It plays at the start of each launch.`) }) }, 'Save macro'), liveMacro))
+  h('div', { class: 'row' }, recordBtn, h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => { st.macro = await lab.invoke('macro-save'); recording(false); showMacro(); showOptions(); say(`Macro saved: ${st.macro.events.length} events. It plays at the start of each launch.`) }) }, 'Save macro'), liveMacro))
 const at01 = e => ({ x: e.offsetX / liveImg.clientWidth, y: e.offsetY / liveImg.clientHeight })
 liveImg.addEventListener('click', e => { liveImg.focus(); liveInput({ type: 'click', ...at01(e) }) })
 let wheelAt = 0
@@ -737,15 +737,16 @@ function restore(...ids) {
 restore(...REMEMBER.filter(id => id !== 'profile'))   // the profile list arrives later
 const remember = () => store.set('pl.launch', JSON.stringify({ ...saved(), ...Object.fromEntries(REMEMBER.filter(id => id !== 'profile' || st.profiles).map(id => [id, $(id).type === 'checkbox' ? $(id).checked : $(id).value])) }))
 for (const id of REMEMBER) $(id).addEventListener('change', remember)
-const launchOptions = () => ({ macro: st.macro, recordInput: $('record-input').checked, expose: $('expose').value, profile: profileOption(), depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
+const macroSize = () => st.macro.events.length ? st.macro.viewport : null   // what the macro was recorded at (main.js launchItem)
+const launchOptions = () => ({ macro: st.macro.events, recordInput: $('record-input').checked, expose: $('expose').value, profile: profileOption(), depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
   pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim(), trace: $('trace').checked, storage: $('storage').value, tool: $('tool').value || null,
-  browser: $('browser').value, viewport: $('viewport').value === 'custom' ? `${+$('viewport-w').value}x${+$('viewport-h').value}` : $('viewport').value || null })
+  browser: $('browser').value, viewport: $('viewport').value === 'custom' ? `${+$('viewport-w').value}x${+$('viewport-h').value}` : $('viewport').value || (macroSize() ? `${macroSize().width}x${macroSize().height}` : null) })
 // The Macro box under More options: how long it is, the clicks the selected run's probe saw, and Clear.
 function showMacro() {
-  const r = run(), seen = r ? r.trace.probe.filter(p => p.type === 'input').length : 0
-  $('macro').replaceChildren(h('p', { class: 'muted small' }, st.macro.length ? `${st.macro.length} events over ${(st.macro.at(-1).t / 1000).toFixed(1)} s. They play at the start of every launch, and are saved in each run’s options.` : 'None. Record clicks in the Live view (web interface), or take the clicks of a run.'),
-    h('div', { class: 'row' }, h('button', { type: 'button', class: 'secondary', disabled: !seen, title: 'The clicks, keys and typing the probe saw in the course’s frames during the selected run', onclick: () => act(async () => { st.macro = await lab.invoke('macro-from-run', { run: r.id }); showMacro(); showOptions(); say(`Macro made from the selected run: ${st.macro.length} events.`) }) }, seen ? `Use this run’s clicks (${seen})` : 'Use this run’s clicks'),
-      h('button', { type: 'button', class: 'secondary', disabled: !st.macro.length, onclick: () => { st.macro = []; showMacro(); showOptions() } }, 'Clear')))
+  const r = run(), seen = r ? r.trace.probe.filter(p => p.type === 'input').length : 0, m = st.macro, n = m.events.length
+  $('macro').replaceChildren(h('p', { class: 'muted small' }, n ? `${n} events over ${(m.events.at(-1).t / 1000).toFixed(1)} s${m.viewport ? `, recorded at ${m.viewport.width}×${m.viewport.height}` : ''}. They play at the start of every launch${m.viewport ? ', at that size unless Device size says otherwise' : ''}, and are saved in each run’s options.` : 'None. Record clicks in the Live view (web interface), or take the clicks of a run.'),
+    h('div', { class: 'row' }, h('button', { type: 'button', class: 'secondary', disabled: !seen, title: 'The clicks, keys and typing the probe saw in the course’s frames during the selected run', onclick: () => act(async () => { st.macro = await lab.invoke('macro-from-run', { run: r.id }); showMacro(); showOptions(); say(`Macro made from the selected run: ${st.macro.events.length} events.`) }) }, seen ? `Use this run’s clicks (${seen})` : 'Use this run’s clicks'),
+      h('button', { type: 'button', class: 'secondary', disabled: !n, onclick: () => { st.macro = { events: [], viewport: null }; showMacro(); showOptions() } }, 'Clear')))
 }
 async function showOptions() {
   try {
@@ -776,7 +777,7 @@ const exportFixed = only => act(async () => {
 $('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeText($('cli-line').textContent); say('Copied.') })
 $('launch').onclick = () => act(async () => {
   st.live = []
-  await lab.invoke('launch', { item: +$('item').value, ...launchOptions() })
+  await lab.invoke('launch', { item: +$('item').value, ...launchOptions(), macroSize: macroSize() })
   st.sel = null; st.tab = lab.web ? 'Live' : st.pkg?.analysis.format && st.pkg.analysis.format !== 'scorm' ? 'xAPI' : 'API'; render()
 }, 'Launching…')
 $('ref').onclick = () => act(async () => { st.live = []; await lab.invoke('reference', { url: $('ref-url').value.trim(), caught: $('caught').checked, auto: +$('auto').value }); st.sel = null; st.tab = lab.web ? 'Live' : 'API'; render() }, 'Opening the reference…')

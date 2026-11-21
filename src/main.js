@@ -21,7 +21,7 @@ import { Recorder, shiftTimes, markAnswers } from './recorder.js'
 import { compare } from './diff.js'
 import { staticFindings, compareFindings, sortFindings, runFindings, launchFindings } from './rules.js'
 import { bootGraph, bootRun } from './bootpath.js'
-import { runCounts } from './milestones.js'
+import { runCounts, milestones as stepsReached } from './milestones.js'
 import { startWeb } from './web.js'
 import { DEFAULT_PORT, readSettings, writeSettings } from './settings.js'
 import { DOCS } from './docs.js'
@@ -32,7 +32,7 @@ import { comparePackages } from './pkgdiff.js'
 import { batchFiles, staticRows, batchSummary } from './batch.js'
 import { exportFixed, fixedName, applicable } from './fixes.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from './experiments.js'
-import { cycleFindings, cycleRows, macroFromTrace, resumeOptions } from './cycle.js'
+import { cycleFindings, cycleRows, macroFromTrace, resumeOptions, macroDelays, quietFor, withMacroSize, macroSize } from './cycle.js'
 import { discover, checkDiscover } from './shape.js'
 import { drill, watchPins } from './drilldown.js'
 import { PROFILES, launchProfile } from './profiles.js'
@@ -176,6 +176,7 @@ async function begin({ kind, label, url, launch, partition, lrs: lrsConfig, caug
   if (viewport) win.setContentSize(viewport.width, viewport.height)
   const ropts = { caught, pins, responses, trace: !!trace, storage, viewport, recordInput }, rec = new Recorder(win.webContents, { label, ...ropts }), extra = [], wins = [win]
   rec.onProbe = p => emit('probe', p)
+  rec.setWindow(...win.getContentSize()); win.on('resize', () => { if (!win.isDestroyed()) rec.setWindow(...win.getContentSize()) })   // trace.window: what a macro made from the run is recorded at
   if (lrsConfig) lrs = createLrs({ ...lrsConfig, now: () => rec.t() })   // its times are on the run's clock, like the probe's
   win.webContents.setWindowOpenHandler(() => ({ action: 'allow', overrideBrowserWindowOptions: { show: SHOW_RUNS, webPreferences: { partition, sandbox: true, backgroundThrottling: false } } }))
   watchPopups(win.webContents, extra, ropts, wins)
@@ -306,6 +307,7 @@ const live = {
         emit('macro', { state: 'full', message: `Recording stopped: a macro holds at most ${MACRO_MAX} events and ${MACRO_TEXT_MAX / 1024} KB of text. Save what was recorded, or start again.` })
       } else if (e.type !== 'text' || text) {
         const clamp = n => Math.min(1, Math.max(0, +n || 0)); macro.text += text.length
+        if (!macro.events.length) macro.viewport = { width: cw, height: ch }   // the size the positions are across
         macro.events.push({ t: Date.now() - active.started, type: e.type, ...(e.type === 'click' || e.type === 'wheel' ? { x: clamp(e.x), y: clamp(e.y) } : {}), ...(e.type === 'wheel' ? { dy: Math.max(-10000, Math.min(10000, +e.dy || 0)) } : {}), ...(e.type === 'key' ? { key: e.key } : {}), ...(e.type === 'text' ? { text } : {}) })
       }
     }
@@ -316,7 +318,7 @@ const live = {
 
 // Macros (P2.4): "Record clicks" keeps what comes in through live-input, with its time into the run; Save macro hands the events
 // to the interface, which keeps them with its other launch options (like pins). Recording stops when saved.
-const macro = { recording: false, events: [], text: 0 }
+const macro = { recording: false, events: [], text: 0, viewport: null }
 const MACRO_MAX = 2000, MACRO_TEXT_MAX = 100 * 1024   // as options.js
 
 // ---- Packages ----
@@ -353,9 +355,10 @@ function bootFor(path, files = pkg.files) {
 }
 
 // o: { item, cmi?, ...launch options } (see options.js). Unknown options throw.
-async function launchItem({ item: itemIndex, cmi: givenCmi, leave = false, ...rest }) {
+// macroSize: the window size the macro was recorded at, { width, height } (a macro file's viewport); see withMacroSize.
+async function launchItem({ item: itemIndex, cmi: givenCmi, leave = false, macroSize: recorded = null, ...rest }) {
   if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
-  const norm = normaliseOptions({ ...rest, files: rest.files ?? pkg?.overrides })
+  const sized = withMacroSize(normaliseOptions({ ...rest, files: rest.files ?? pkg?.overrides }), macroSize(recorded)), norm = sized.options
   if ((norm.tool ?? null) !== (pkg.analysis.tool ?? null)) pkg.analysis = analyze(pkg.files, { tool: norm.tool })   // the Authoring tool setting changes the pack findings
   const cmi = givenCmi ?? (norm.resume && pkg.lastCmi ? pkg.lastCmi : null)
   const plan = launchPlan({ pkg, item: itemIndex, cmi, options: { ...norm, ...(process.env.PACKAGE_LAB_FORCE_TRACE === '1' && norm.browser === 'chromium' ? { trace: true } : {}) },   // tests: every Electron run traced
@@ -368,8 +371,47 @@ async function launchItem({ item: itemIndex, cmi: givenCmi, leave = false, ...re
   // A click in a frame of another origin was only placed approximately (approx): it is skipped, and the trace says so.
   const a = active, skipped = o.macro.filter(e => e.approx).length
   if (skipped) a.rec.push('probe', { type: 'macro-skipped', count: skipped, message: `${skipped} click${skipped === 1 ? ' was' : 's were'} made in a frame of another origin, so ${skipped === 1 ? 'its' : 'their'} position is approximate: not replayed.`, t: a.rec.t(), sid: '' })
-  for (const e of o.macro.filter(e => !e.approx)) setTimeout(() => { if (active === a) live.input(e, true) }, e.t)
+  if (sized.note) a.rec.push('probe', { ...sized.note, t: a.rec.t(), sid: '' })
+  playMacro(a, o.macro).catch(() => {})
   return true
+}
+// Plays a macro's events from index `from` up to (not including) `to` into the run `a` (E1.1): through the same input as the live view,
+// each after the sleep macroDelays gives (kept to the clock, so a long macro doesn't drift). A wait event blocks until what it names
+// has happened; if it hasn't by its timeout, a macro-wait note goes in the trace and the macro stops. It also stops when the run ends.
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+async function playMacro(a, events, from = 0, to = events.length) {
+  const delays = macroDelays(events)
+  let due = Date.now()
+  for (let i = from; i < to; i++) {
+    const e = events[i]
+    due += delays[i]
+    await sleep(due - Date.now())
+    if (active !== a) return
+    if (e.type !== 'wait') { if (!e.approx) live.input(e, true); continue }
+    const start = Date.now(), timeout = e.timeout ?? 30000
+    if (e.ms) await sleep(e.ms)
+    else while (!(await waitMet(a, e))) {
+      if (active !== a) return
+      if (Date.now() - start >= timeout) {
+        a.rec.push('probe', { type: 'macro-wait', event: i, waited: Date.now() - start, for: e.text !== undefined ? { text: e.text } : e.milestone ? { milestone: e.milestone } : { quiet: e.quiet }, t: a.rec.t(), sid: '' })
+        return
+      }
+      await sleep(Math.min(250, start + timeout - Date.now()))
+    }
+    if (active !== a) return
+    due = Date.now()
+  }
+}
+// Whether a wait event's condition holds now. The text is looked for in the document of every attached session and in the
+// same-origin frames of each (contentDocument is null for another origin's frame, so nothing is thrown or recorded as caught).
+const TEXT_IN = `(function f(d,t){try{if(d.body&&d.body.innerText.indexOf(t)>=0)return true;var l=d.querySelectorAll('iframe,frame');for(var i=0;i<l.length;i++){var c=l[i].contentDocument;if(c&&f(c,t))return true}}catch(e){}return false})`
+async function waitMet(a, e) {
+  if (e.milestone) return stepsReached(a.rec.trace, a.boot).some(s => s.id === e.milestone && s.reached)
+  if (e.quiet) return quietFor([...a.rec.req.values()], a.rec.t()) >= e.quiet
+  const expression = `typeof document!=='undefined'&&${TEXT_IN}(document,${JSON.stringify(e.text)})`
+  for (const r of [a.rec, ...a.extra]) for (const sid of r.sessions)
+    if (await r.send('Runtime.evaluate', { expression, returnByValue: true, silent: true }, sid).then(x => x.result.value === true, () => false)) return true
+  return false
 }
 const webkitMacro = () => new Error('Macros and the save-and-resume test run in Chromium only: WebKit runs have no input to replay. Choose Chromium.')
 
@@ -458,8 +500,8 @@ async function experimentStart({ item, preset = 'standard', variants, ...rest })
 }
 
 // One launch, stopped after its wait; the recorded run, or null if it ended without one. Experiments and discovery use it.
-async function runToEnd(item, options, leave = false, cmi) {
-  await launchItem({ ...options, auto: options.auto || options.wait, item, leave, ...(cmi ? { cmi } : {}) })
+async function runToEnd(item, options, leave = false, cmi, recorded = null) {
+  await launchItem({ ...options, auto: options.auto || options.wait, item, leave, ...(cmi ? { cmi } : {}), ...(recorded ? { macroSize: recorded } : {}) })
   const a = active
   while (a && !a.ended) await new Promise(r => setTimeout(r, 200))
   return a?.run ?? null
@@ -534,17 +576,17 @@ async function drillStart({ run: id }) {
 // Two runs through the experiment runner's path, sharing its slot. Run 1 plays the macro (options.macro) and then leaves: the content
 // window goes to about:blank and is closed with the recorder attached. Run 2 resumes from run 1's data. Events 'cycle':
 // { state: 'start' } · { state: 'run', index, run (id) } · { state: 'done', runs: [ids], rows, findings } · { state: 'error', message }.
-async function cycleStart({ item, ...rest }) {
+async function cycleStart({ item, macroSize: recorded = null, ...rest }) {
   rest = { ...rest, files: rest.files ?? pkg?.overrides }
   if (experiment || active) throw new Error('Something is already running. Stop it first.')
   if (!pkg?.analysis.manifest) throw new Error('Open a package with a manifest first.')
   if (pkg.analysis.format !== 'scorm') throw new Error('The save-and-resume test is for SCORM packages: a cmi5 or Tin Can package saves through its LRS.')
-  const base = normaliseOptions(rest), job = experiment = { stop: false }
+  const base = withMacroSize(normaliseOptions(rest), macroSize(recorded)).options, job = experiment = { stop: false }
   try { if (base.browser === 'webkit') throw webkitMacro() } catch (e) { experiment = null; throw e }
   emit('cycle', { state: 'start' })
   ;(async () => {
     try {
-      const first = await runToEnd(item, base, true)
+      const first = await runToEnd(item, base, true, undefined, recorded)
       if (job.stop) throw new Error('Stopped.')
       if (!first) throw new Error('The first run didn’t finish.')
       emit('cycle', { state: 'run', index: 0, run: first.id })
@@ -749,10 +791,10 @@ const handlers = {
     return timelineView(r.trace, r.milestones ?? undefined, win)
   },
   'live-input': e => live.input(e),
-  // Macros: Record clicks starts keeping live-input events; Save macro stops and returns them. 'macro-from-run' returns the clicks and keys the probe saw in a run's content frames.
-  'macro-record': ({ on = true }) => { macro.recording = !!on; if (macro.recording) { macro.events = []; macro.text = 0 } return macro.recording },
-  'macro-save': () => { macro.recording = false; return normaliseOptions({ macro: macro.events }).macro },
-  'macro-from-run': ({ run }) => { const r = runs.get(+run); if (!r) throw new Error('Choose a run.'); return macroFromTrace(r.trace) },
+  // Macros: Record clicks starts keeping live-input events; Save macro stops and returns { events, viewport } (the window size at the first event). 'macro-from-run' returns the clicks and keys the probe saw in a run's content frames, with the run window's size.
+  'macro-record': ({ on = true }) => { macro.recording = !!on; if (macro.recording) { macro.events = []; macro.text = 0; macro.viewport = null } return macro.recording },
+  'macro-save': () => { macro.recording = false; return { events: normaliseOptions({ macro: macro.events }).macro, viewport: (() => { try { return macroSize(macro.viewport) } catch { return null } })() } },
+  'macro-from-run': ({ run }) => { const r = runs.get(+run); if (!r) throw new Error('Choose a run.'); return { events: macroFromTrace(r.trace), viewport: r.trace.window ?? null } },
 }
 for (const [name, fn] of Object.entries(handlers)) ipcMain.handle(name, (_e, arg) => fn(arg ?? {}))
 
@@ -846,7 +888,7 @@ app.on('window-all-closed', () => { if (!web && !JOB && process.platform !== 'da
 app.on('activate', () => { if (WINDOW && !ui && app.isReady()) createWindow() })
 
 // ---- Headless runs (bin/package-lab.js run) ----
-// The job file: { zip, item, options (see options.js), resumeFrom, close (leave like a learner at the end: the cycle's first run), out, live (folder) }. Writes
+// The job file: { zip, item, options (see options.js), resumeFrom, close (leave like a learner at the end: the cycle's first run), macroSize ({ width, height } the macro was recorded at), out, live (folder) }. Writes
 // the run to out in the saved-run format. With live: frames to live/frame.jpg, progress to live/status.json, and
 // input (and { type: 'stop' }) read from live/input/*.json.
 async function headless(jobFile) {
@@ -861,7 +903,7 @@ async function headless(jobFile) {
   if (job.live) { mkdirSync(join(job.live, 'input'), { recursive: true }); live.dir = job.live }
   status({ state: 'starting' })
   const options = normaliseOptions(job.options)
-  await launchItem({ ...options, resume: options.resume || !!cmi, item, cmi, leave: !!job.close })
+  await launchItem({ ...options, resume: options.resume || !!cmi, item, cmi, leave: !!job.close, macroSize: job.macroSize ?? null })
   const until = Date.now() + options.wait * 1000
   let stop = false
   while (!stop && Date.now() < until && active) {

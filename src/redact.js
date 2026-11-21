@@ -152,6 +152,7 @@ export function redactRun(input, { names = false, key, map = new Map(), package:
       case 'dom': cut(p, 'sample', 'dom'); cut(p, 'loader', 'dom'); break
       case 'dialog': cut(p, 'message', 'dom'); break
       case 'input': cut(p, 'text', 'typed'); break
+      case 'macro-wait': cut(p.for, 'text', 'typed'); break   // the text a wait step waited for can be course text
       case 'post': if (p.shape) { fix(p.shape, 'value', v => tree(v)); fix(p.shape, 'vals', v => tree(v)) } break
       case 'pin-failed': case 'probe-failed': edit(p, 'error', browserMsg); break
     }

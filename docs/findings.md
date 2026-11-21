@@ -325,6 +325,15 @@ Only after **Run all** on the Experiments tab, or `package-lab experiment`. They
 | With storage blocked, the content gets less far | warning | A variant with storage blocked (the **storage** experiment) reached an earlier step than the default, which doesn't block it. The evidence lists the steps it no longer reached | Open the blocked run: "The content needs storage the browser can block" says where the content uses storage. Keep its state in the LMS instead |
 | Nothing tried made a difference | info | No variant got further than the default | Try your own variants, or look at what stops the default run in its own findings |
 
+## From a run: the macro
+
+Only when a macro was played (`--macro`, or the macro in the options). See [Macros](cli.md#macros).
+
+| Finding | Severity | Meaning | What to try |
+|---|---|---|---|
+| The macro stopped at step 4: waited 30 s for “Next” and it never appeared | warning | A wait step (the number counts events from 1) ran out of time. It named text, a step of the progress strip or a quiet network, and what it waited for didn't happen. The clicks and keys after it were not played | Lengthen the wait's `timeout`, or check the step before it: it may not have done what this one waits for |
+| The macro was recorded at 1100×800 and played at 390×844: clicks may miss | info | The macro's clicks are positions across the window. The run has a device size of its own, and it wins over the size the macro was recorded at | Set Device size to "Window as it is" to play at the recorded size, or record the macro again at this size |
+
 ## From a save-and-resume test
 
 Only after **Test saving** (the Test saving tab) or `package-lab cycle`. The first run plays the macro and then leaves the

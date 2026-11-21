@@ -4,15 +4,16 @@
 import { pinPathProblem, PIN_MODES, matcher, USER_AGENT } from './pins.js'
 import { checkProfile, launchProfile } from './profiles.js'
 import { PACKS } from './packs/index.js'
+import { STEPS } from './milestones.js'
 const DEFAULTS = Object.freeze({
   expose: 'manifest', depth: 0, opener: false, resume: false, caught: true, auto: 0, wait: 10,
   profile: 'generic', browser: 'chromium', viewport: null, files: {}, pins: [], responses: [], launchParams: '', storage: 'normal', trace: false, macro: [], recordInput: false, tool: null,
 })
 const MAX_PIN = 1024 ** 2, MAX_BODY = 10 * 1024 ** 2, MAX_BODIES = 20 * 1024 ** 2, MAX_LIST = 100   // a pin's value, a response's body, entries in pins or responses
-// A macro (P2.4): events, at most this many, with at most this much typed text in all, none later than an hour into the run.
+// A macro (P2.4; wait steps in format 2, E1.1): events, at most this many, with at most this much typed text in all, none later than an hour into the run.
 export const MACRO_KEYS = /^(Enter|Tab|Escape|Backspace|Delete|Space|Up|Down|Left|Right|PageUp|PageDown|Home|End)$/
 const MAX_MACRO = 2000, MAX_MACRO_TEXT = 100 * 1024, MAX_MACRO_T = 3600 * 1000
-const MACRO_FIELDS = { click: ['x', 'y', 'approx'], move: ['x', 'y', 'approx'], wheel: ['x', 'y', 'dy'], key: ['key'], text: ['text'] }
+const MACRO_FIELDS = { click: ['x', 'y', 'approx'], move: ['x', 'y', 'approx'], wheel: ['x', 'y', 'dy'], key: ['key'], text: ['text'], wait: ['ms', 'text', 'milestone', 'quiet', 'timeout'] }
 const MAX_FILE = 50 * 1024 ** 2, MAX_TOTAL = 200 * 1024 ** 2   // changed files: per file and in all
 const EXPOSE = ['manifest', 'both', '1.2', '2004', 'none']
 export const STORAGE = ['normal', 'blocked', 'partitioned']
@@ -137,7 +138,7 @@ const check = {
   // normal: the run window's storage as it is (it lasts from run to run while the app is open) · blocked: Safari's refusals in
   // content frames (the probe) · partitioned: the same storage, emptied before the run. The profile's cookies field can block too.
   storage: (k, v) => str(k, v, STORAGE),
-  // [{ t (ms into the run), type: 'click' | 'move' | 'wheel' | 'key' | 'text', x, y (0–1 across the window), dy, key, text }], replayed through the live view's input (main.js live.input).
+  // [{ t (ms into the run), type: 'click' | 'move' | 'wheel' | 'key' | 'text' | 'wait', x, y (0–1 across the window), dy, key, text }], replayed through the live view's input (main.js live.input).
   macro: (k, v) => {
     if (!Array.isArray(v) || !v.every(obj)) bad(k, 'must be a list of events like { "t": 1500, "type": "click", "x": 0.5, "y": 0.3 }')
     if (v.length > MAX_MACRO) bad(k, `can hold at most ${MAX_MACRO} events`)
@@ -145,7 +146,7 @@ const check = {
     const unit = (e, f) => typeof e[f] === 'number' && e[f] >= 0 && e[f] <= 1 ? e[f] : bad(k, `needs ${f} to be a number from 0 to 1 in each ${e.type} event`)
     return v.map((e, i) => {
       const allowed = Object.hasOwn(MACRO_FIELDS, e.type) ? MACRO_FIELDS[e.type] : null
-      if (!allowed) bad(k, `needs type to be click, move, wheel, key or text in event ${i + 1}`)
+      if (!allowed) bad(k, `needs type to be click, move, wheel, key, text or wait in event ${i + 1}`)
       const extra = Object.keys(e).filter(f => !['t', 'type', ...allowed].includes(f))
       if (extra.length) bad(k, `has an unknown field in event ${i + 1}: ${extra.join(', ')}`)
       if (typeof e.t !== 'number' || !(e.t >= 0 && e.t <= MAX_MACRO_T)) bad(k, `needs t to be a number of milliseconds from 0 to ${MAX_MACRO_T} in event ${i + 1}`)
@@ -154,6 +155,16 @@ const check = {
       if (e.approx !== undefined) { if (e.approx !== true) bad(k, `needs approx to be true or left out in event ${i + 1}`); out.approx = true }   // a click in another origin's frame, placed approximately: not replayed
       if (e.type === 'wheel') { if (typeof e.dy !== 'number' || !Number.isFinite(e.dy) || Math.abs(e.dy) > 10000) bad(k, `needs dy to be a number from -10000 to 10000 in event ${i + 1}`); out.dy = e.dy }
       if (e.type === 'key') { if (!MACRO_KEYS.test(e.key)) bad(k, `needs key to be a name like Enter or Tab in event ${i + 1}, not ${JSON.stringify(e.key)}`); out.key = e.key }
+      if (e.type === 'wait') {
+        const num = (f, lo, hi) => typeof e[f] === 'number' && e[f] >= lo && e[f] <= hi ? Math.round(e[f]) : bad(k, `needs ${f} to be a number from ${lo} to ${hi} in event ${i + 1}`)
+        const given = ['ms', 'text', 'milestone', 'quiet'].filter(f => e[f] !== undefined)
+        if (given.length !== 1) bad(k, `needs exactly one of ms, text, milestone or quiet in wait event ${i + 1}`)
+        if (given[0] === 'ms') out.ms = num('ms', 1, 600000)
+        if (given[0] === 'quiet') out.quiet = num('quiet', 100, 30000)
+        if (given[0] === 'text') { if (typeof e.text !== 'string' || !e.text || e.text.length > 200) bad(k, `needs text to be 1 to 200 characters in wait event ${i + 1}`); if ((text += e.text.length) > MAX_MACRO_TEXT) bad(k, `holds more than ${MAX_MACRO_TEXT / 1024} KB of text in all`); out.text = e.text }
+        if (given[0] === 'milestone') { if (!STEPS.some(s => s[0] === e.milestone)) bad(k, `needs milestone to be one of ${STEPS.map(s => s[0]).join(', ')} in wait event ${i + 1}`); out.milestone = e.milestone }
+        if (e.timeout !== undefined) out.timeout = num('timeout', 1000, 600000)
+      }
       if (e.type === 'text') {
         if (typeof e.text !== 'string' || !e.text || e.text.length > 2000) bad(k, `needs text to be 1 to 2000 characters in event ${i + 1}`)
         if ((text += e.text.length) > MAX_MACRO_TEXT) bad(k, `holds more than ${MAX_MACRO_TEXT / 1024} KB of typed text in all`)

@@ -88,6 +88,17 @@ export function runFindings(trace, launch = {}, analysis = null) {
         fix: found ? 'Look at the first error after the lookup.' : 'Launch again with the Both APIs profile. If calls appear, the SCORM version is the cause.' })
     }
   }
+  // Notes from the macro player (main.js, E1.1).
+  for (const n of probe.filter(p => p.type === 'macro-size'))
+    out.push({ sev: 'info', title: `The macro was recorded at ${n.recorded.width}×${n.recorded.height} and played at ${n.used.width}×${n.used.height}: clicks may miss`,
+      detail: 'A macro’s clicks are positions across the window. This run has a device size of its own, which wins over the size the macro was recorded at.',
+      evidence: [], fix: 'Run with the device size set to “Window as it is” to play the macro at its own size, or record it again at this size.' })
+  for (const n of probe.filter(p => p.type === 'macro-wait')) {
+    const w = n.for ?? {}, what = w.text !== undefined ? `“${w.text}” and it never appeared` : w.milestone ? `the step “${w.milestone}” and the run never reached it` : `the network to be quiet for ${w.quiet} ms and it never was`
+    out.push({ sev: 'warn', title: `The macro stopped at step ${n.event + 1}: waited ${+(n.waited / 1000).toFixed(1)} s for ${what}`,
+      detail: 'The macro waits for what its wait step names and plays nothing after it if that doesn’t happen in time. The clicks and keys after it were not played.',
+      evidence: [], fix: 'Lengthen the wait step’s timeout, or check the step before it: it may not have done what the next one waits for.' })
+  }
   if (contentAssigns.length)
     out.push({ sev: shim.length ? 'error' : 'warn', title: 'The content set its own window.API or API_1484_11',
       detail: 'Content that brings its own API object (a preview or standalone shim) talks to that instead of the LMS, so nothing is saved.' +

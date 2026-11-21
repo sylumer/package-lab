@@ -804,7 +804,7 @@ exit, whether the session was ended) with the findings (see [From a save-and-res
 Each run is in the Runs list too, so you can open its API tab. Each run lasts as long as **Stop after** (10 s if that
 is “I stop it”). It runs in Chromium only.
 
-**Macros.** A macro is a list of clicks, keys and typed text with the time of each. Three ways to make one:
+**Macros.** A macro is a list of clicks, keys, typed text and waits, with the time of each. Three ways to make one:
 
 - **Live view** (the web interface): choose **Record clicks** over the Live tab, use the course, then **Save macro**.
   Everything sent through the picture is recorded with its time into the run.
@@ -820,6 +820,19 @@ run, and never from a password field or a field whose `autocomplete` names a pas
 through the Live view while **Record clicks** is on is kept in the macro, so don't type secrets there.
 Recording drops pointer moves, and stops with a message at 2,000 events or 100 KB of text.
 A click made in a frame from another origin is marked approximate and is not replayed (the run's trace says how many were skipped).
+
+**Size.** A macro remembers the window size it was recorded at ("14 events over 12.3 s, recorded at 1100×800" under
+More options), because its clicks are positions across the window. When **Device size** is "Window as it is", the
+course runs at that size. If you choose a device size yourself, yours wins, and the run says so in a finding: "The macro
+was recorded at 1100×800 and played at 390×844: clicks may miss".
+
+**Waits.** Timing is the usual reason a macro misses: a button that appears after a slow request isn't there at the
+moment the click is. A macro file can hold wait steps that block until something has happened, then carry on. A wait
+is one of: some milliseconds, a piece of text that appears on the page (any frame of the same origin as the lesson, or
+a frame of its own), a step of the run's progress strip (`found`, `initialised`, `wrote`…), or a quiet network (no
+request pending for that long). Each has a timeout (30 s unless it says otherwise). If it runs out, the macro stops
+there and the run has the finding "The macro stopped at step 4: waited 30 s for “Next” and it never appeared", and
+carries on to its end. The file format is in [Macros](cli.md#macros).
 
 The macro is kept with your other options (**More options** shows how many events it has, with **Clear**), is played
 at the start of every launch from then on, and is saved in each run's launch options. **Use this run's clicks** and

@@ -37,7 +37,7 @@ import { Recorder, shiftTimes, isBlocked, nameAt } from '../src/recorder.js'
 import { launchPlan, serveRequest, WEBKIT_ORIGINS, runAnalysis } from '../src/launch.js'
 import { PROFILES, PROFILE_NAMES, checkProfile, resolveProfile, launchProfile, apiAt, fillParams, storageMode } from '../src/profiles.js'
 import { originFindings, storageFindings } from '../src/rules.js'
-import { cycleFindings, cycleRows, readMacro, macroFromTrace, resumeOptions } from '../src/cycle.js'
+import { cycleFindings, cycleRows, readMacro, macroFile as macroFileOf, macroDelays, quietFor, withMacroSize, macroFromTrace, resumeOptions } from '../src/cycle.js'
 import { drill, deadEnd, untakenRange, programs, assignments, codePath, watchPins } from '../src/drilldown.js'
 import './packs.js'
 import { cmi5Package, cmi5Steps, tincanPackage } from './xapi.js'
@@ -114,6 +114,9 @@ const restart = fixture('restart', d => sub(d, 'lesson.js', /show\(entry === 're
 
 // typing: a text field and a password field, to see what is kept of typed text.
 const typing = fixture('typing', d => sub(d, 'lesson.html', '<nav>', '<p><input id="name" type="text"> <input id="pw" type="password" autocomplete="current-password"></p><nav>'))
+// latebutton: Next is there from the start but only visible, and so only clickable and only in the page's text, after 3 s. It is a big
+// button in the top left corner, so a click at (0.15, 0.1) hits it at any window size.
+const latebutton = fixture('latebutton', d => writeFileSync(join(d, 'lesson.js'), readFileSync(join(d, 'lesson.js'), 'utf8') + "\nvar late = document.getElementById('next'); late.style.cssText = 'position:fixed;left:10px;top:10px;width:300px;height:100px;visibility:hidden'; setTimeout(function () { late.style.visibility = 'visible' }, 3000)\n"))
 // handshake: tells its parent it is ready and waits for {type: 'launch'}, which no LMS here sends. polling: checks
 // window.API every 250 ms (the LMS offers it on the parent, so it never finds it on its own window).
 const handshake = fixture('handshake', d => {
@@ -1082,7 +1085,42 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
     [[{ t: 0, type: 'click', x: 0, y: 0, z: 1 }], /unknown field in event 1: z/], [Array.from({ length: 2001 }, (_, i) => click(i)), /at most 2000 events/], [Array.from({ length: 52 }, () => ({ t: 0, type: 'text', text: 'x'.repeat(2000) })), /KB of typed text/]])
     assert.throws(() => normaliseOptions({ macro: bad }), why, 'macro: refused ' + JSON.stringify(bad).slice(0, 50))
   assert.match(cliCommand({ macro: [click(5)] }), / --macro macro\.json$/, 'macro: the CLI line')
-  assert.deepEqual(readMacro({ events: [click(1)] }), readMacro([click(1)]), 'macro file: a list or { events }'); assert.throws(() => readMacro({ nope: 1 }), /list of events/)
+  assert.deepEqual(readMacro({ events: [click(1)] }), readMacro([click(1)]), 'macro file: a list or { events }'); assert.deepEqual(readMacro([click(1)]), { events: [click(1)], viewport: null }, 'macro file: a bare list has no size'); assert.throws(() => readMacro({ nope: 1 }), /list of events/)
+  // Macro format 2 (E1.1): wait steps, the recorded window size, the player's delays, and the notes the player leaves.
+  {
+    const w = (extra, t = 5) => [{ t, type: 'wait', ...extra }]
+    assert.deepEqual(normaliseOptions({ macro: [...w({ text: 'Next' }), ...w({ ms: 500.4 }, 6), ...w({ milestone: 'found', timeout: 2000 }, 7), ...w({ quiet: 300 }, 8)] }).macro,
+      [{ t: 5, type: 'wait', text: 'Next' }, { t: 6, type: 'wait', ms: 500 }, { t: 7, type: 'wait', milestone: 'found', timeout: 2000 }, { t: 8, type: 'wait', quiet: 300 }], 'macro: each wait form is accepted')
+    for (const [bad, why] of [[w({}), /exactly one of ms, text, milestone or quiet in wait event 1/], [w({ text: 'a', ms: 5 }), /exactly one/], [w({ ms: 0 }), /ms to be a number from 1 to 600000/], [w({ ms: 600001 }), /ms to be a number/],
+      [w({ text: '' }), /text to be 1 to 200 characters in wait event 1/], [w({ text: 'x'.repeat(201) }), /text to be 1 to 200/], [w({ milestone: 'nope' }), /milestone to be one of launched, scripts/], [w({ quiet: 99 }), /quiet to be a number from 100 to 30000/],
+      [w({ quiet: 30001 }), /quiet to be a number/], [w({ text: 'a', timeout: 999 }), /timeout to be a number from 1000 to 600000/], [w({ text: 'a', timeout: 600001 }), /timeout to be a number/], [[{ t: 0, type: 'wait', text: 'a', x: 0 }], /unknown field in event 1: x/]])
+      assert.throws(() => normaliseOptions({ macro: bad }), why, 'macro: refused ' + JSON.stringify(bad))
+    const ev = [click(1)], vp = { width: 800, height: 600 }
+    assert.deepEqual(readMacro({ format: 'package-lab-macro', version: 1, events: ev }), { events: ev, viewport: null }, 'macro file: version 1')
+    assert.deepEqual(readMacro({ format: 'package-lab-macro', version: 2, viewport: vp, events: ev }), { events: ev, viewport: vp }, 'macro file: version 2 with a size')
+    assert.deepEqual(readMacro({ version: 2, events: ev }), { events: ev, viewport: null }, 'macro file: version 2 without a size')
+    assert.throws(() => readMacro({ version: 2, viewport: { width: 5, height: 5 }, events: ev }), /whole pixels/, 'macro file: a bad size is refused')
+    assert.deepEqual(macroFileOf(ev, vp), { format: 'package-lab-macro', version: 2, viewport: vp, events: ev }, 'macro file: written as version 2')
+    assert.deepEqual(readMacro(JSON.parse(JSON.stringify(macroFileOf(ev, vp)))), { events: ev, viewport: vp }, 'macro file: round trip')
+    assert.deepEqual(readMacro(macroFileOf(ev)), { events: ev, viewport: null }, 'macro file: round trip without a size')
+    assert.deepEqual(macroDelays([{ t: 0 }, { t: 500 }, { type: 'wait', t: 600 }, { t: 900 }]), [0, 500, 100, 300], 'player: the sleep before each event')
+    assert.deepEqual(macroDelays([{ t: 700 }]), [700], 'player: the first event waits its own time'); assert.deepEqual(macroDelays([]), [])
+    assert.equal(quietFor([{ end: 100 }, { end: 400 }], 1000), 600, 'quiet: since the last request ended'); assert.equal(quietFor([{ end: 100 }, {}], 1000), 0, 'quiet: not while one is pending'); assert.equal(quietFor([], 700), 700, 'quiet: no requests at all')
+    const run = { ...normaliseOptions({ macro: ev }) }
+    assert.deepEqual([withMacroSize(run, vp).options.viewport.width, withMacroSize(run, vp).options.viewport.height, withMacroSize(run, vp).note], [800, 600, null], 'macro size: set when the run has none')
+    assert.equal(withMacroSize(run, null).options, run, 'macro size: none recorded, none set')
+    const other = normaliseOptions({ macro: ev, viewport: 'iphone' })
+    assert.deepEqual(withMacroSize(other, vp), { options: other, note: { type: 'macro-size', recorded: vp, used: { width: 390, height: 844 } } }, 'macro size: the run’s own size wins, with a note')
+    assert.equal(withMacroSize(normaliseOptions({ macro: ev, viewport: '800x600' }), vp).note, null, 'macro size: the same size is no note')
+    assert.equal(withMacroSize(normaliseOptions({ viewport: 'iphone' }), vp).note, null, 'macro size: no events, no note')
+    const launch = { kind: 'package', itemType: 'sco', expose: '1.2' }
+    const sized = runFindings(trace({ probe: [{ type: 'macro-size', recorded: vp, used: { width: 390, height: 844 }, t: 5 }] }), launch).find(f => /recorded at/.test(f.title))
+    assert.deepEqual([sized.sev, sized.title], ['info', 'The macro was recorded at 800×600 and played at 390×844: clicks may miss'], 'macro size: the finding')
+    const waited = runFindings(trace({ probe: [{ type: 'macro-wait', event: 3, waited: 30000, for: { text: 'Next' }, t: 5 }, { type: 'macro-wait', event: 0, waited: 2500, for: { milestone: 'found' }, t: 6 }, { type: 'macro-wait', event: 1, waited: 5000, for: { quiet: 500 }, t: 7 }] }), launch).filter(f => /^The macro stopped/.test(f.title))
+    assert.deepEqual(waited.map(f => f.sev + ' ' + f.title), ['warn The macro stopped at step 4: waited 30 s for “Next” and it never appeared', 'warn The macro stopped at step 1: waited 2.5 s for the step “found” and the run never reached it',
+      'warn The macro stopped at step 2: waited 5 s for the network to be quiet for 500 ms and it never was'], 'macro wait: the findings')
+    assert.match(waited[0].fix, /Lengthen the wait step’s timeout/, 'macro wait: the fix')
+  }
   assert.deepEqual(macroFromTrace({ probe: [{ type: 'input', kind: 'click', x: 0.5, y: 0.25, t: 40 }, { type: 'api', t: 41 }, { type: 'input', kind: 'key', key: 'Tab', t: 50 }, { type: 'input', kind: 'text', text: 'a', t: 60 }] }),
     [{ t: 40, type: 'click', x: 0.5, y: 0.25 }, { t: 50, type: 'key', key: 'Tab' }, { t: 60, type: 'text', text: 'a' }], 'macro: made from the probe’s input reports')
   assert.deepEqual([resumeOptions({ macro: [click(1)], depth: 1 })].map(o => [o.macro.length, o.resume, o.depth]), [[0, true, 1]], 'cycle: the second run plays no macro and resumes')
@@ -1135,7 +1173,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   f = cycleFindings({ runs: [run(saving.slice(0, 2).concat([call('LMSFinish')])), resumed([], '')] })
   assert.deepEqual(f.map(x => x.title), ['The LMS started a new attempt instead of resuming (entry was “”)'], 'cycle: exit unset with the status incomplete passes the exit check; entry still says no resume')
   // approximate clicks and typed text
-  assert.deepEqual(readMacro([{ t: 1, type: 'click', x: 0.1, y: 0.2, approx: true }]), [{ t: 1, type: 'click', x: 0.1, y: 0.2, approx: true }], 'macro: approx clicks are kept')
+  assert.deepEqual(readMacro([{ t: 1, type: 'click', x: 0.1, y: 0.2, approx: true }]).events, [{ t: 1, type: 'click', x: 0.1, y: 0.2, approx: true }], 'macro: approx clicks are kept')
   assert.throws(() => normaliseOptions({ macro: [{ t: 1, type: 'click', x: 0, y: 0, approx: 1 }] }), /approx/, 'macro: approx is true or left out')
   assert.throws(() => normaliseOptions({ macro: [{ t: 0, type: 'constructor' }] }), /type to be click/, 'macro: only own event types (constructor is not one)')
   assert.deepEqual(macroFromTrace({ probe: [{ type: 'input', kind: 'click', x: 0.5, y: 0.5, approx: true, t: 5 }, { type: 'input', kind: 'text', length: 6, redacted: true, t: 6 }, { type: 'input', kind: 'text', text: 'ok', t: 7 }] }),
@@ -1303,7 +1341,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
     format: 'package-lab-run', version: 1, kind: 'package', label: 'pkg.zip · Lesson title · Part two · SCORM 1.2', package: 'pkg.zip', file: '/Users/someone/runs/a.json',
     launch: { version: '1.2', expose: '1.2', depth: 0, opener: false, item: 'Lesson title · Part two', itemIndex: 0, itemType: 'sco', url: L + 'lesson.html?learner=jsmith&token=abc123', resume: false, storage: 'normal', profile: prof,
       options: { files: { 'js/lesson.js': { content: 'var secret = "Wrong answer text"' } }, pins: [{ path: 'cmi.core.student_name', value: 'Sam Learner' }], launchParams: 'user=jsmith&sid=77;flag', profile: prof,
-        responses: [{ match: 'https://example.com/api/*?key=apikey99', status: 200, body: '{"name":"Sam Learner"}', headers: { 'Set-Cookie': 'session=cookie-secret' } }], macro: [{ t: 5, type: 'text', text: 'my typed password' }, { t: 9, type: 'key', key: 'Enter' }] } },
+        responses: [{ match: 'https://example.com/api/*?key=apikey99', status: 200, body: '{"name":"Sam Learner"}', headers: { 'Set-Cookie': 'session=cookie-secret' } }], macro: [{ t: 5, type: 'text', text: 'my typed password' }, { t: 9, type: 'key', key: 'Enter' }, { t: 12, type: 'wait', text: 'Course heading words' }] } },
     findings: [{ sev: 'info', title: 'Said “Welcome to the course text here”', detail: 'Found it on the page', evidence: ['lab://run/pkg/lesson.html', 'LMSSetValue cmi.core.student_name = Sam Learner'] }],
     milestones: [{ id: 'shown', label: 'Content shown', reached: true, evidence: '42 characters of text, 0 media in lesson.html' }],
     boot: { start: 'lesson.html', nodes: [{ path: 'lesson.html', kind: 'page', how: 'launch', status: 'ok', depth: 0, ref: 'lesson.html' },
@@ -1339,6 +1377,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
         { type: 'api', t: 48, version: '1.2', call: 'LMSSetValue', el: 'cmi.core.student_id', value: '12345', result: 'true' },
         { type: 'api', t: 49, version: '1.2', call: 'LMSSetValue', el: 'cmi.core.score.max', value: 'x', result: 'false', err: 405, diag: 'Invalid value: “zq secret ab”' },
         { type: 'frame', t: 46, frame: L + 'lesson.html', depth: 0, referrer: 'https://lms.example/launch?user=jsmith#x', origin: 'https://lms.example' },
+        { type: 'macro-wait', t: 50, event: 2, waited: 30000, for: { text: 'Course heading words' } },
       ],
       cmi: { '1.2': { 'cmi.core.lesson_status': 'incomplete', 'cmi.suspend_data': 'xyz is secret text' } },
       scripts: [{ t: 1, sid: 'a', id: '7', url: L + 'js/lesson.js', hash: 'abc', length: 40 }], untraced: [{ file: 'js/big.js', why: 'too big' }],
@@ -1383,6 +1422,9 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.equal(p[9].url, 'https://example.com/api/x?token=‹6 characters›', 'redact: a shape read’s URL')
   assert.equal(red.launch.options.files['js/lesson.js'].content, `‹${'var secret = "Wrong answer text"'.length} characters›`, 'redact: changed file contents')
   assert.equal(red.launch.options.macro[0].text, `‹${'my typed password'.length} characters›`, 'redact: typed text')
+  assert.equal(red.launch.options.macro[2].text, `‹${'Course heading words'.length} characters›`, 'redact: a wait step’s text')
+  assert.equal(red.trace.probe.find(x => x.type === 'macro-wait').for.text, `‹${'Course heading words'.length} characters›`, 'redact: the text a macro waited for')
+  assert.ok(!JSON.stringify(red).includes('Course heading words'), 'redact: no wait text anywhere')
   assert.equal(red.launch.options.launchParams, 'user=‹6 characters›&sid=‹2 characters›;‹4 characters›', 'redact: launch parameters')
   assert.equal(red.launch.url, 'lab://run/pkg/lesson.html?learner=‹6 characters›&token=‹6 characters›', 'redact: the launch URL’s query')
   for (const pr of [red.launch.profile, red.launch.options.profile]) assert.deepEqual([pr.headers, pr.csp, pr.launchParams, pr.name], [{ 'X-Token': '‹16 characters›' }, '‹45 characters›', 'user=‹6 characters›&sid=‹2 characters›;‹4 characters›', 'Custom LMS'], 'redact: a custom profile’s headers, policy and parameters')
@@ -2157,6 +2199,29 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     // A macro in an ordinary run reaches the page, and the run's saved options carry it.
     const mr = run(good, '--wait', '3', '--macro', macroFile)
     assert.ok(mr.api.some(a => a.el === 'cmi.core.lesson_location' && a.value === '2') && mr.launch.options.macro.length === 2 && mr.api.some(a => a.call === 'LMSFinish'), 'macro: replayed in a run: ' + calls(mr))
+    // Macro format 2 (E1.1): wait steps, and the size a macro was recorded at.
+    {
+      let n = 0
+      const macro2 = (events, extra = {}) => { const f = join(work, `macro2-${n++}.json`); writeFileSync(f, JSON.stringify({ format: 'package-lab-macro', version: 2, ...extra, events })); return f }
+      const toTwo = r => r.api.some(a => a.el === 'cmi.core.lesson_location' && a.value === '2'), click = { type: 'click', x: 0.15, y: 0.1 }
+      const early = run(latebutton, '--wait', '6', '--macro', macro2([{ t: 1000, ...click }], { version: 1 }))
+      assert.ok(!toTwo(early), 'wait: a click on Next at 1 s comes too early: ' + calls(early))
+      const waited = run(latebutton, '--wait', '8', '--macro', macro2([{ t: 100, type: 'wait', text: 'Next' }, { t: 200, ...click }]))
+      assert.ok(toTwo(waited), 'wait: the click after a wait for “Next” reaches it: ' + calls(waited))
+      assert.ok(!waited.findings.some(f => /macro stopped/.test(f.title)), 'wait: no timeout finding when the text appears')
+      const never = run(latebutton, '--wait', '6', '--macro', macro2([{ t: 100, type: 'wait', text: 'Never on the page', timeout: 2000 }, { t: 200, ...click }]))
+      assert.ok(never.findings.some(f => f.sev === 'warn' && /^The macro stopped at step 1: waited 2 s for “Never on the page” and it never appeared/.test(f.title)) && !toTwo(never), 'wait: a wait that times out stops the macro: ' + titles(never))
+      assert.ok(never.api.some(a => a.call === 'LMSCommit'), 'wait: and the run still finishes, with its calls')
+      const byStep = run(latebutton, '--wait', '6', '--macro', macro2([{ t: 100, type: 'wait', milestone: 'initialised' }, { t: 200, type: 'wait', quiet: 100 }, { t: 300, type: 'wait', ms: 3500 }, { t: 400, ...click }]))
+      assert.ok(toTwo(byStep) && !byStep.findings.some(f => /macro stopped/.test(f.title)), 'wait: a milestone, a quiet network and a pause: ' + titles(byStep))
+      const small = macro2([{ t: 100, type: 'wait', text: 'Next' }, { t: 200, ...click }], { viewport: { width: 800, height: 600 } })
+      const sized = run(latebutton, '--wait', '8', '--macro', small)
+      assert.deepEqual([sized.launch.options.viewport.width, sized.launch.options.viewport.height], [800, 600], 'macro size: the run is at the size the macro was recorded at')
+      assert.ok(toTwo(sized), 'macro size: the click reaches Next at that size: ' + calls(sized))
+      const forced = run(latebutton, '--wait', '8', '--viewport', '1000x700', '--macro', small)
+      assert.deepEqual([forced.launch.options.viewport.width, forced.launch.options.viewport.height], [1000, 700], 'macro size: --viewport wins')
+      assert.ok(forced.findings.some(f => f.sev === 'info' && f.title === 'The macro was recorded at 800×600 and played at 1000×700: clicks may miss'), 'macro size: and says so: ' + titles(forced))
+    }
     writeFileSync(optFile, JSON.stringify({ macro: [{ t: 1, type: 'tap' }] })); assert.match(node(['run', good, '--options', optFile]).stderr, /type to be click/, 'macro: a bad macro in the options file fails')
     writeFileSync(optFile, '{"nope":1}'); assert.match(node(['run', good, '--macro', optFile]).stderr, /list of events/, 'macro: a bad macro file fails')
     // Typed text: kept only with --record-input, never from the password field (its length only), and keys are not kept for it either.
@@ -2330,18 +2395,20 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
       await invoke('launch', { item: 0, auto: 6 })
       await new Promise(r => setTimeout(r, 1500))
       assert.equal(await invoke('live-input', { type: 'click', x: 0.631, y: 0.328 }), true)
-      const rec = await invoke('macro-save')
+      const saved = await invoke('macro-save'), rec = saved.events
+      assert.ok(Number.isInteger(saved.viewport?.width) && saved.viewport.width > 100 && saved.viewport.height > 100, 'web: the macro has the window size: ' + JSON.stringify(saved.viewport))
       assert.deepEqual(rec.map(e => [e.type, e.x, e.y]), [['click', 0.631, 0.328]], 'web: the click is recorded'); assert.ok(rec[0].t >= 1000 && rec[0].t < 6000, 'web: with its time into the run: ' + rec[0].t)
       await invoke('live-input', { type: 'click', x: 0.2, y: 0.2 })
-      assert.equal((await invoke('macro-save')).length, 1, 'web: saving stops recording: a later click is not added')
-      const mid = await invoke('stop'), seen = await invoke('macro-from-run', { run: mid })
+      assert.equal((await invoke('macro-save')).events.length, 1, 'web: saving stops recording: a later click is not added')
+      const mid = await invoke('stop'), fromRun = await invoke('macro-from-run', { run: mid }), seen = fromRun.events
       assert.ok(seen.length === 2 && seen[0].type === 'click' && Math.abs(seen[0].x - 0.631) < 0.01 && Math.abs(seen[0].y - 0.328) < 0.02, 'web: the probe saw both clicks, recorded or not: ' + JSON.stringify(seen))
+      assert.deepEqual(fromRun.viewport, saved.viewport, 'web: macro-from-run has the run window’s size')
       await assert.rejects(invoke('macro-from-run', { run: 9999 }), /Choose a run/, 'web: macro-from-run needs a run')
       await assert.rejects(invoke('options', { macro: [{ t: 0, type: 'click' }] }), /x to be a number/, 'web: a bad macro is refused')
       assert.match((await invoke('options', { macro: rec })).command, / --macro macro\.json$/, 'web: the macro in the CLI line')
       const cEvs = await fetch(base + '/api/events', { headers: H }), cReader = cEvs.body.getReader()
       let cText = ''
-      assert.equal(await invoke('cycle-start', { item: 0, wait: 4, macro: rec }), true, 'web: the cycle starts')
+      assert.equal(await invoke('cycle-start', { item: 0, wait: 4, macro: rec, macroSize: saved.viewport }), true, 'web: the cycle starts')
       await assert.rejects(invoke('cycle-start', { item: 0 }), /already running/, 'web: one at a time')
       while (!/event: cycle\ndata: \{"state":"(done|error)".*\n/.test(cText)) cText += new TextDecoder().decode((await cReader.read()).value)
       cReader.cancel()

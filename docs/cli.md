@@ -169,7 +169,7 @@ app.
 | `--storage` | `normal` | Storage in the content's frames: `blocked` makes `localStorage` and `sessionStorage` throw a `SecurityError`, `document.cookie` read empty and `indexedDB.open` fail, as Safari does for content in another site's page; `partitioned` empties the run window's storage first. With `normal`, a profile whose `cookies` is `third-party-blocked` (`scorm-cloud`) blocks it too. See the [user guide](user-guide.md#storage-blocked-in-the-contents-frames). In an options file: `"storage": "blocked"` |
 | `--browser` | `chromium` | `webkit` runs the content in Safari's engine through Playwright (see [WebKit](#webkit)) |
 | `--viewport` | none | A device size: `iphone`, `ipad`, `android-phone`, or a width and height like `390x844`. The preset's touch, pixel ratio and user agent come with it. With no `--viewport` the window is as it is |
-| `--macro` | none | A JSON file of clicks, keys and typing to play at their times during the run (see [Macros](#macros)). Chromium only. In an options file: `"macro": [ … ]` |
+| `--macro` | none | A JSON file of clicks, keys, typing and waits to play at their times during the run (see [Macros](#macros)). A version 2 file also sets the window size the macro was recorded at, unless `--viewport` is given (the size is printed to standard error). Chromium only. In an options file: `"macro": [ … ]` |
 | `--record-input` | off | Keeps the text typed in the content's frames in the run's probe reports (`trace.probe`, `type: "input"`), so a macro can be made from it. Never from a password field, or a field whose `autocomplete` is `current-password`, `new-password`, `cc-…` or `one-time-code`: those report only a length. Without it a run holds clicks and named keys, no text |
 | `--trace` | off | Records which functions of the package ran and which way each decision went, with the values (see [Tracing](#tracing)). Keep the run with `--out` to read it |
 | `--out` | none | Keeps the full run (scripts, requests, coverage, sources). Open it in the desktop app with **Open saved…**, or pass it to `report` or `--resume-from` |
@@ -539,7 +539,8 @@ and `b` run 2.
 
 ### Macros
 
-A macro file is a JSON list of events, or `{ "format": "package-lab-macro", "version": 1, "events": [ … ] }`. Each event
+A macro file is a JSON list of events, or `{ "format": "package-lab-macro", "version": 2, "viewport": { "width": 1100, "height": 800 }, "events": [ … ] }`.
+Version 1 files (the same without `viewport`) and bare lists still work and play as they always did. Each event
 has `t`, the milliseconds since the run started (0 to 3,600,000), and a `type`:
 
 | Type | Fields | Does |
@@ -549,12 +550,32 @@ has `t`, the milliseconds since the run started (0 to 3,600,000), and a `type`:
 | `wheel` | `x`, `y`, `dy` | Scrolls by `dy` pixels (positive is down) |
 | `key` | `key` | One of `Enter`, `Tab`, `Escape`, `Backspace`, `Delete`, `Space`, `Up`, `Down`, `Left`, `Right`, `PageUp`, `PageDown`, `Home`, `End` |
 | `text` | `text` | Types the text (up to 2,000 characters) into the focused field |
+| `wait` | one of `ms`, `text`, `milestone`, `quiet`; `timeout`? | Blocks the macro until the condition holds (see below) |
+
+A `wait` has exactly one condition, and an optional `timeout` in milliseconds (1,000 to 600,000; 30,000 if left out):
+
+| Field | Waits until |
+|---|---|
+| `ms` (1 to 600,000) | That many milliseconds have passed (no timeout applies) |
+| `text` (1 to 200 characters) | The text is in the `document.body.innerText` of any frame of the content, checked every 250 ms. Frames of another origin are looked at through their own session |
+| `milestone` | The run has reached that step of its [progress strip](findings.md#from-a-run-milestones): one of `launched`, `scripts`, `shown`, `looked`, `found`, `initialised`, `read`, `wrote`, `committed`, `finished` |
+| `quiet` (100 to 30,000) | No request has been pending for that many milliseconds. A request that never ends, such as a long poll, stops it being met |
+
+The sleep before each event is the gap between its `t` and the one before (the first: its own `t`), counted from the end
+of a wait. If a wait times out, the run's trace gets a `macro-wait` note, the macro plays nothing more, and the run
+carries on to its end (finding: [From a run](findings.md#from-a-run-the-macro)).
+
+**Size.** `viewport` (whole pixels, 100 to 10,000) is the window the positions were measured across. When a macro with
+a `viewport` is loaded by `--macro`, the desktop app or the web interface, and the run has no device size of its own,
+the run's `viewport` option is set to it (`"1100x800"`). With another `--viewport` the run's wins, and the trace gets a
+`macro-size` note (finding: "The macro was recorded at 1100×800 and played at 390×844: clicks may miss").
 
 ```json
-[
-  { "t": 400, "type": "click", "x": 0.631, "y": 0.328 },
+{ "format": "package-lab-macro", "version": 2, "viewport": { "width": 1100, "height": 800 }, "events": [
+  { "t": 400, "type": "wait", "text": "Next", "timeout": 10000 },
+  { "t": 500, "type": "click", "x": 0.631, "y": 0.328 },
   { "t": 900, "type": "click", "x": 0.73, "y": 0.328 }
-]
+] }
 ```
 
 At most 2,000 events and 100 KB of typed text in all. Events are played in time order through the same input as the live
