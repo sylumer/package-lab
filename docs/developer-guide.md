@@ -201,6 +201,7 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | Name | Argument | Returns |
 |---|---|---|
 | `open-package` | — | Package info (desktop only: opens a dialog) |
+| `open-path` | `{ path }` | Package info (desktop only). A .zip dropped on the window: `path` is checked to be a string, resolved, and must end in `.zip` (case-insensitive) and be an existing regular file. Otherwise it throws with the reason. Then `openPath`, as the Finder's Open With does |
 | `export-report` | `{ run, redact }` | `{ file }` after a save dialog, or `{ cancelled }` (desktop only) |
 | `report-html` | `{ run, redact }` | `{ name, html }`: a run's report, for the web download (`lab.report` in the bridge) |
 | `state` | — | `{ pkg, runs, running, web }`: everything a new client needs |
@@ -1272,6 +1273,17 @@ The user guide tells the user to check the report before sending it.
 `render()` redraws the view list, the view and the runs list from `st`. It talks only through `window.lab`:
 `lab.invoke(name, arg)` and `lab.on(channel, fn)`.
 
+**Drop to open (E2.5).** A `.zip` dropped anywhere on the window opens it. `app.js` shows `#drop` (“Drop to open”) while
+a file is dragged over the window, counting `dragenter` and `dragleave` so the overlay goes when the drag leaves. On the
+desktop, `lab.pathFor(file)` (`webUtils.getPathForFile` in `preload.cjs`) gives the file's place on disk, and
+`invoke('open-path', { path })` opens it through `openPath` in `main.js`. A `File` the page made itself has no place on
+disk, so `pathFor` returns `''` and `open-path` refuses it: test the desktop path with `invoke('open-path', …)`. The web
+interface has no `pathFor`; it uploads the file with `lab.upload`, as Open does. Any file not ending in `.zip` gets
+“Only .zip packages can be opened” and nothing changes.
+
+**Tooltips (E2.5).** Each `title` is one line of about 80 characters or less. `test/ui.js` fails if any `title` in the
+rendered page is over 100 characters. Longer explanations go in the user guide, under the setting they describe.
+
 The page's CSP allows only its own scripts and styles, and `data:` images (for live frames).
 
 **Toolbar and icons.** `index.html` starts with one `<header id="toolbar">` (52 px, `-webkit-app-region: drag`; every control in it is `no-drag`), then the `.main` row. Icons are `<symbol id="i-…">` elements in one hidden `<svg>` at the top of the toolbar, 16×16, `stroke="currentColor"`, 1.5 stroke, drawn by hand; use them with `<svg class="icon" aria-hidden="true"><use href="#i-run"/></svg>`. There is no icon library. Every toolbar button has an `aria-label`; its `.tb-label` text hides below 1100 px. `syncRun()` in `app.js` sets the Run/Stop button's label, icon and enabled state from `st.running`.
@@ -1288,7 +1300,7 @@ The page's CSP allows only its own scripts and styles, and `data:` images (for l
 |---|---|
 | `GET /?token=…` | Checks the token and sets the cookie, then redirects to `/` |
 | `GET /`, `GET /<ui file>` | The interface |
-| `POST /api/invoke/<handler>` | JSON body, then `{ value }` or `{ error }` (status 500). `open-package` and `open-run` are refused |
+| `POST /api/invoke/<handler>` | JSON body, then `{ value }` or `{ error }` (status 500). `open-package`, `open-path` and `open-run` are refused |
 | `POST /api/upload?name=` | Raw `.zip` body (up to 1 GB), then `{ value: package info }`. With `&role=compare`, the body is compared with the open package and `{ value: comparison }` returned; nothing is opened |
 | `GET /api/events` | Server-sent events: `package`, `run`, `state`, `probe`, `experiment`, `discover` |
 | `GET /api/live` | Server-sent events: `frame` with `{ w, h, t, jpeg (base64) }`. Open connections count as watchers |

@@ -7,7 +7,7 @@ commit. The states are `todo`, `in progress`, `done` and `skipped` (with the rea
 
 Phase 0 done: `test/ui.js` drives the real app through Playwright's Electron driver (`npm run test:ui`, also in `--slow`); slow suite passed and merged into main.
 
-Phase 1 done: macro format 2 (window size, wait steps, a player on one clock), clicks tied to the element clicked with a position fallback, and a Record button in the desktop app. Each took one review round; the slow suite passed and main was fast-forwarded to b2eb223. Phase 2 in progress.
+Phase 1 done: macro format 2 (window size, wait steps, a player on one clock), clicks tied to the element clicked with a position fallback, and a Record button in the desktop app. Each took one review round; the slow suite passed and main was fast-forwarded to b2eb223. Phase 2 done: a Mac toolbar with the system accent and hand-drawn icons, run settings in a right-hand inspector with a summary chip, views grouped in the sidebar, a verdict banner on Findings, and drop-to-open with one-line tooltips. Each took one review round. The slow suite passed on the final E2.5 tree (run by its builder under the lock). From E2.5 on, the plan runs in lanes (see evolution-plan.md, "Parallel lanes"); lane C needed no change.
 
 Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
 
@@ -22,13 +22,14 @@ Each commit column is filled in by the following work package's commit, since a 
 | E2.1 | Window chrome and one toolbar | sonnet | done | 07a83e1 | One review round: vibrancy now shows through the sidebar only, Run text colour follows the accent's luminance, status keeps its full text as a tooltip, short UI strings say Run and Stop. Developer Tools moved to ⇧⌥⌘I. The web check uses a cached Chromium 1200 (build 1255 not installed). Light and dark screenshots come with E3.3. One `npm test` run failed once in the Alfred fix check and passed on rerun (flaky, unrelated). |
 | E2.2 | The inspector: run settings on the right | sonnet | done | 5519d75 | One review round. The before object was captured from the E2.1 web interface (`test/fixtures/launch-options-before.json`, every control set) and is compared after the change; macro and answers aren't in it. The Compare view's working-copy button was dropped (Compare stays hidden until a comparison exists); File → Record a Working Copy… and the sidebar's Package group cover it. Narrow widths (under 800 px) not checked. |
 | E2.3 | Views grouped in the sidebar | sonnet | done | ce36740 | One review round: ⌘1–⌘5 blurs an editing field first so sidebar and content agree, Ctrl+1–5 off a Mac, the list stays reachable by Tab, Live checked in the web interface, "tab" wording swept to "view". The old Package actions sit under the views as "Actions". |
-| E2.4 | A verdict at the top of Findings | haiku | done | | One review round: an empty milestone list no longer reads "Ran through", the banner has no live-region role, the guide says the banner is Problem, Warning or Good. `runVerdict` never returns `info` (an info finding counts as ok). The verdict reaches the UI through the run summary. Banner checked by text, not by eye. |
-| E2.5 | Drop a package on the window; short tooltips | haiku | in progress | | |
-| E3.1 | Split the user guide; docs link check | haiku | todo | | |
+| E2.4 | A verdict at the top of Findings | haiku | done | 3e5f348 | One review round: an empty milestone list no longer reads "Ran through", the banner has no live-region role, the guide says the banner is Problem, Warning or Good. `runVerdict` never returns `info` (an info finding counts as ok). The verdict reaches the UI through the run summary. Banner checked by text, not by eye. |
+| E2.5 | Drop a package on the window; short tooltips | haiku | done | | One review round: no drop while a dialog is open, load errors show in the status, the real path is checked, the first .zip of several opens, the overlay has role status. The desktop drop of good.zip is tested through `open-path`, because a File built in the page has no path. Long tooltip text moved into the user guide's "The settings, in full". |
+| E3.1 | Split the user guide; docs link check | haiku | in progress | | Lane B, in ~/github/package-lab-docs on `evolve-docs`. |
 | E3.2 | Docs search, contents and context help | sonnet | todo | | |
 | E3.3 | Screenshots by script; images in the docs panel | haiku | todo | | |
+| E3.4 | Light, dark or follow the system | sonnet | todo | | |
 | E4.1 | The live view in the desktop app, with coordinates | sonnet | todo | | |
 | E4.2 | The macro editor | sonnet | todo | | |
-| E5.1 | CLI, web, Alfred and Concierge in step | sonnet | todo | | |
+| E5.1 | CLI, web, Alfred and Concierge in step | sonnet | todo | | Lane C (Concierge) done with no change: the module has no macro field (see decisions.md). The rest waits for Phase 5. |
 | E5.2 | Documentation pass | haiku | todo | | |
 | E5.3 | Final check and release build | sonnet | todo | | |

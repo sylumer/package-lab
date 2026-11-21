@@ -9,10 +9,10 @@
 //   --no-window          no desktop window (with --serve: a server only)
 //   --show-runs          with --no-window: show the content windows anyway
 import { app, BrowserWindow, ipcMain, dialog, net, protocol, session, Menu, shell, systemPreferences } from 'electron'
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
-import { basename, extname, join } from 'node:path'
+import { basename, extname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { unzip } from './zip.js'
@@ -675,6 +675,17 @@ const handlers = {
   'open-package': async () => {
     const r = await dialog.showOpenDialog(ui, { title: 'Open a SCORM package', filters: [{ name: 'SCORM package', extensions: ['zip'] }], properties: ['openFile'] })
     return r.canceled ? null : loadPackage(r.filePaths[0])
+  },
+  // A .zip dropped on the window (E2.5): the preload gives its path (lab.pathFor). The path comes from the window, so it is checked: a string, an existing .zip file.
+  // Desktop only (web.js DESKTOP_ONLY): the web interface can't name a path on this Mac.
+  'open-path': ({ path }) => {
+    if (typeof path !== 'string' || !path) throw new Error('Drop the file from Finder: Package Lab needs its place on the disk')
+    // The real path (symlinks followed) is what is checked and read, so a link can't point the check at one file and the read at another.
+    let p
+    try { p = realpathSync(resolve(path)) } catch { throw new Error(`${basename(path)} isn’t a file, so it can’t be opened`) }
+    if (extname(p).toLowerCase() !== '.zip') throw new Error('Only .zip packages can be opened')
+    if (!statSync(p).isFile()) throw new Error(`${basename(p)} isn’t a file, so it can’t be opened`)
+    return loadPackage(p)   // as open-package does: a load error reaches the window's status line (openPath would show a dialog and return nothing)
   },
   // Export corrected package…: a save dialog, then the file. Returns the summary (file is null if nothing needed changing or the dialog was cancelled).
   'export-fixed': async o => {

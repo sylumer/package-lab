@@ -82,7 +82,10 @@ On the desktop, the menu bar has the toolbar's actions and a few more. Reload is
   - **Run**, the one button that starts a run (⌘R) and becomes **Stop** while it goes (⌘.). It is the only filled
     button. Beside it, a small **summary chip** lists the settings that aren't at their defaults (for example
     "SCORM 2004, Moodle, iPhone"). Click it to open them. It isn't shown when every setting is at its default.
-  - **Record** (desktop only, while a run is going), then **Test saving**
+  - **Record** (desktop only, while a run is going), then **Test saving**. Press **Record** and click through the course:
+    the clicks are kept as the macro after the run stops (the dialog asks whether to save them).
+    **Test saving** runs the item, leaves the way a learner closing the window does, resumes from what was saved, and
+    checks that the content saved its progress and read its place. See [Testing saving](#testing-that-progress-is-saved-and-resumed).
   - the status line
   - **Inspector** (⌥⌘I), which shows or hides the pane on the right (see [The inspector](#the-inspector)), and **Help**
 
@@ -102,6 +105,14 @@ On the desktop, the menu bar has the toolbar's actions and a few more. Reload is
   nothing to show is left out. The **Filter** box above the view filters whichever table is showing.
 - **Actions** (left, at the bottom): **Compare packages…**, **Record a working copy…**, **Check a folder…** (desktop
   only) and **Export corrected package…**.
+  - **Compare packages…** compares this package with another one: files, manifest, loading path and findings, from the
+    files alone.
+  - **Record a working copy…** records the course where it works (a hosted preview, an LMS, SCORM Cloud), to compare a
+    run of this package with it.
+  - **Check a folder…** checks every SCORM package in a folder, from the files alone: one row each, with its verdict.
+    Click a row to open that package.
+  - **Export corrected package…** saves a corrected copy of the package: your changed files and the mechanical fixes
+    (capitals, manifest version, missing files, http, layout), with a list of every change inside.
 - **Help** at the right end of the toolbar opens the docs in the inspector; see [The docs panel](#the-docs-panel).
 
 ### The inspector
@@ -121,6 +132,26 @@ wide to start with. Drag its left edge to resize it, or focus the edge and use t
 
 **Macro** shows the macro the next run will play, with **Use this run's clicks** and **Clear**; see
 [Testing resume and progress saving](#testing-resume-and-progress-saving). **Help** is the docs panel; see [The docs panel](#the-docs-panel).
+
+### The settings, in full
+
+The tooltips in the inspector are short. What they leave out:
+
+- **Profile**: presets are approximations of an LMS. Change their fields below the list. See
+  [Profiles](#running-it-the-way-an-lms-does-profiles).
+- **Browser**: Chromium is the app's own browser. WebKit is Safari's engine, run through Playwright (it needs
+  `npm i -D playwright`). A WebKit run has no live view, coverage, caught errors or code trace. See
+  [Other browsers and device sizes](#other-browsers-and-device-sizes).
+- **Device size**: the run uses that device's size, touch and user agent.
+- **Storage**: the storage the content's frames get. **Blocked** is what Safari does for content inside another site's
+  page. **Partitioned** starts empty at the start of each run. **Normal** leaves it to the profile's Cookies field. See
+  [Storage blocked in the content's frames](#storage-blocked-in-the-contents-frames).
+- **Trace the code**: records which functions ran and which way each decision went, with the values. The content runs a
+  little slower. See [Tracing the code](#tracing-the-code).
+- **Keep typed text in runs**: keeps the text typed in the course's frames, so **Use this run's clicks** can include it.
+  Never from password fields. The text is saved in the run.
+- **Authoring tool**: applies the rules for that tool even when Package Lab doesn't recognise it in the package. **Auto**
+  uses what it recognises.
 
 ### Record a working copy
 
@@ -226,6 +257,10 @@ Each view below says what it shows and what its buttons do. Where a feature has 
 Choose **Open package…** and pick the `.zip`. Package Lab reads it in memory; it isn't unpacked anywhere. The
 **Findings** tab fills straight away with what can be told from the files. The status line counts the errors and
 warnings. **File › Open Recent** lists packages you opened before.
+
+You can also drag the `.zip` from Finder onto the window. A **Drop to open** overlay shows while the file is over the
+window, and the package opens when you let go. In the web interface the file is uploaded to the Mac running Package
+Lab. Dropping any other kind of file shows *Only .zip packages can be opened* and changes nothing.
 
 The package is checked like this:
 - The manifest must be called `imsmanifest.xml`, in lower case, at the top of the ZIP.

@@ -130,6 +130,8 @@ ol.chain li { margin: .35em 0; }
 
 /* Docs panel, start screen, tab gap */
 [hidden] { display: none !important; }
+/* Dragging a file over the window (E2.5): the overlay is drawn over everything and ignores the pointer, so the drag goes on to the window. */
+#drop { position: fixed; inset: 12px; z-index: 1000; display: grid; place-items: center; border: 3px dashed var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--accent) 12%, var(--bg)); color: var(--fg); font-size: 20px; font-weight: 600; pointer-events: none; }
 #inspector { position: relative; width: var(--inspector-w, 340px); max-width: 60vw; flex: none; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
 #inspector-resize { position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 2; }
 #inspector-resize:hover { background: color-mix(in srgb, var(--accent) 35%, transparent); }

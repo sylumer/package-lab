@@ -75,7 +75,7 @@ const VIEWS = {
       r.milestones && h('p', { class: 'milestones' }, r.milestones.map(s => h('span', { class: s.reached ? 'ok' : 'bad', title: s.evidence }, `${s.reached ? '✓' : '✗'} ${s.label}`))),
       findingsList(r.findings),
       h('div', { class: 'row' }, h('label', { class: 'muted small' }, redact, ' Take the course content out'),
-        h('button', { type: 'button', class: 'secondary', title: 'Save this run’s report as HTML. Redacted: no page text, console text, API values, suspend data, bodies or file contents; vocabulary, numbers and element names stay.', onclick: () => saveReport(r.id, redact.checked) }, 'Save report…'))]
+        h('button', { type: 'button', class: 'secondary', title: 'Save this run’s report as HTML. Redacted leaves out the course content.', onclick: () => saveReport(r.id, redact.checked) }, 'Save report…'))]
   },
   'Boot path'() {
     const r = run(), item = $('item').value
@@ -699,6 +699,26 @@ $('file').onchange = () => act(async () => {
   showPackage(await lab.upload(f, p => say(`Uploading ${f.name}: ${Math.round(p * 100)}%`)))
   $('file').value = ''
 }, 'Uploading…')
+// ---- Drop a package on the window (E2.5): a .zip anywhere on the window opens it, and the overlay shows while a file is dragged over it.
+// Desktop: the file's place on disk (lab.pathFor) goes to open-path. Web: the file is uploaded, as Open does. Other files are refused.
+let dragDepth = 0
+// A drag of files. While a dialog is open (Settings, Saved runs, …) the window takes no drops: the overlay stays off and nothing opens.
+const dragsFiles = e => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files')
+const dropOff = () => !!document.querySelector('dialog[open]')
+const showDrop = on => { $('drop').hidden = !on; if (!on) dragDepth = 0 }
+window.addEventListener('dragenter', e => { if (dragsFiles(e) && !dropOff()) { e.preventDefault(); dragDepth++; showDrop(true) } })
+window.addEventListener('dragover', e => { if (dragsFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = dropOff() ? 'none' : 'copy' } })
+window.addEventListener('dragleave', e => { if (dragsFiles(e) && --dragDepth <= 0) showDrop(false) })
+window.addEventListener('drop', e => {
+  if (!dragsFiles(e)) return
+  e.preventDefault(); showDrop(false)
+  if (dropOff()) return
+  const files = [...e.dataTransfer.files]
+  if (!files.length) return
+  const f = files.find(x => /\.zip$/i.test(x.name))   // several files: the first .zip among them
+  if (!f) return say('Only .zip packages can be opened')
+  act(async () => showPackage(lab.web ? await lab.upload(f, p => say(`Uploading ${f.name}: ${Math.round(p * 100)}%`)) : await lab.invoke('open-path', { path: lab.pathFor(f) })), 'Opening…')
+})
 // ---- Package diff (P3.3): the open package (A) against a second one (B) ----
 const kb = n => n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`
 const showDiff = d => { if (!d) return; st.pdiff = d; st.tab = 'Package diff'; render(); say(`${d.a.name} against ${d.b.name}: ${d.summary}`) }
@@ -808,7 +828,7 @@ const launchOptions = () => ({ macro: st.macro.events, recordInput: $('record-in
 function showMacro() {
   const r = run(), seen = r ? r.trace.probe.filter(p => p.type === 'input').length : 0, m = st.macro, n = m.events.length
   $('macro').replaceChildren(h('p', { class: 'muted small' }, n ? `${n} events over ${(m.events.at(-1).t / 1000).toFixed(1)} s${m.viewport ? `, recorded at ${m.viewport.width}×${m.viewport.height}` : ''}. They play at the start of every launch${m.viewport ? ', at that size unless Device size says otherwise' : ''}, and are saved in each run’s options.` : 'None. Record clicks in the Live view (web interface), or take the clicks of a run.'),
-    h('div', { class: 'row' }, h('button', { type: 'button', class: 'secondary', disabled: !seen, title: 'The clicks, keys and typing the probe saw in the course’s frames during the selected run', onclick: () => act(async () => { st.macro = await lab.invoke('macro-from-run', { run: r.id }); showMacro(); showOptions(); say(`Macro made from the selected run: ${st.macro.events.length} events.`) }) }, seen ? `Use this run’s clicks (${seen})` : 'Use this run’s clicks'),
+    h('div', { class: 'row' }, h('button', { type: 'button', class: 'secondary', disabled: !seen, title: 'The clicks, keys and typing seen in this run’s course', onclick: () => act(async () => { st.macro = await lab.invoke('macro-from-run', { run: r.id }); showMacro(); showOptions(); say(`Macro made from the selected run: ${st.macro.events.length} events.`) }) }, seen ? `Use this run’s clicks (${seen})` : 'Use this run’s clicks'),
       h('button', { type: 'button', class: 'secondary', disabled: !n, onclick: () => { st.macro = { events: [], viewport: null }; showMacro(); showOptions() } }, 'Clear')))
 }
 async function showOptions() {

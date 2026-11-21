@@ -3,7 +3,7 @@
 // later work packages and scripts/screenshots.js can drive the same window. The app keeps its data in a temp folder.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -75,6 +75,34 @@ async function checks() {
   assert.match(await text('#pkg-name'), /good\.zip/, 'the package name shows')
   assert.ok(await win.getByRole('button', { name: 'Run', exact: true }).isEnabled(), 'Run is enabled')
   console.log('ui: package open ok')
+
+  // Drop (E2.5). The overlay shows while a file is dragged over the window and goes when the drag leaves. A .txt is refused with the
+  // message and changes nothing. A desktop drop of good.zip can't be dispatched: a File the page made has no place on disk, so the
+  // desktop path is tested through open-path, the handler a drop calls (see decisions.md).
+  await dispatchFile(win, 'dragenter', 'good.zip')
+  await win.locator('#drop').waitFor()
+  assert.equal(await text('#drop'), 'Drop to open', 'dragging a file over the window shows Drop to open')
+  await dispatchFile(win, 'dragleave', 'good.zip')
+  await win.locator('#drop').waitFor({ state: 'hidden' })
+  await dispatchFile(win, 'drop', 'notes.txt', Buffer.from('not a package'))
+  assert.equal(await win.locator('#status').textContent(), 'Only .zip packages can be opened', 'a .txt is refused with the message')
+  assert.match(await text('#pkg-name'), /good\.zip/, 'and the package stays open')
+  // With a dialog open (Settings), a drag shows no overlay: the window takes no drops then.
+  await menu('Settings…')
+  await win.locator('#settings[open]').waitFor()
+  await dispatchFile(win, 'dragenter', 'good.zip')
+  assert.ok(await win.locator('#drop').isHidden(), 'no Drop to open overlay while a dialog is open')
+  await win.keyboard.press('Escape')
+  await win.locator('#settings:not([open])').waitFor({ state: 'attached' })
+  const openPathError = path => win.evaluate(path => lab.invoke('open-path', { path }).then(() => '', e => e.message), path)
+  const notes = join(dir(), 'notes.txt'), folder = join(dir(), 'folder.zip'), missing = join(dir(), 'missing.zip')
+  writeFileSync(notes, 'not a package'); mkdirSync(folder)
+  assert.match(await openPathError(notes), /Only \.zip packages can be opened/, 'open-path refuses a file that is not a .zip')
+  assert.match(await openPathError(folder), /isn’t a file, so it can’t be opened/, 'open-path refuses a folder named .zip')
+  assert.match(await openPathError(missing), /isn’t a file, so it can’t be opened/, 'open-path refuses a .zip that does not exist')
+  assert.match(await openPathError(''), /Drop the file from Finder/, 'open-path refuses an empty path')
+  assert.match((await win.evaluate(path => lab.invoke('open-path', { path }), goodZip())).name, /good\.zip$/, 'open-path opens a .zip file')
+  console.log('ui: drop ok')
 
   // ⌘R runs and ⌘. stops (the menu items carry the shortcuts), and the Run button's label follows the run.
   const runMenu = await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find(i => i.label === 'Run').submenu.items.map(i => i.accelerator))
@@ -172,6 +200,7 @@ async function checks() {
   await win.keyboard.press('Escape')
   await win.locator('#ref-dialog:not([open])').waitFor({ state: 'attached' })
   console.log('ui: working copy dialog ok')
+  assert.deepEqual(await longTitles(win), [], 'no title attribute is longer than 100 characters')
   assert.deepEqual(errors, [], 'no uncaught errors in the window')
   await webChecks()
   console.log('ui: web toolbar ok')
@@ -267,6 +296,13 @@ async function webChecks() {
     assert.equal(await p.evaluate(() => document.documentElement.style.getPropertyValue('--accent')), '', 'web: the accent stays the CSS default')
     await p.waitForTimeout(500)
     assert.deepEqual(problems, [], 'web: no errors in the console: ' + problems.join(' | '))
+    // Drop (E2.5), web: a .zip dropped on the window is uploaded and opens; a .txt is refused and changes nothing.
+    await dispatchFile(p, 'drop', 'good.zip', readFileSync(goodZip()))
+    await p.locator('#pkg-name').filter({ hasText: /good\.zip/ }).waitFor()
+    await dispatchFile(p, 'drop', 'notes.txt', Buffer.from('not a package'))
+    assert.equal(await p.locator('#status').textContent(), 'Only .zip packages can be opened', 'web: a .txt is refused with the message')
+    assert.match(await p.locator('#pkg-name').textContent(), /good\.zip/, 'web: the package stays open')
+    assert.deepEqual(await longTitles(p), [], 'web: no title attribute is longer than 100 characters')
     // E2.2: with every control set to a non-default value, launchOptions() and the Copy as CLI command line are what the window made of
     // the same choices before the controls moved into the inspector.
     const before = JSON.parse(readFileSync(join(root, 'test', 'fixtures', 'launch-options-before.json'), 'utf8'))
@@ -280,6 +316,16 @@ async function webChecks() {
     assert.deepEqual(problems, [], 'web: no errors after the settings were changed: ' + problems.join(' | '))
   })
 }
+
+// A file dragged over the window (dragenter, dragleave) or dropped on it (drop): Playwright's dispatchEvent with a DataTransfer that
+// holds the file. The window reads the name (.zip or not); the bytes are only there so the file is a real one.
+async function dispatchFile(p, type, name, bytes = Buffer.alloc(0)) {
+  const dt = await p.evaluateHandle(({ name, b64 }) => { const d = new DataTransfer(); d.items.add(new File([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], name)); return d }, { name, b64: bytes.toString('base64') })
+  await p.locator('body').dispatchEvent(type, { dataTransfer: dt })
+  await dt.dispose()
+}
+// The title attributes on the page that are longer than 100 characters (E2.5: a tooltip is one line).
+const longTitles = p => p.evaluate(() => [...document.querySelectorAll('[title]')].map(e => e.title).filter(t => t.length > 100))
 
 // Launches with Record pressed, clicks Next in the course window, and stops. Leaves the Save/Discard dialog open.
 async function recordRound() {
