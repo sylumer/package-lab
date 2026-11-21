@@ -168,7 +168,8 @@ The rest of the file, in order:
   (a web client on `/api/live`, or a headless run with a live folder), and sends a frame only when it changed. Input
   goes to the newest window through `sendInputEvent` and `insertText`. Hidden windows render and take input.
 - **`handlers`:** the interfaces' API. They are registered with `ipcMain.handle` and passed to the web server.
-- **App menu:** `buildMenu()` builds the menu bar (desktop only). It has an explicit Package Lab menu, whose **Settings…** (⌘,) sends `{ action: 'settings' }` to the window. Each item sends a `menu` event to the window: `{ action }` for a toolbar button id, or `{ action: 'docs', name }` to open a doc in the docs panel.
+- **App menu:** `buildMenu()` builds the menu bar (desktop only). It has an explicit Package Lab menu, whose **Settings…** (⌘,) sends `{ action: 'settings' }` to the window. Each item sends a `menu` event to the window: `{ action }` for a toolbar button id, or `{ action: 'docs', name }` to open a doc in the docs panel. The Run menu's **Run** and **Stop** both send the toolbar's one Run/Stop button (`#run`): `launch` clicks it only when no run is going and `stop` only when one is. On macOS `createWindow()` adds `MAC_WINDOW` (`hiddenInset` title bar, traffic lights at 14,14, `sidebar` vibrancy, transparent window background); the toolbar is the title bar and `body.mac` leaves 78 px for the lights.
+- **Accent colour:** `ipcMain.handle('accent')` returns `systemPreferences.getAccentColor()` as `#rrggbb` (`''` where there is none). `preload.cjs` exposes it as `lab.accent()` and `lab.onAccent(fn)`, which hears the `accent` message main sends on `accent-color-changed`. `app.js` sets `--accent` on the root from both; the web interface has neither, so it keeps the CSS default. Developer Tools is ⇧⌥⌘I (⌥⌘I is Show Inspector). Never detect Electron by user agent: use `lab.web` or check for `lab.accent`.
 - **Start-up:** handles `open-file` (Finder, `open -a`, Alfred), the single-instance lock, and window creation.
 - **`headless()`:** the `--run` mode. It reads input files from the live folder while it waits.
 
@@ -1272,6 +1273,8 @@ The user guide tells the user to check the report before sending it.
 `lab.invoke(name, arg)` and `lab.on(channel, fn)`.
 
 The page's CSP allows only its own scripts and styles, and `data:` images (for live frames).
+
+**Toolbar and icons.** `index.html` starts with one `<header id="toolbar">` (52 px, `-webkit-app-region: drag`; every control in it is `no-drag`), then `#legacy-bar` holding the rows that are waiting to move into the Inspector. Icons are `<symbol id="i-…">` elements in one hidden `<svg>` at the top of the toolbar, 16×16, `stroke="currentColor"`, 1.5 stroke, drawn by hand; use them with `<svg class="icon" aria-hidden="true"><use href="#i-run"/></svg>`. There is no icon library. Every toolbar button has an `aria-label`; its `.tb-label` text hides below 1100 px. `syncRun()` in `app.js` sets the Run/Stop button's label, icon and enabled state from `st.running`.
 
 ### Web interface
 

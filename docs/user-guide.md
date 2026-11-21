@@ -64,28 +64,32 @@ press what it says, and choose **Steps** to read the recipe for it.
 
 ## The app menu
 
-On the desktop, the menu bar has the toolbar's actions and a few more. Reload is ⇧⌥⌘R, so ⌘R is **Launch**.
+On the desktop, the menu bar has the toolbar's actions and a few more. Reload is ⇧⌥⌘R, so ⌘R is **Run**, and Developer Tools is ⇧⌥⌘I, so ⌥⌘I is **Show Inspector**.
 
 | Menu | Items |
 |---|---|
 | **Package Lab** | **Settings…** ⌘, (see [Settings](#settings)) |
 | **File** | **Open Package…** ⌘O, **Open Recent**, **Compare Packages…**, **Check a Folder…**, **Open Saved Run…**, **Export Corrected Package…** ⌘E |
-| **Run** | **Launch** ⌘R, **Test Saving** ⇧⌘R, **Record Reference**, **Stop and Analyse** ⌘. |
-| **View** | **Reload** ⇧⌥⌘R |
+| **Run** | **Run** ⌘R, **Stop** ⌘., **Record Macro** ⌥⌘R, **Test Saving** ⇧⌘R, **Record Reference** |
+| **View** | **Show Inspector** ⌥⌘I, **Reload** ⇧⌥⌘R |
 | **Help** | **Show Docs** ⇧⌘H, **User Guide**, **Recipes**, **Findings**, **Show Data Folder** (opens `~/Library/Application Support/Package Lab`) |
 
 ## The window
 
-- **Toolbar, first row:**
-  - **Open package…**
-  - the item to launch
-  - the launch settings (see [Testing a theory](#testing-a-theory-launch-settings))
-  - **Stop after** and **Launch**
-- **Toolbar, second row:**
-  - the address of a working copy, and **Record reference** (optional)
-  - **Record caught errors**
-  - **Stop and analyse**
+- **Toolbar** (in the title bar on a Mac; the traffic lights sit at its left). From left to right:
+  - **Open**, then the package's name
+  - the **Item** to run
+  - **Run**, the one button that starts a run (⌘R) and becomes **Stop** while it goes (⌘.). It is the only filled button.
+  - **Record** (desktop only, while a run is going), then **Test saving**
   - the status line
+  - **Inspector** (⌥⌘I), which shows or hides a pane on the right (empty for now), and **Help**
+
+  The buttons show an icon and a label when the window is 1,100 pixels wide or more, and only the icon when it is
+  narrower. Drag the empty part of the toolbar to move the window. On a Mac the controls use your system accent colour.
+- **Settings rows**, under the toolbar (they will move into the Inspector):
+  - the launch settings (see [Testing a theory](#testing-a-theory-launch-settings)), **Stop after**, **Compare
+    packages…**, **Check a folder…** and **Export corrected package…**
+  - the address of a working copy, **Record reference** (optional) and **Record caught errors**
 - **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the tabs.
   The **R** and **F** buttons are for comparing.
 - **Tabs:** Findings, Boot path, API and Lookups always show, and so do the tabs you start things from: Experiments,
@@ -169,11 +173,11 @@ Each tab below says what it shows and what its buttons do. Where a feature has a
 
 | Button or control | What it does | Where it's described |
 |---|---|---|
-| **Open package…** | Opens a `.zip` | [Opening a package](#opening-a-package) |
+| **Open** | Opens a `.zip` | [Opening a package](#opening-a-package) |
 | **Item**, **API**, **Frame depth**, **In a new window**, **Resume last run's data** | The launch settings | [Testing a theory](#testing-a-theory-launch-settings) |
 | **Profile** | Hosts the content the way an LMS does | [Profiles](#running-it-the-way-an-lms-does-profiles) |
 | **Stop after** | How long a run lasts, or until you stop it | [Launching an item](#launching-an-item) |
-| **Launch** | Starts a run | [Launching an item](#launching-an-item) |
+| **Run** (then **Stop**) | Starts a run, and stops and analyses it | [Launching an item](#launching-an-item) |
 | **Test saving** | Runs the save-and-resume test | [Testing saving](#testing-that-progress-is-saved-and-resumed) |
 | **Compare packages…** | Compares this package with another `.zip` | [Comparing two packages](#comparing-two-packages) |
 | **Check a folder…** | Checks every package in a folder (desktop only) | [Checking a folder](#checking-a-folder-of-packages) |

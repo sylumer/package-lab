@@ -8,7 +8,7 @@
 //   --serve[=port]       start the web interface (default: the port in Settings, 4880 unless changed); --host=<address> (default 127.0.0.1)
 //   --no-window          no desktop window (with --serve: a server only)
 //   --show-runs          with --no-window: show the content windows anyway
-import { app, BrowserWindow, ipcMain, dialog, net, protocol, session, Menu, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, net, protocol, session, Menu, shell, systemPreferences } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
@@ -833,8 +833,14 @@ if (WINDOW) {
   })
 }
 
+// The system accent colour as #rrggbb ('' where the platform has none). The window asks for it, and hears when it changes.
+const accent = () => { try { const c = systemPreferences.getAccentColor(); return /^[0-9a-f]{6}/i.test(c) ? '#' + c.slice(0, 6) : '' } catch { return '' } }
+ipcMain.handle('accent', accent)
+if (process.platform === 'darwin') systemPreferences.on('accent-color-changed', () => { if (ui && !ui.isDestroyed()) ui.webContents.send('accent', accent()) })
+// macOS only: the toolbar is the title bar (E2.1), with the traffic lights inset and the sidebar's translucency showing the desktop.
+const MAC_WINDOW = process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' } : {}
 function createWindow() {
-  ui = new BrowserWindow({ width: 1400, height: 900, title: 'Package Lab', webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, sandbox: true } })
+  ui = new BrowserWindow({ width: 1400, height: 900, title: 'Package Lab', ...MAC_WINDOW, webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, sandbox: true } })
   ui.loadFile(join(import.meta.dirname, 'ui', 'index.html'))
   // Links in the docs panel open in the user's browser; the window never navigates away from the app page.
   ui.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' } })
@@ -858,12 +864,13 @@ function buildMenu() {
       { type: 'separator' }, item('Export Corrected Package…', 'CmdOrCtrl+E', 'export'),
       { type: 'separator' }, { role: 'close' } ] },
     { role: 'editMenu' },
-    { label: 'View', submenu: [   // viewMenu's reload would take ⌘R from Launch
-      { role: 'reload', accelerator: 'Shift+CmdOrCtrl+Alt+R' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' },
+    { label: 'View', submenu: [   // viewMenu's reload would take ⌘R from Run, and its DevTools ⌥⌘I from Show Inspector
+      item('Show Inspector', 'Alt+CmdOrCtrl+I', 'inspector'), { type: 'separator' },
+      { role: 'reload', accelerator: 'Shift+CmdOrCtrl+Alt+R' }, { role: 'forceReload' }, { role: 'toggleDevTools', accelerator: 'Shift+CmdOrCtrl+Alt+I' }, { type: 'separator' },
       { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' } ] },
     { label: 'Run', submenu: [
-      item('Launch', 'CmdOrCtrl+R', 'launch'), item('Test Saving', 'Shift+CmdOrCtrl+R', 'cycle'), item('Record Macro', 'Alt+CmdOrCtrl+R', 'record'),
-      item('Record Reference', undefined, 'ref'), item('Stop and Analyse', 'CmdOrCtrl+.', 'stop') ] },
+      item('Run', 'CmdOrCtrl+R', 'launch'), item('Stop', 'CmdOrCtrl+.', 'stop'), item('Record Macro', 'Alt+CmdOrCtrl+R', 'record'),
+      item('Test Saving', 'Shift+CmdOrCtrl+R', 'cycle'), item('Record Reference', undefined, 'ref') ] },
     { role: 'windowMenu' },
     { role: 'help', submenu: [
       docs('Show Docs', 'README.md', 'Shift+CmdOrCtrl+H'), docs('User Guide', 'user-guide.md'), docs('Recipes', 'recipes.md'), docs('Findings', 'findings.md'),

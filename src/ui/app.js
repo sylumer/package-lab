@@ -1,13 +1,19 @@
 // Package Lab's window: toolbar, runs list and the tabs that show a run.
 import { markdown } from './markdown.js'
 const $ = id => document.getElementById(id)
+const runBtn = $('run')
 function h(tag, props = {}, ...kids) {
   const e = document.createElement(tag)
   for (const [k, v] of Object.entries(props)) if (v != null && v !== false) k === 'class' ? e.className = v : k.startsWith('on') ? e.addEventListener(k.slice(2), v) : e.setAttribute(k, v === true ? '' : v)
   e.append(...kids.flat(Infinity).filter(x => x != null && x !== false).map(x => typeof x === 'object' ? x : String(x)))
   return e
 }
-const say = t => { $('status').textContent = t }
+// Desktop only: the Mac's accent colour (lab.accent is undefined in the web interface, which keeps the CSS default), and the class that leaves room for the traffic lights.
+if (!lab.web && navigator.platform.startsWith('Mac')) document.body.classList.add('mac')
+const setAccent = c => { if (/^#[0-9a-f]{6}$/i.test(c)) { const root = document.documentElement.style, [r, g, b] = [1, 3, 5].map(i => { const v = parseInt(c.slice(i, i + 2), 16) / 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4 })
+  root.setProperty('--accent', c); root.setProperty('--on-accent', .2126 * r + .7152 * g + .0722 * b > .4 ? '#000' : '#fff') } }
+lab.accent?.().then(setAccent).catch(() => {}); lab.onAccent?.(setAccent)
+const say = t => { $('status').textContent = $('status').title = t }
 const short = u => (u || '').replace(/^lab:\/\/(?:run|content)\/pkg\//, '')
 const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
@@ -72,7 +78,7 @@ const VIEWS = {
     const FILE = { ok: 'in package', case: 'wrong capitals', missing: 'missing', server: 'server path', outside: 'outside package', local: 'author’s computer', remote: 'other site', 'remote-http': 'other site (http)' }
     const runCell = n => !r ? '' : !n.run ? h('span', { class: n.status === 'ok' && n.how !== 'literal' && n.kind !== 'asset' ? 'bad' : 'muted' }, 'never asked for')
       : n.run.failed || n.run.status >= 400 ? h('span', { class: 'bad' }, String(n.run.status ?? n.run.failed)) : n.run.pending ? 'still waiting' : `${n.run.status} at ${secs(n.run.t)} s`
-    const out = [h('p', { class: 'muted small' }, r ? `How ${boot.start} should load, against what ${r.label} actually loaded.` : `How ${boot.start} should load, worked out from the files. Launch it to see what actually loads.`),
+    const out = [h('p', { class: 'muted small' }, r ? `How ${boot.start} should load, against what ${r.label} actually loaded.` : `How ${boot.start} should load, worked out from the files. Run it to see what actually loads.`),
       findingsList(boot.risks),
       h('h3', { class: 'section' }, 'Loading path'),
       ...table(['#', 'File', 'Kind', 'How', 'From', 'In the files', ...(r ? ['In the run'] : [])], boot.nodes.map((n, i) => [i + 1, '  '.repeat(n.depth) + (n.path ?? n.target), n.kind + (n.mode && n.mode !== 'sync' ? ` (${n.mode})` : ''), n.how,
@@ -107,7 +113,7 @@ const VIEWS = {
   // The LRS of a cmi5 or Tin Can run (P4.5): the statements with their validation, the documents (state, profiles) and the requests.
   xAPI() {
     const x = run()?.trace.lrs
-    if (!x) return h('p', { class: 'muted' }, run() ? 'This run had no LRS: only cmi5 and Tin Can (xAPI) packages get one.' : 'Launch a cmi5 or Tin Can package to see its statements here.')
+    if (!x) return h('p', { class: 'muted' }, run() ? 'This run had no LRS: only cmi5 and Tin Can (xAPI) packages get one.' : 'Run a cmi5 or Tin Can package to see its statements here.')
     const verb = e => (e.statement?.verb?.id ?? '').replace(/^.*[/#]/, '') || '(no verb)'
     const line = e => { const st = e.statement ?? {}, r = st.result ?? {}, o = st.object ?? {}, bits = [r.completion === true && 'completion', r.success === true ? 'success' : r.success === false && 'failure', typeof r.score?.scaled === 'number' && `scaled ${r.score.scaled}`, r.duration].filter(Boolean)
       return [verb(e), o.definition?.name ? Object.values(o.definition.name)[0] : o.id ?? '', ...bits].join(' · ') }
@@ -178,7 +184,7 @@ const VIEWS = {
 // ---- Pins and answers: values forced before the content's code runs, and responses given instead of the network ----
 // Both live in the session (st.pins, st.responses) and go with every launch; "Run with these" launches now.
 const afterChange = () => { render(); showOptions(); showPinBox() }
-const runWithThese = () => $('launch').click()
+const runWithThese = () => launchRun()
 function pinsEditor() {
   const d = st.pinDraft, field = (key, props = {}) => h('input', { type: 'text', value: d[key], spellcheck: 'false', oninput: e => { d[key] = e.target.value }, ...props })
   const add = () => {
@@ -302,7 +308,7 @@ VIEWS.Files = () => {
         !o.binary && h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => { if (x.diffs[o.path]) delete x.diffs[o.path]; else x.diffs[o.path] = await lab.invoke('override-diff', { path: o.path }); render() }) }, x.diffs[o.path] ? 'Hide changes' : 'Show changes'),
         o.binary && h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => { x.diffs[o.path] = await lab.invoke('override-diff', { path: o.path }); render() }) }, 'Size'),
         h('button', { type: 'button', class: 'secondary', onclick: () => revert(o.path) }, 'Revert'), diffBlock(o.path)))),
-      h('button', { type: 'button', class: 'secondary', onclick: () => revert() }, 'Revert all')] : h('p', { class: 'muted' }, 'None. Click a file, change it and choose Save as override, then Launch.'), pick]
+      h('button', { type: 'button', class: 'secondary', onclick: () => revert() }, 'Revert all')] : h('p', { class: 'muted' }, 'None. Click a file, change it and choose Save as override, then Run.'), pick]
 }
 
 // ---- Experiments: one launch run several ways, with a table that fills as each run finishes ----
@@ -498,7 +504,7 @@ VIEWS.Timeline = () => {
     h('div', { class: 'tl-holder' }, ...timelineBody(d)),
     d.missing.length ? h('p', { class: 'muted' }, `Not reached: ${d.missing.join(', ')}.`) : null]
 }
-VIEWS.Live = () => st.running ? livePanel : h('p', { class: 'muted' }, 'Launch an item to see it here. It runs on the Mac; this view lets you watch and use it from here.')
+VIEWS.Live = () => st.running ? livePanel : h('p', { class: 'muted' }, 'Run an item to see it here. It runs on the Mac; this view lets you watch and use it from here.')
 
 // Tabs with nothing to show are left out of the tab bar (never the chosen one, and never the ones the user starts things from:
 // Lookups holds the pins, and Experiments, Test saving, Server needs, Drill-down, Folder check and Live are not listed here).
@@ -512,12 +518,12 @@ const HIDE = {
 }
 
 // ---- Start screen: shown until a package (or a run) is open ----
-const RECIPES = [['The page is blank', 'Launch, then read Findings, Boot path and Errors.', 'shows-a-blank-page'],
-  ['The content never talks to the LMS', 'Launch, then look at Lookups and API.', 'no-api-calls'],
+const RECIPES = [['The page is blank', 'Run, then read Findings, Boot path and Errors.', 'shows-a-blank-page'],
+  ['The content never talks to the LMS', 'Run, then look at Lookups and API.', 'no-api-calls'],
   ['It doesn’t save or resume', 'Test saving (set up a macro first).', 'doesnt-resume'],
   ['Works in Chrome, not in Safari or on an iPad', 'More options: Storage “Blocked”, Browser “WebKit”, Device size; then Launch.', 'works-in-chrome-not-in-safari-or-on-an-ipad'],
   ['Works in one LMS, not another', 'Experiments, or choose a Profile and Launch.', 'works-in-one-lms-not-another'],
-  ['Works in the authoring tool, not in an LMS', 'Launch, then Server needs: Discover all server requests.', 'works-on-the-authoring-platform-not-in-an-lms']]
+  ['Works in the authoring tool, not in an LMS', 'Run, then Server needs: Discover all server requests.', 'works-on-the-authoring-platform-not-in-an-lms']]
 const startScreen = () => h('div', { class: 'welcome' },
   h('p', {}, 'Package Lab runs a SCORM, cmi5 or Tin Can package the way an LMS would, records what happens, and says what stops it working.'),
   h('p', {}, 'Open a package to start: choose Open package… above.'),
@@ -532,7 +538,7 @@ const docBody = $('doc-body')
 const saveDocs = () => store.set('pl.docs', JSON.stringify({ open: !$('docs').hidden, doc: docs.cur }))
 // back: going back, so the page left isn't added to the history again.
 const openDoc = (name, anchor = '', back) => act(async () => {
-  $('docs').hidden = false
+  $('docs').hidden = false; $('inspector').hidden = true; $('inspector-toggle').setAttribute('aria-pressed', 'false')
   if (!docs.list) { docs.list = await lab.invoke('docs'); $('doc-pick').replaceChildren(...docs.list.map(d => h('option', { value: d.name }, d.title))) }
   if (!docs.list.some(d => d.name === name)) name = docs.cur ?? docs.list[0]?.name
   if (!name) return
@@ -580,6 +586,9 @@ docBody.addEventListener('click', e => {
 $('doc-pick').onchange = () => openDoc($('doc-pick').value)
 $('doc-back').onclick = () => { const [n, a] = docs.hist.pop(); openDoc(n, a, true) }
 $('doc-close').onclick = () => { $('docs').hidden = true; saveDocs() }
+// The Inspector is an empty right-hand pane for now (E2.2 fills it). Opening it closes the docs panel, so one right pane shows at a time.
+const toggleInspector = () => { const on = $('inspector').hidden; if (on) { $('docs').hidden = true; saveDocs() } $('inspector').hidden = !on; $('inspector-toggle').setAttribute('aria-pressed', String(on)) }
+$('inspector-toggle').onclick = toggleInspector
 $('help').onclick = () => $('docs').hidden ? openDoc(docs.cur ?? 'README.md', docs.anchor) : $('doc-close').click()
 // Settings (desktop only: the menu sends it, and the handlers refuse the web interface).
 let settingsDefault = 4880
@@ -595,7 +604,7 @@ $('set-save').onclick = async () => {
     $('settings').close(); say(`Saved: the web interface will use port ${settings.port}.`)
   } catch (e) { setNote(e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')) }
 }
-lab.on?.('menu', ({ action, name }) => { if (action === 'docs') openDoc(name ?? docs.cur ?? 'README.md'); else if (action === 'settings') openSettings(); else { const b = $(action); if (b && !b.disabled) b.click() } })
+lab.on?.('menu', ({ action, name }) => { if (action === 'docs') openDoc(name ?? docs.cur ?? 'README.md'); else if (action === 'settings') openSettings(); else if (action === 'inspector') toggleInspector(); else if (action === 'launch' || action === 'stop') { if ((action === 'stop') === !!st.running && !runBtn.disabled) runBtn.click() } else { const b = $(action); if (b && !b.disabled) b.click() } })
 try { const d = JSON.parse(store.get('pl.docs')); if (d?.open) openDoc(typeof d.doc === 'string' ? d.doc : 'README.md') } catch { /* nothing remembered */ }
 
 function render() {
@@ -622,10 +631,10 @@ async function act(fn, busy) {
 function showPackage(p) {
   if (!p) return
   st.pkg = p; st.sel = null; st.boots = {}; st.files = { list: null, open: null, draft: '', diffs: {}, note: '' }
-  $('pkg-name').textContent = p.name
+  $('pkg-name').textContent = p.name; $('pkg-name').classList.remove('muted')
   $('item').replaceChildren(...p.items.map(i => h('option', { value: i.index }, `${'· '.repeat(i.depth)}${i.title} (${i.type || '?'})`)))
   const firstSco = p.items.find(i => i.type === 'sco'); if (firstSco) $('item').value = firstSco.index
-  $('item').disabled = !p.items.length; $('launch').disabled = !p.items.length; $('cycle').disabled = !p.items.length; $('export').disabled = false; $('compare-pkg').disabled = false; st.pdiff = null
+  $('item').disabled = !p.items.length; syncRun(); $('cycle').disabled = !p.items.length; $('export').disabled = false; $('compare-pkg').disabled = false; st.pdiff = null
   say(`${p.name}: before running, ${p.findings.filter(f => f.sev === 'error').length} errors and ${p.findings.filter(f => f.sev === 'warn').length} warnings.`)
   st.tab = 'Findings'; render()
 }
@@ -765,14 +774,14 @@ st.recordFrom = null; st.recordPending = null; st.recordRun = null   // recordFr
 const recordEl = $('record'), recordDlg = $('record-dialog'), recordTip = recordEl.title
 const showRecord = () => { const on = st.recordFrom != null; $('record-text').textContent = on ? 'Recording…' : 'Record'; recordEl.setAttribute('aria-pressed', String(on)); recordEl.title = on ? 'Press again to stop the run and save the clicks.' : recordTip }
 // Shown only in the desktop app and only while a run is going; used by the state event and by the restore path.
-function setRunning(s) { st.running = s || null; recordEl.hidden = lab.web || !s; showRecord() }
+function setRunning(s) { st.running = s || null; recordEl.hidden = lab.web || !s; showRecord(); syncRun() }
 recordEl.onclick = () => {
-  if (st.recordFrom != null) return $('stop').click()   // Record again ends the run too: the clicks are only read once the run is analysed
-  if (!st.running) return say('Launch an item first, then press Record and click through the course.')
+  if (st.recordFrom != null) return stopRun()   // Record again ends the run too: the clicks are only read once the run is analysed
+  if (!st.running) return say('Run an item first, then press Record and click through the course.')
   // A macro replays at the start of the run as real input: its clicks are not the user's, so recording starts after its last event.
   const press = Date.now() - st.running.started, last = st.macro.events.at(-1)
   st.recordFrom = last ? Math.max(press, last.t + 1) : press
-  showRecord(); say('Recording: click through the course. Press Record again, or Stop and analyse, to keep the clicks.')
+  showRecord(); say('Recording: click through the course. Press Record again, or Stop, to keep the clicks.')
 }
 const finishRecord = (run, from) => act(async () => {
   const m = await lab.invoke('macro-from-run', { run: run.id })
@@ -790,7 +799,7 @@ $('record-save').onclick = () => {
   say(`Macro saved: ${p.events.length} ${p.events.length === 1 ? 'step' : 'steps'}. It plays at the start of each launch.`)
 }
 $('record-discard').onclick = () => recordDlg.close()
-recordDlg.addEventListener('close', () => { st.recordPending = null; $('launch').focus() })   // Record is hidden once the run has ended, so focus goes to Launch
+recordDlg.addEventListener('close', () => { st.recordPending = null; $('run').focus() })   // Record is hidden once the run has ended, so focus goes to Run
 // Export corrected package…: a checklist of the fixes that apply to this package (all ticked), then the export.
 $('export').onclick = () => {
   const fixes = st.pkg?.fixes ?? [], panel = $('export-panel')
@@ -807,13 +816,21 @@ const exportFixed = only => act(async () => {
     : `${lab.web ? 'Downloaded' : 'Saved'} ${r.file}: ${r.changes} change${r.changes === 1 ? '' : 's'}, ${r.gone} finding${r.gone === 1 ? '' : 's'} cleared, ${r.remaining} still there. PACKAGE-LAB-CHANGES.txt inside lists every change.`)
 }, 'Building the corrected package…')
 $('copy-cli').onclick = () => act(async () => { await navigator.clipboard.writeText($('cli-line').textContent); say('Copied.') })
-$('launch').onclick = () => act(async () => {
+const launchRun = () => act(async () => {
   st.live = []
   await lab.invoke('launch', { item: +$('item').value, ...launchOptions(), macroSize: macroSize() })
   st.sel = null; st.tab = lab.web ? 'Live' : st.pkg?.analysis.format && st.pkg.analysis.format !== 'scorm' ? 'xAPI' : 'API'; render()
 }, 'Launching…')
 $('ref').onclick = () => act(async () => { st.live = []; await lab.invoke('reference', { url: $('ref-url').value.trim(), caught: $('caught').checked, auto: +$('auto').value }); st.sel = null; st.tab = lab.web ? 'Live' : 'API'; render() }, 'Opening the reference…')
-$('stop').onclick = () => act(() => lab.invoke('stop'), 'Collecting coverage and sources…')
+const stopRun = () => act(() => lab.invoke('stop'), 'Collecting coverage and sources…')
+// Run and Stop are one button (E2.1): its label, icon and action follow st.running.
+function syncRun() {
+  const on = !!st.running
+  runBtn.disabled = !on && !st.pkg?.items.length
+  $('run-text').textContent = runBtn.ariaLabel = on ? 'Stop' : 'Run'
+  runBtn.querySelector('use').setAttribute('href', on ? '#i-stop' : '#i-run')
+}
+runBtn.onclick = () => st.running ? stopRun() : launchRun()
 $('compare').onclick = () => act(async () => { st.cmp = await lab.invoke('compare', { ref: st.ref, run: st.fail }); st.tab = 'Compare'; render(); say('Compared.') }, 'Comparing…')
 const addRuns = list => { for (const r of list) if (!st.runs.some(x => x.id === r.id)) st.runs.push(r); if (list.length) { st.sel = list.at(-1).id; st.tab = 'Findings' } render() }
 $('open-run').onclick = () => act(async () => {
@@ -828,7 +845,7 @@ $('item').onchange = () => render()
 let pending = false
 lab.on('probe', p => { st.live.push(p); if (!run() && !pending) { pending = true; setTimeout(() => { pending = false; if (!run()) render() }, 300) } })
 lab.on('run', r => { if (st.runs.some(x => x.id === r.id)) return; if (st.recordFrom != null && Math.abs(Date.parse(r.trace.started) - st.recordRun) < 50) { const from = st.recordFrom; st.recordFrom = null; showRecord(); finishRecord(r, from) } st.runs.push(r);if (!st.exp.busy && !st.disc.busy && !st.drill.busy && !st.cyc.busy) { st.sel = r.id; st.tab = 'Findings' } render(); say(`Recorded: ${r.findings.filter(f => f.sev === 'error').length} errors, ${r.findings.filter(f => f.sev === 'warn').length} warnings.`) })
-lab.on('state', s => { if (s.running) Object.assign(st, { recordFrom: null, recordRun: s.started }); setRunning(s.running ? s : null);if (!s.running && st.tab === 'Live') st.tab = 'Findings'; render(); $('stop').disabled = !s.running;$('launch').disabled = !!s.running || !st.pkg?.items.length; $('cycle').disabled = !!s.running || !st.pkg?.items.length; $('ref').disabled = !!s.running; if (s.running) say(`Recording ${s.label}. ${s.auto ? `It stops by itself after ${s.auto} s, or` : 'Use the course, then'} Stop and analyse${lab.web ? '' : ' (or close its window)'}.`) })
+lab.on('state', s => { if (s.running) Object.assign(st, { recordFrom: null, recordRun: s.started }); setRunning(s.running ? s : null);if (!s.running && st.tab === 'Live') st.tab = 'Findings'; render(); syncRun(); $('cycle').disabled = !!s.running || !st.pkg?.items.length; $('ref').disabled = !!s.running; if (s.running) say(`Recording ${s.label}. ${s.auto ? `It stops by itself after ${s.auto} s, or` : 'Use the course, then'} Stop${lab.web ? '' : ' (or close its window)'}.`) })
 lab.on('experiment', e => {
   const x = st.exp
   if (e.state === 'start') { x.names = e.names; x.rows = []; x.findings = []; x.busy = true }
@@ -869,6 +886,6 @@ render()
 if (lab.web) lab.invoke('state').then(s => {
   if (s.pkg) showPackage(s.pkg)
   addRuns(s.runs)
-  if (s.running) { setRunning(s.running); $('stop').disabled = false; $('launch').disabled = true; st.tab = 'Live'; render() }
+  if (s.running) { setRunning(s.running); st.tab = 'Live'; render() }
   document.title = 'Package Lab (web)'
 }).catch(e => say(e.message))

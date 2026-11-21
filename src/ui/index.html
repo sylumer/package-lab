@@ -4,16 +4,45 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
 <title>Package Lab</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-<svg class="sprite" aria-hidden="true" width="0" height="0"><symbol id="i-record" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2.5" fill="currentColor"/></symbol></svg>
-  <div class="bar">
-    <button id="open" type="button">Open package…</button>
+<header id="toolbar">
+<svg class="sprite" aria-hidden="true" width="0" height="0" hidden>
+<symbol id="i-open" viewBox="0 0 16 16"><path d="M1.75 4.5v8.25h12.5V5.75a1 1 0 0 0-1-1H7.5L6.25 3.25H2.75a1 1 0 0 0-1 1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+<symbol id="i-run" viewBox="0 0 16 16"><path d="M4.5 2.75v10.5L13 8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+<symbol id="i-stop" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+<symbol id="i-record" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2.5" fill="currentColor"/></symbol>
+<symbol id="i-test-saving" viewBox="0 0 16 16"><path d="M13.25 7A5.25 5.25 0 0 0 3.6 5M2.75 9A5.25 5.25 0 0 0 12.4 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3 2.5V5.25h2.75M13 13.5v-2.75h-2.75" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-sidebar-right" viewBox="0 0 16 16"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v10" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+<symbol id="i-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.25 6.25a1.75 1.75 0 1 1 2.5 1.6C8.25 8.1 8 8.5 8 9.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.4" r=".9" fill="currentColor"/></symbol>
+<symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.25 14.25 13H1.75z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.5v3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.3" r=".8" fill="currentColor"/></symbol>
+<symbol id="i-error" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m5.5 5.5 5 5m0-5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+<symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 7.25v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".9" fill="currentColor"/></symbol>
+<symbol id="i-ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m5.25 8.25 2 2 3.5-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.75" y="5.75" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.25 3.5v-.25a1 1 0 0 0-1-1h-5.5a1 1 0 0 0-1 1v5.5a1 1 0 0 0 1 1H4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+<symbol id="i-crosshair" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v3.5M8 11v3.5M1.5 8H5m6 0h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+<symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.5 4.25h11M6.25 4.25V2.75h3.5v1.5M4 4.25l.6 8.5a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9l.6-8.5M6.5 7v4m3-4v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-up" viewBox="0 0 16 16"><path d="m3.5 10.25 4.5-4.5 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16"><path d="m3.5 5.75 4.5 4.5 4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+    <button id="open" type="button" title="Open a SCORM, cmi5 or xAPI package (a .zip)." aria-label="Open package"><svg class="icon" aria-hidden="true"><use href="#i-open"/></svg><span class="tb-label">Open</span></button>
     <input id="file" type="file" accept=".zip,application/zip" hidden>
+    <input id="file2" type="file" accept=".zip,application/zip" hidden>
     <span id="pkg-name" class="muted">No package open</span>
     <label>Item <select id="item" disabled></select></label>
+    <button id="run" type="button" class="primary" disabled aria-label="Run" title="Run the item and record it. Run turns into Stop while it is going."><svg class="icon" aria-hidden="true"><use href="#i-run"/></svg><span class="tb-label" id="run-text">Run</span></button>
+    <button id="record" type="button" class="record" hidden aria-pressed="false" aria-label="Record macro" title="Click through the course while this is pressed: the clicks are kept as the macro after the run stops. Desktop app only."><svg class="icon" aria-hidden="true"><use href="#i-record"/></svg><span class="tb-label" id="record-text">Record</span></button>
+    <button id="cycle" type="button" disabled title="Run, leave the way a learner closing the window does, then resume from what was saved, and check the content saved and read its place." aria-label="Test saving"><svg class="icon" aria-hidden="true"><use href="#i-test-saving"/></svg><span class="tb-label">Test saving</span></button>
+    <span class="spacer"></span>
+    <span id="status" role="status"></span>
+    <button id="inspector-toggle" type="button" aria-pressed="false" title="Show or hide the inspector on the right." aria-label="Inspector"><svg class="icon" aria-hidden="true"><use href="#i-sidebar-right"/></svg><span class="tb-label">Inspector</span></button>
+    <button id="help" type="button" title="Show or hide the documentation beside the window." aria-label="Help"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span class="tb-label">Help</span></button>
+</header>
+<div id="legacy-bar">
+  <div class="bar">
     <label>API <select id="expose">
       <option value="manifest">As the manifest says</option><option value="both">Both (1.2 and 2004)</option>
       <option value="1.2">SCORM 1.2 only</option><option value="2004">SCORM 2004 only</option><option value="none">None</option></select></label>
@@ -24,22 +53,14 @@
     <label>Stop after <select id="auto" title="Stop and analyse automatically after this long">
       <option value="0">I stop it</option><option value="10">10 s</option><option value="20">20 s</option><option value="30">30 s</option>
       <option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
-    <button id="launch" type="button" disabled>Launch</button>
-    <button id="cycle" type="button" class="secondary" disabled title="Run, leave the way a learner closing the window does, then resume from what was saved, and check the content saved and read its place.">Test saving</button>
     <button id="compare-pkg" type="button" class="secondary" disabled title="Compare this package with another one: files, manifest, loading path and findings, from the files alone.">Compare packages…</button>
     <button id="check-folder" type="button" class="secondary" title="Check every SCORM package in a folder, from the files alone: one row each, with its verdict. Click a row to open that package.">Check a folder…</button>
-    <input id="file2" type="file" accept=".zip,application/zip" hidden>
     <button id="export" type="button" class="secondary" disabled title="Save a corrected copy of the package: your changed files and the mechanical fixes (capitals, manifest version, missing files, http, layout), with a list of every change inside.">Export corrected package…</button>
-    <button id="help" type="button" class="secondary" title="Show or hide the documentation beside the window.">Help</button>
   </div>
   <div class="bar">
     <label class="grow">Working copy (reference) <input id="ref-url" type="url" placeholder="https://… where the course works (hosted preview, LMS, SCORM Cloud)" spellcheck="false"></label>
     <button id="ref" type="button">Record reference</button>
     <label class="check"><input type="checkbox" id="caught" checked> Record caught errors</label>
-    <button id="stop" type="button" disabled>Stop and analyse</button>
-    <button id="record" type="button" class="record" hidden aria-pressed="false" aria-label="Record macro" title="Click through the course while this is pressed: the clicks are kept as the macro after the run stops. Desktop app only.">
-      <svg class="icon" aria-hidden="true"><use href="#i-record"/></svg><span id="record-text">Record</span></button>
-    <span id="status" role="status"></span>
   </div>
   <div class="bar" id="export-panel" hidden></div>
   <details id="more">
@@ -69,7 +90,7 @@
     <pre id="options-json"></pre>
     <div class="row"><button id="copy-cli" type="button" class="secondary">Copy as CLI command</button><code id="cli-line"></code></div>
   </details>
-</header>
+</div>
 <div class="main">
   <aside>
     <h2>Runs</h2>
@@ -83,6 +104,7 @@
     <div id="code-pane" hidden></div>
     <div id="view"></div>
   </section>
+  <div id="inspector" hidden><p class="muted small">The inspector. Run settings will move here.</p></div>
   <div id="docs" hidden>
     <div class="docs-head"><select id="doc-pick" aria-label="Document"></select><button id="doc-back" type="button" class="secondary" disabled>Back</button><button id="doc-close" type="button" class="secondary" aria-label="Close the documentation">Close</button></div>
     <div id="doc-body" class="doc"></div>
