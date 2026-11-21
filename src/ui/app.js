@@ -236,7 +236,7 @@ function answersList() {
     h('button', { type: 'button', class: 'secondary', onclick: () => { st.responses.splice(i, 1); afterChange() } }, 'Remove'))))
     : h('p', { class: 'muted small' }, 'None. In a run’s Network tab, choose “Answer this request…” on a request.')
 }
-// The More options boxes. Drawn when pins or answers change, not on every redraw, so typing isn't interrupted.
+// The Pins and Answers boxes (Settings → Advanced). Drawn when pins or answers change, not on every redraw, so typing isn't interrupted.
 function showPinBox() { $('pins').replaceChildren(...pinsEditor()); $('answers').replaceChildren(answersList()) }
 
 // ---- Files: look at any file of the package, change it for the next run (an override), and see what changed ----
@@ -317,7 +317,7 @@ VIEWS.Experiments = () => {
   const x = st.exp
   if (!x.presets) { x.presets = []; lab.invoke('experiment-presets').then(p => { x.presets = p; render() }) }
   const rows = x.names.map((n, i) => x.rows[i] ?? { name: n, pending: true })
-  return [h('p', { class: 'muted small' }, 'Runs the item with the settings above, then again with each variant changed, one after another. Each takes as long as “Stop after” (10 s if that is “I stop it”).'),
+  return [h('p', { class: 'muted small' }, 'Runs the item with the settings in the inspector, then again with each variant changed, one after another. Each takes as long as “Stop after” (10 s if that is “I stop it”).'),
     h('div', { class: 'row' },
       h('label', {}, 'Variants ', h('select', { onchange: e => { x.preset = e.target.value } }, x.presets.map(p => h('option', { value: p, selected: p === x.preset }, p)))),
       h('button', { type: 'button', disabled: x.busy || !!st.running || !st.pkg?.items.length, onclick: () => act(async () => {
@@ -341,7 +341,7 @@ function runRows(rows, busy, first = 'Variant', against = 'the default') {
 VIEWS['Test saving'] = () => {
   const x = st.cyc, off = x.busy || !!st.running || !st.pkg?.items.length
   const open = id => id && st.runs.some(q => q.id === id) ? h('button', { type: 'button', class: 'link', onclick: () => { st.sel = id; st.tab = 'API'; render() } }, 'open run') : ''
-  return [h('p', { class: 'muted small' }, 'Runs the item with the settings above and plays the macro (More options). Then it leaves the way a learner closing the window does, and runs the item again with the data that was saved, to see whether the content saved its place and went back to it. Each run lasts as long as “Stop after” (10 s if that is “I stop it”). Chromium only.'),
+  return [h('p', { class: 'muted small' }, 'Runs the item with the settings in the inspector and plays the macro (the inspector’s Macro tab). Then it leaves the way a learner closing the window does, and runs the item again with the data that was saved, to see whether the content saved its place and went back to it. Each run lasts as long as “Stop after” (10 s if that is “I stop it”). Chromium only.'),
     h('div', { class: 'row' }, h('button', { type: 'button', disabled: off, onclick: startCycle }, 'Test saving'),
       h('button', { type: 'button', class: 'secondary', disabled: !x.busy, onclick: () => act(() => lab.invoke('cycle-stop')) }, 'Stop'),
       h('span', { class: 'muted small' }, `${x.note} Macro: ${st.macro.events.length ? st.macro.events.length + ' events' : 'none (nothing will be clicked)'}.`)),
@@ -362,14 +362,14 @@ st.disc = { rounds: 5, rows: [], result: null, busy: false, note: '' }
 const host = u => (u || '').replace(/^lab:\/\/(?:run|content)(?=\/)/, '')
 // fetch and XHR requests to the server's root or another site, one per pattern (as src/shape.js serverRequests).
 const serverReqs = r => { const seen = new Set(); return (r?.trace.requests ?? []).filter(q => /^(XHR|Fetch)$/.test(q.type) && (/^lab:\/\/(?:run|content)\/(?!pkg\/|__lab\/)/.test(q.url) || /^https?:/.test(q.url)) && !seen.has(answerDraft(q).match) && seen.add(answerDraft(q).match)) }
-const saveResponse = resp => { const i = st.responses.findIndex(x => x.match === resp.match); if (i >= 0) st.responses[i] = resp; else st.responses.push(resp); afterChange(); say(`Added an answer for ${resp.match}. It applies to the next launch (see More options).`) }
+const saveResponse = resp => { const i = st.responses.findIndex(x => x.match === resp.match); if (i >= 0) st.responses[i] = resp; else st.responses.push(resp); afterChange(); say(`Added an answer for ${resp.match}. It applies to the next launch (see the inspector’s Settings, under Advanced).`) }
 VIEWS['Server needs'] = () => {
   const x = st.disc, r = run(), reqs = serverReqs(r), off = x.busy || !!st.running || !st.pkg?.items.length
   const start = request => act(async () => {
     x.rows = []; x.result = null; x.busy = true; x.note = ''; render()
     try { await lab.invoke('discover-start', { item: +$('item').value, ...(request ? { request } : {}), rounds: x.rounds, ...launchOptions(), wait: +$('auto').value || 10 }) } catch (e) { x.busy = false; throw e }
   })
-  const out = [h('p', { class: 'muted small' }, 'Discover answers the content’s requests to its server and watches what it reads from the answer, round after round, until it reads nothing new. Each round is a run of the item with the settings above, as long as “Stop after” (10 s if that is “I stop it”). The answer is a stand-in that is always there: if (setting) is always true, so the content may go further than with a real answer.'),
+  const out = [h('p', { class: 'muted small' }, 'Discover answers the content’s requests to its server and watches what it reads from the answer, round after round, until it reads nothing new. Each round is a run of the item with the settings in the inspector, as long as “Stop after” (10 s if that is “I stop it”). The answer is a stand-in that is always there: if (setting) is always true, so the content may go further than with a real answer.'),
     h('div', { class: 'row' }, h('label', {}, 'Rounds ', h('select', { onchange: e => { x.rounds = +e.target.value } }, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => h('option', { value: n, selected: n === x.rounds }, n)))),
       h('button', { type: 'button', disabled: off, onclick: () => start() }, 'Discover all server requests'),
       h('button', { type: 'button', class: 'secondary', disabled: !x.busy, onclick: () => act(() => lab.invoke('discover-stop')) }, 'Stop'), h('span', { class: 'muted small' }, x.note)),
@@ -390,7 +390,7 @@ const showCode = (r, e) => openCode({ run: r.id, path: e.file, line: e.line, col
 VIEWS.Execution = () => {
   const r = run(); if (!r) return h('p', { class: 'muted' }, 'Choose a run.')
   const tail = r.trace.execTail
-  if (!tail) return h('p', { class: 'muted' }, 'This run wasn’t traced. Tick “Trace the code” under More options and launch again to record which functions ran and which way each decision went.')
+  if (!tail) return h('p', { class: 'muted' }, 'This run wasn’t traced. Tick “Trace the code” in the inspector’s Settings and launch again to record which functions ran and which way each decision went.')
   return [h('p', { class: 'muted small' }, `The last ${tail.length} of ${r.trace.execEvents} events before the run went quiet, newest last. Code opens the line.`),
     ...table(['s', 'Where', 'What happened', ''], tail.map(e => [secs(e.t), e.file ? `${e.file}:${e.line}` : '', e.say, e.file ? h('button', { type: 'button', class: 'secondary', onclick: () => showCode(r, e) }, 'Code') : '']))]
 }
@@ -521,8 +521,8 @@ const HIDE = {
 const RECIPES = [['The page is blank', 'Run, then read Findings, Boot path and Errors.', 'shows-a-blank-page'],
   ['The content never talks to the LMS', 'Run, then look at Lookups and API.', 'no-api-calls'],
   ['It doesn’t save or resume', 'Test saving (set up a macro first).', 'doesnt-resume'],
-  ['Works in Chrome, not in Safari or on an iPad', 'More options: Storage “Blocked”, Browser “WebKit”, Device size; then Launch.', 'works-in-chrome-not-in-safari-or-on-an-ipad'],
-  ['Works in one LMS, not another', 'Experiments, or choose a Profile and Launch.', 'works-in-one-lms-not-another'],
+  ['Works in Chrome, not in Safari or on an iPad', 'Settings: Storage “Blocked”, Browser “WebKit”, Device size; then Run.', 'works-in-chrome-not-in-safari-or-on-an-ipad'],
+  ['Works in one LMS, not another', 'Experiments, or choose a Profile and Run.', 'works-in-one-lms-not-another'],
   ['Works in the authoring tool, not in an LMS', 'Run, then Server needs: Discover all server requests.', 'works-on-the-authoring-platform-not-in-an-lms']]
 const startScreen = () => h('div', { class: 'welcome' },
   h('p', {}, 'Package Lab runs a SCORM, cmi5 or Tin Can package the way an LMS would, records what happens, and says what stops it working.'),
@@ -535,10 +535,36 @@ const startScreen = () => h('div', { class: 'welcome' },
 const store = { get: k => { try { return localStorage.getItem(k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(k, v) } catch { /* not remembered */ } } }
 const docs = { list: null, text: {}, cur: null, anchor: '', hist: [] }
 const docBody = $('doc-body')
-const saveDocs = () => store.set('pl.docs', JSON.stringify({ open: !$('docs').hidden, doc: docs.cur }))
+const saveDocs = () => store.set('pl.docs', JSON.stringify({ doc: docs.cur }))
+// ---- The inspector (E2.2): Settings, Macro and Help in one right-hand pane. Help is the docs panel. The open state, the segment and the width are remembered. ----
+const inspEl = $('inspector'), SEGS = ['settings', 'macro', 'help'], insp = { seg: 'settings' }
+const PANES = { settings: 'insp-settings', macro: 'insp-macro', help: 'docs' }
+function showInspector(open, seg = insp.seg) {
+  insp.seg = seg; inspEl.hidden = !open
+  $('inspector-toggle').setAttribute('aria-pressed', String(open))
+  for (const s of SEGS) { const t = $('insp-tab-' + s); t.setAttribute('aria-selected', String(s === seg)); t.tabIndex = s === seg ? 0 : -1; $(PANES[s]).hidden = s !== seg }
+  store.set('pl.inspector', JSON.stringify({ open, seg }))
+}
+// Help loads its first document the first time it is shown.
+const openInspector = seg => seg === 'help' && !docs.cur ? openDoc('README.md') : showInspector(true, seg)
+const toggleInspector = () => inspEl.hidden ? openInspector(insp.seg) : showInspector(false)
+$('insp-tabs').addEventListener('click', e => { const b = e.target.closest('[data-seg]'); if (b) openInspector(b.dataset.seg) })
+$('insp-tabs').addEventListener('keydown', e => {
+  const i = SEGS.indexOf(insp.seg), j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: SEGS.length - 1 }[e.key]
+  if (j === undefined) return
+  e.preventDefault(); const s = SEGS[(j + SEGS.length) % SEGS.length]; openInspector(s); $('insp-tab-' + s).focus()
+})
+// The width: dragged, or changed with the arrow keys on the handle.
+const grip = $('inspector-resize')
+const setWidth = (w, keep) => { w = Math.round(Math.min(Math.max(w, 280), Math.min(800, window.innerWidth * .6))); inspEl.style.setProperty('--inspector-w', w + 'px'); grip.setAttribute('aria-valuenow', String(w)); if (keep) store.set('pl.inspector-width', String(w)) }
+if (+store.get('pl.inspector-width')) setWidth(+store.get('pl.inspector-width'))
+grip.addEventListener('pointerdown', e => { grip.setPointerCapture(e.pointerId); e.preventDefault() })
+grip.addEventListener('pointermove', e => { if (grip.hasPointerCapture(e.pointerId)) setWidth(window.innerWidth - e.clientX) })
+grip.addEventListener('pointerup', e => { if (grip.hasPointerCapture(e.pointerId)) { grip.releasePointerCapture(e.pointerId); store.set('pl.inspector-width', String(inspEl.offsetWidth)) } })
+grip.addEventListener('keydown', e => { const d = { ArrowLeft: 20, ArrowRight: -20 }[e.key]; if (d) { e.preventDefault(); setWidth(inspEl.offsetWidth + d, true) } })
 // back: going back, so the page left isn't added to the history again.
 const openDoc = (name, anchor = '', back) => act(async () => {
-  $('docs').hidden = false; $('inspector').hidden = true; $('inspector-toggle').setAttribute('aria-pressed', 'false')
+  showInspector(true, 'help')
   if (!docs.list) { docs.list = await lab.invoke('docs'); $('doc-pick').replaceChildren(...docs.list.map(d => h('option', { value: d.name }, d.title))) }
   if (!docs.list.some(d => d.name === name)) name = docs.cur ?? docs.list[0]?.name
   if (!name) return
@@ -585,11 +611,10 @@ docBody.addEventListener('click', e => {
 })
 $('doc-pick').onchange = () => openDoc($('doc-pick').value)
 $('doc-back').onclick = () => { const [n, a] = docs.hist.pop(); openDoc(n, a, true) }
-$('doc-close').onclick = () => { $('docs').hidden = true; saveDocs() }
-// The Inspector is an empty right-hand pane for now (E2.2 fills it). Opening it closes the docs panel, so one right pane shows at a time.
-const toggleInspector = () => { const on = $('inspector').hidden; if (on) { $('docs').hidden = true; saveDocs() } $('inspector').hidden = !on; $('inspector-toggle').setAttribute('aria-pressed', String(on)) }
+$('doc-close').onclick = () => showInspector(false)
 $('inspector-toggle').onclick = toggleInspector
-$('help').onclick = () => $('docs').hidden ? openDoc(docs.cur ?? 'README.md', docs.anchor) : $('doc-close').click()
+$('help').onclick = () => !inspEl.hidden && insp.seg === 'help' ? showInspector(false) : openInspector('help')
+$('summary').onclick = () => openInspector('settings')
 // Settings (desktop only: the menu sends it, and the handlers refuse the web interface).
 let settingsDefault = 4880
 const setNote = t => { $('set-status').textContent = t }
@@ -605,7 +630,10 @@ $('set-save').onclick = async () => {
   } catch (e) { setNote(e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')) }
 }
 lab.on?.('menu', ({ action, name }) => { if (action === 'docs') openDoc(name ?? docs.cur ?? 'README.md'); else if (action === 'settings') openSettings(); else if (action === 'inspector') toggleInspector(); else if (action === 'launch' || action === 'stop') { if ((action === 'stop') === !!st.running && !runBtn.disabled) runBtn.click() } else { const b = $(action); if (b && !b.disabled) b.click() } })
-try { const d = JSON.parse(store.get('pl.docs')); if (d?.open) openDoc(typeof d.doc === 'string' ? d.doc : 'README.md') } catch { /* nothing remembered */ }
+try {
+  const m = JSON.parse(store.get('pl.inspector')), doc = JSON.parse(store.get('pl.docs'))?.doc, seg = SEGS.includes(m?.seg) ? m.seg : 'settings'
+  if (m?.open && seg === 'help') openDoc(typeof doc === 'string' ? doc : 'README.md'); else showInspector(!!m?.open, seg)
+} catch { /* nothing remembered */ }
 
 function render() {
   if (!codePane.hidden && codePane.dataset.run !== '' && +codePane.dataset.run !== st.sel) { codePane.hidden = true; codePane.replaceChildren() }   // its run isn't the chosen one any more
@@ -636,7 +664,7 @@ function showPackage(p) {
   const firstSco = p.items.find(i => i.type === 'sco'); if (firstSco) $('item').value = firstSco.index
   $('item').disabled = !p.items.length; syncRun(); $('cycle').disabled = !p.items.length; $('export').disabled = false; $('compare-pkg').disabled = false; st.pdiff = null
   say(`${p.name}: before running, ${p.findings.filter(f => f.sev === 'error').length} errors and ${p.findings.filter(f => f.sev === 'warn').length} warnings.`)
-  st.tab = 'Findings'; render()
+  st.tab = 'Findings'; render(); showOptions()
 }
 $('open').onclick = () => lab.web ? $('file').click() : act(async () => showPackage(await lab.invoke('open-package')))
 $('file').onchange = () => act(async () => {
@@ -689,7 +717,7 @@ VIEWS['Folder check'] = () => {
       h('tbody', {}, b.rows.map(r => h('tr', { class: 'click', title: 'Open this package', onclick: () => openBatchRow(r) },
         [r.package, r.scorm ?? '', r.tool, BATCH_SEV[r.verdict] ?? r.verdict, r.errors, r.warnings, r.note].map(c => h('td', {}, String(c)))))))]
 }
-// ---- LMS profile (P2.1): a preset from the toolbar, with the fields changed in More options going over it ----
+// ---- LMS profile (P2.1): a preset from the inspector’s Settings, with the changed fields going over it ----
 // [field path, label, choices | 'text' | 'number' | 'json']. Empty sandbox, CSP and limits are null (none, the standard's).
 const PF = [['contentOrigin', 'Content origin', ['same', 'other']], ['frames.depth', 'Frames', [0, 1, 2, 3, 4, 5]], ['frames.kind', 'Frame kind', ['iframe', 'frameset']],
   ['frames.sandbox', 'Sandbox', 'text'], ['frames.allow', 'Allow', 'text'], ['launch', 'Launch', ['frame', 'popup']], ['popupDelay', 'Popup delay (ms)', 'number'],
@@ -750,7 +778,7 @@ const macroSize = () => st.macro.events.length ? st.macro.viewport : null   // w
 const launchOptions = () => ({ macro: st.macro.events, recordInput: $('record-input').checked, expose: $('expose').value, profile: profileOption(), depth: +$('depth').value || 0, opener: $('opener').checked, resume: $('resume').checked, caught: $('caught').checked, auto: +$('auto').value,
   pins: st.pins, responses: st.responses, launchParams: $('launch-params').value.trim(), trace: $('trace').checked, storage: $('storage').value, tool: $('tool').value || null,
   browser: $('browser').value, viewport: $('viewport').value === 'custom' ? `${+$('viewport-w').value}x${+$('viewport-h').value}` : $('viewport').value || (macroSize() ? `${macroSize().width}x${macroSize().height}` : null) })
-// The Macro box under More options: how long it is, the clicks the selected run's probe saw, and Clear.
+// The Macro tab of the inspector: how long it is, the clicks the selected run's probe saw, and Clear.
 function showMacro() {
   const r = run(), seen = r ? r.trace.probe.filter(p => p.type === 'input').length : 0, m = st.macro, n = m.events.length
   $('macro').replaceChildren(h('p', { class: 'muted small' }, n ? `${n} events over ${(m.events.at(-1).t / 1000).toFixed(1)} s${m.viewport ? `, recorded at ${m.viewport.width}×${m.viewport.height}` : ''}. They play at the start of every launch${m.viewport ? ', at that size unless Device size says otherwise' : ''}, and are saved in each run’s options.` : 'None. Record clicks in the Live view (web interface), or take the clicks of a run.'),
@@ -761,12 +789,17 @@ async function showOptions() {
   try {
     const n = st.pkg?.items.findIndex(i => i.index === +$('item').value) + 1
     const r = await lab.invoke('options', { ...launchOptions(), item: n || undefined })
-    $('options-json').textContent = JSON.stringify(r.options, null, 2); $('cli-line').textContent = r.command
-  } catch (e) { $('options-json').textContent = e.message; $('cli-line').textContent = '' }
+    $('options-json').textContent = JSON.stringify(r.options, null, 2); $('cli-line').textContent = r.command; showSummary(r.summary)
+  } catch (e) { $('options-json').textContent = e.message; $('cli-line').textContent = ''; showSummary([]) }
+}
+// The chip beside Run: what isn't at its default (optionsSummary, src/options.js). Hidden when nothing is.
+function showSummary(list) {
+  const chip = $('summary'), text = list.join(', ')
+  chip.hidden = !list.length; chip.textContent = text; chip.setAttribute('aria-label', list.length ? `Changed settings: ${text}. Open the settings.` : 'Settings')
 }
 for (const id of ['item', 'expose', 'profile', 'depth', 'opener', 'resume', 'caught', 'auto', 'launch-params', 'trace', 'record-input', 'storage', 'tool', 'browser', 'viewport', 'viewport-w', 'viewport-h']) $(id).addEventListener('change', showOptions)
 $('viewport').addEventListener('change', () => { $('viewport-custom').hidden = $('viewport').value !== 'custom' })
-$('more').addEventListener('toggle', showOptions)
+$('advanced').addEventListener('toggle', showOptions)
 $('cycle').onclick = startCycle
 // ---- Record (E1.3, desktop only): press Record during a run and click through the course. When the run stops, its clicks
 // (from the press on) become the macro, once the user says Save in the dialog. Discard leaves the macro as it was. ----
@@ -821,7 +854,17 @@ const launchRun = () => act(async () => {
   await lab.invoke('launch', { item: +$('item').value, ...launchOptions(), macroSize: macroSize() })
   st.sel = null; st.tab = lab.web ? 'Live' : st.pkg?.analysis.format && st.pkg.analysis.format !== 'scorm' ? 'xAPI' : 'API'; render()
 }, 'Launching…')
-$('ref').onclick = () => act(async () => { st.live = []; await lab.invoke('reference', { url: $('ref-url').value.trim(), caught: $('caught').checked, auto: +$('auto').value }); st.sel = null; st.tab = lab.web ? 'Live' : 'API'; render() }, 'Opening the reference…')
+// Record a working copy (the reference run): File → Record a Working Copy…, the Package list and the Compare view open this small dialog.
+const refDlg = $('ref-dialog')
+$('ref').onclick = () => { $('ref-note').textContent = ''; refDlg.showModal(); $('ref-url').focus() }
+$('ref-cancel').onclick = () => refDlg.close()
+$('ref-url').addEventListener('keydown', e => { if (e.key === 'Enter') $('ref-go').click() })
+$('ref-go').onclick = async () => {
+  const busy = on => { $('ref-go').disabled = $('ref-url').disabled = on }
+  $('ref-note').textContent = 'Opening the working copy…'; st.live = []; busy(true)
+  try { await lab.invoke('reference', { url: $('ref-url').value.trim(), caught: $('caught').checked, auto: +$('auto').value }) } catch (e) { busy(false); return void ($('ref-note').textContent = e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')) }
+  busy(false); refDlg.close(); st.sel = null; st.tab = lab.web ? 'Live' : 'API'; render()
+}
 const stopRun = () => act(() => lab.invoke('stop'), 'Collecting coverage and sources…')
 // Run and Stop are one button (E2.1): its label, icon and action follow st.running.
 function syncRun() {
@@ -879,7 +922,7 @@ lab.on('drill', e => {
   else Object.assign(x, { busy: false, note: e.message })
   render()
 })
-showPinBox()
+showPinBox(); showOptions()
 lab.on('package', p => { if (p?.loaded !== st.pkg?.loaded) showPackage(p) })
 render()
 // The web interface may join a session already under way: show its package, runs and any run in progress.

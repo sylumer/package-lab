@@ -25,7 +25,7 @@ import { runCounts, milestones as stepsReached } from './milestones.js'
 import { startWeb } from './web.js'
 import { DEFAULT_PORT, readSettings, writeSettings } from './settings.js'
 import { DOCS } from './docs.js'
-import { normaliseOptions, cliCommand, packagePath } from './options.js'
+import { normaliseOptions, cliCommand, packagePath, optionsSummary } from './options.js'
 import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
 import { comparePackages } from './pkgdiff.js'
@@ -716,7 +716,7 @@ const handlers = {
   boot: ({ item }) => { const res = pkg?.analysis.manifest?.items[item]?.res; return res?.path ? bootFor(res.path) : null },
   launch: o => launchItem(o),
   // The normalised options for the current controls, and the CLI line that repeats the launch.
-  options: ({ item, ...o }) => { const options = normaliseOptions({ ...o, files: o.files ?? pkg?.overrides }); return { options, command: cliCommand(options, { zip: pkg?.name, item }) } },
+  options: ({ item, ...o }) => { const options = normaliseOptions({ ...o, files: o.files ?? pkg?.overrides }); return { options, command: cliCommand(options, { zip: pkg?.name, item }), summary: optionsSummary(options) } },
   reference: async o => {
     const u = new URL(o.url)
     if (!/^https?:$/.test(u.protocol)) throw new Error('A reference is a web address (http or https).')
@@ -860,7 +860,7 @@ function buildMenu() {
     { label: 'File', submenu: [
       item('Open Package…', 'CmdOrCtrl+O', 'open'),
       { role: 'recentDocuments', submenu: [{ role: 'clearRecentDocuments' }] },
-      item('Compare Packages…', undefined, 'compare-pkg'), item('Check a Folder…', undefined, 'check-folder'), item('Open Saved Run…', undefined, 'open-run'),
+      item('Compare Packages…', undefined, 'compare-pkg'), item('Check a Folder…', undefined, 'check-folder'), item('Open Saved Run…', undefined, 'open-run'), item('Record a Working Copy…', undefined, 'ref'),
       { type: 'separator' }, item('Export Corrected Package…', 'CmdOrCtrl+E', 'export'),
       { type: 'separator' }, { role: 'close' } ] },
     { role: 'editMenu' },
@@ -870,7 +870,7 @@ function buildMenu() {
       { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' } ] },
     { label: 'Run', submenu: [
       item('Run', 'CmdOrCtrl+R', 'launch'), item('Stop', 'CmdOrCtrl+.', 'stop'), item('Record Macro', 'Alt+CmdOrCtrl+R', 'record'),
-      item('Test Saving', 'Shift+CmdOrCtrl+R', 'cycle'), item('Record Reference', undefined, 'ref') ] },
+      item('Test Saving', 'Shift+CmdOrCtrl+R', 'cycle') ] },
     { role: 'windowMenu' },
     { role: 'help', submenu: [
       docs('Show Docs', 'README.md', 'Shift+CmdOrCtrl+H'), docs('User Guide', 'user-guide.md'), docs('Recipes', 'recipes.md'), docs('Findings', 'findings.md'),

@@ -58,7 +58,7 @@ press what it says, and choose **Steps** to read the recipe for it.
 | The page is blank | **Launch**, then read **Findings**, **Boot path** and **Errors** | [Steps](recipes.md#shows-a-blank-page) |
 | The content never talks to the LMS | **Launch**, then look at **Lookups** and **API** | [Steps](recipes.md#no-api-calls) |
 | It doesn't save or resume | **Test saving** (set up a macro first) | [Steps](recipes.md#doesnt-resume) |
-| Works in Chrome, not in Safari or on an iPad | **More options**: Storage "Blocked", Browser "WebKit", Device size; then **Launch** | [Steps](recipes.md#works-in-chrome-not-in-safari-or-on-an-ipad) |
+| Works in Chrome, not in Safari or on an iPad | **Settings**: Storage "Blocked", Browser "WebKit", Device size; then **Launch** | [Steps](recipes.md#works-in-chrome-not-in-safari-or-on-an-ipad) |
 | Works in one LMS, not another | **Experiments**, or choose a **Profile** and **Launch** | [Steps](recipes.md#works-in-one-lms-not-another) |
 | Works in the authoring tool, not in an LMS | **Launch**, then **Server needs**: Discover all server requests | [Steps](recipes.md#works-on-the-authoring-platform-not-in-an-lms) |
 
@@ -69,8 +69,8 @@ On the desktop, the menu bar has the toolbar's actions and a few more. Reload is
 | Menu | Items |
 |---|---|
 | **Package Lab** | **Settings…** ⌘, (see [Settings](#settings)) |
-| **File** | **Open Package…** ⌘O, **Open Recent**, **Compare Packages…**, **Check a Folder…**, **Open Saved Run…**, **Export Corrected Package…** ⌘E |
-| **Run** | **Run** ⌘R, **Stop** ⌘., **Record Macro** ⌥⌘R, **Test Saving** ⇧⌘R, **Record Reference** |
+| **File** | **Open Package…** ⌘O, **Open Recent**, **Compare Packages…**, **Check a Folder…**, **Open Saved Run…**, **Record a Working Copy…**, **Export Corrected Package…** ⌘E |
+| **Run** | **Run** ⌘R, **Stop** ⌘., **Record Macro** ⌥⌘R, **Test Saving** ⇧⌘R |
 | **View** | **Show Inspector** ⌥⌘I, **Reload** ⇧⌥⌘R |
 | **Help** | **Show Docs** ⇧⌘H, **User Guide**, **Recipes**, **Findings**, **Show Data Folder** (opens `~/Library/Application Support/Package Lab`) |
 
@@ -79,35 +79,59 @@ On the desktop, the menu bar has the toolbar's actions and a few more. Reload is
 - **Toolbar** (in the title bar on a Mac; the traffic lights sit at its left). From left to right:
   - **Open**, then the package's name
   - the **Item** to run
-  - **Run**, the one button that starts a run (⌘R) and becomes **Stop** while it goes (⌘.). It is the only filled button.
+  - **Run**, the one button that starts a run (⌘R) and becomes **Stop** while it goes (⌘.). It is the only filled
+    button. Beside it, a small **summary chip** lists the settings that aren't at their defaults (for example
+    "SCORM 2004, Moodle, iPhone"). Click it to open them. It isn't shown when every setting is at its default.
   - **Record** (desktop only, while a run is going), then **Test saving**
   - the status line
-  - **Inspector** (⌥⌘I), which shows or hides a pane on the right (empty for now), and **Help**
+  - **Inspector** (⌥⌘I), which shows or hides the pane on the right (see [The inspector](#the-inspector)), and **Help**
 
   The buttons show an icon and a label when the window is 1,100 pixels wide or more, and only the icon when it is
   narrower. Drag the empty part of the toolbar to move the window. On a Mac the controls use your system accent colour.
-- **Settings rows**, under the toolbar (they will move into the Inspector):
-  - the launch settings (see [Testing a theory](#testing-a-theory-launch-settings)), **Stop after**, **Compare
-    packages…**, **Check a folder…** and **Export corrected package…**
-  - the address of a working copy, **Record reference** (optional) and **Record caught errors**
+- **Inspector** (right, ⌥⌘I): the run settings, the macro and the docs. See [The inspector](#the-inspector).
 - **Runs** (left): every run in this session, plus any saved runs you open. Click one to show it in the tabs.
-  The **R** and **F** buttons are for comparing.
+  The **R** and **F** buttons are for comparing. Under the list, **Package** has **Compare packages…**, **Record a
+  working copy…**, **Check a folder…** (desktop only) and **Export corrected package…**.
 - **Tabs:** Findings, Boot path, API and Lookups always show, and so do the tabs you start things from: Experiments,
   Test saving, Server needs, Drill-down, Folder check and, in the web interface, Live. (The web interface has a
   **Live** tab instead of Folder check.) The result tabs (Package, Files, xAPI, Network, Scripts, Console, Errors,
   Frames, Execution, Timeline, Compare, Package diff) show only when the selected run has something for them. A small
   gap separates the tool tabs from the result tabs. The **Filter** box filters whichever table is showing.
-- **Help** at the right end of the toolbar opens the docs; see [The docs panel](#the-docs-panel).
+- **Help** at the right end of the toolbar opens the docs in the inspector; see [The docs panel](#the-docs-panel).
+
+### The inspector
+
+The pane on the right has three segments, chosen with the control at its top: **Settings**, **Macro** and **Help**.
+Package Lab remembers whether the pane is open, which segment you were on and how wide you made it. It is 340 pixels
+wide to start with. Drag its left edge to resize it, or focus the edge and use the left and right arrow keys.
+
+**Settings** holds the options the next run will use, in groups. All but Advanced start open:
+
+| Group | Holds |
+|---|---|
+| **LMS** | **Profile** and its fields, **API**, **Resume last run's data** |
+| **Browser and device** | **Browser**, **Device size** (with the custom size), **Storage** |
+| **Recording** | **Stop after**, **Record caught errors**, **Trace the code**, **Keep typed text in runs** |
+| **Advanced** (closed to begin with) | **Frame depth**, **In a new window**, **Launch parameters**, **Authoring tool**, **Pins**, **Answers**, the options as JSON, **Copy as CLI command** |
+
+**Macro** shows the macro the next run will play, with **Use this run's clicks** and **Clear**; see
+[Testing resume and progress saving](#testing-resume-and-progress-saving). **Help** is the docs panel; see [The docs panel](#the-docs-panel).
+
+### Record a working copy
+
+**File → Record a Working Copy…** (also **Record a working copy…** under **Package**, and a button at the top of the
+**Compare** view when there is no reference yet) opens a small dialog. Enter the address of the course where it works
+and choose **Record**. See [Comparing with a working copy](#comparing-with-a-working-copy-optional).
 
 When no run is selected, the tabs show the package as read from its files. When a run is selected, they show that run.
 [The tabs and buttons, one by one](#the-tabs-and-buttons-one-by-one) says what each one is for.
 
 ## The docs panel
 
-**Help** (at the right end of the toolbar, or **Show Docs** in the Help menu) opens the docs in a panel on the right of
-the window. Choose a doc from the list. **Back** returns to the doc you were reading, and **Close** shuts the panel.
-Links to other docs open in the panel; web links open in your browser. The panel remembers whether it was open and
-which doc it showed.
+**Help** (at the right end of the toolbar, or **Show Docs** in the Help menu) opens the docs in the **Help** segment of
+the [inspector](#the-inspector). Choose a doc from the list. **Back** returns to the doc you were reading, and **Close**
+shuts the inspector. Links to other docs open there; web links open in your browser. Package Lab remembers which doc
+it showed.
 
 The docs are bundled in the app: this guide, the recipes, the findings, the web interface, the command line, Alfred,
 Concierge and the authoring-tool notes. The web interface has the panel too.
@@ -182,15 +206,15 @@ Each tab below says what it shows and what its buttons do. Where a feature has a
 | **Compare packages…** | Compares this package with another `.zip` | [Comparing two packages](#comparing-two-packages) |
 | **Check a folder…** | Checks every package in a folder (desktop only) | [Checking a folder](#checking-a-folder-of-packages) |
 | **Export corrected package…** | Saves a corrected `.zip` | [Exporting a corrected package](#exporting-a-corrected-package) |
-| **Working copy** and **Record reference** | Records a working copy for comparison | [Comparing with a working copy](#comparing-with-a-working-copy-optional) |
+| **Record a working copy…** (File menu, Package list, Compare view) | Records a working copy for comparison | [Comparing with a working copy](#comparing-with-a-working-copy-optional) |
 | **Record caught errors** | Records errors the content catches itself | [Errors](#reading-a-run) |
 | **Stop and analyse** | Ends the run and analyses it | [Launching an item](#launching-an-item) |
 | **Filter** | Narrows the table in the tab you're on | [The window](#the-window) |
 | **R** and **F** (in Runs), **Compare** | Chooses a reference and a failing run and compares them | [Comparing with a working copy](#comparing-with-a-working-copy-optional) |
 | **Open saved…** | Opens a saved run | [Saved runs](#saved-runs) |
-| **More options** | Every launch option, the profile fields, pins, answers and macro | [Testing a theory](#testing-a-theory-launch-settings) |
-| **Copy as CLI command** (under More options) | Copies the `package-lab run` line for this launch | [cli.md](cli.md#copy-as-cli-command) |
-| **Help** | Opens the docs in a panel on the right | [The docs panel](#the-docs-panel) |
+| **Inspector** (Settings, Macro, Help) | Every launch option, the profile fields, pins, answers and macro | [Testing a theory](#testing-a-theory-launch-settings) |
+| **Copy as CLI command** (Settings, under Advanced) | Copies the `package-lab run` line for this launch | [cli.md](cli.md#copy-as-cli-command) |
+| **Help** | Opens the docs in the inspector | [The docs panel](#the-docs-panel) |
 
 ## Opening a package
 
@@ -402,8 +426,8 @@ Change one setting, launch again, and see whether the content gets further.
 **Frame depth** and **In a new window** go on top of the profile (see below): a depth other than 0 replaces the
 profile's, and a new window puts the API on the opener.
 
-Under the toolbar, **More options** shows every option the next launch will use, as JSON, and the profile's fields,
-which you can change (see below).
+Under **Advanced** in the inspector's Settings, the options the next launch will use are shown as JSON. The profile's
+fields are under **LMS**, and you can change them (see below).
 **Copy as CLI command** copies the `package-lab run …` line that repeats the launch from the command line. Options that
 have no flag are left out of the line; it adds `--options options.json` to say a file is needed. [The CLI guide](cli.md#copy-as-cli-command) lists the other file names it uses.
 
@@ -425,7 +449,7 @@ Choose it in the toolbar's **Profile** list:
   options** each shows its notes and the documents used. Where the documents don't say, a preset keeps the generic
   value and says so. An LMS's administrator can change most of these, so treat a preset as a likely setup, not a fact.
 
-Under **More options**, **Profile fields** shows the chosen profile's values. Change any of them to try a variation;
+Under **LMS** in the inspector's Settings, the profile fields show the chosen profile's values. Change any of them to try a variation;
 the launch then uses the preset with your changes (and **Copy as CLI command** adds `--profile-file profile.json`).
 Choosing another profile clears your changes.
 
@@ -457,7 +481,7 @@ A course that works in Chrome can fail in Safari or on an iPad. Those browsers r
 inside another site's page, which is how most LMSs show a course. If the content keeps something in the browser (the
 learner's place, a flag saying it has started), the refusal can stop it. Package Lab can reproduce this.
 
-Under **More options**, **Storage** sets what the content's frames get:
+Under **Browser and device** in the inspector's Settings, **Storage** sets what the content's frames get:
 
 | Storage | What happens |
 |---|---|
@@ -476,7 +500,7 @@ mode in `launch.options.storage` (and, with the profile's cookies taken into acc
 
 ## Other browsers and device sizes
 
-A course can work in Chrome and fail in Safari, or work on a desktop and fail on a phone. Under **More options**, two
+A course can work in Chrome and fail in Safari, or work on a desktop and fail on a phone. In the inspector's Settings, under **Browser and device**, two
 settings let you try both.
 
 **Browser** chooses the engine:
@@ -570,13 +594,13 @@ Two more ways to test a theory without touching the course. Both happen before t
 **Pin a value.** Many courses decide how to behave from a name, such as `previewMode` or `config.mode`. A pin makes the
 content read the value you choose, whatever it sets itself.
 
-1. In **More options**, under **Pins** (the **Lookups** tab has the same list), type the name, the value as JSON
+1. In the inspector's Settings, under **Advanced → Pins** (the **Lookups** tab has the same list), type the name, the value as JSON
    (`false`, `3`, `"text"`, `{"a":1}`; text needs quotes), and choose **Add pin**. **Edit** and **Remove** change the list.
 2. Choose **Run with these**, or **Launch**. Pins go with every launch until you remove them.
 
 Names can be dotted (`config.mode`): the pin applies to that part of the object once the content creates it.
 `navigator.userAgent` can be pinned too (it changes what the content and its server requests see). Other `navigator` names
-and `location` can't; for extra query parameters on the launch address, use **Launch parameters** in More options.
+and `location` can't; for extra query parameters on the launch address, use **Launch parameters** under Advanced.
 **In** chooses whether the pin applies in the content's frames only (the default) or in every frame.
 
 The Lookups tab then shows each read of a pinned value, and each time the content tried to change it. If the content
@@ -592,7 +616,7 @@ nothing, it may fall back to a mode that never talks to an LMS. Give it an answe
    The pattern is a path such as `/api/player/config`, a glob (`*` and `?`), or a `/regex/`.
 3. Choose **Add and run with these**. Answered requests show as **answered** in the Network tab.
 
-The list of answers is under **Answers** in More options. The Findings list the requests that were answered, and any answer
+The list of answers is under **Advanced → Answers** in the inspector's Settings. The Findings list the requests that were answered, and any answer
 nothing asked for. An answer applies to every request that matches, in every frame.
 
 Pins and answers are saved in a run's options, so the CLI's `--options-from` repeats them.
@@ -686,7 +710,7 @@ sources the run recorded). A minified file's excerpt is formatted, or is the ori
 
 ## Tracing the code
 
-Findings say what the content did. To see why, turn on **Trace the code** under **More options** and launch again.
+Findings say what the content did. To see why, turn on **Trace the code** in the inspector's Settings and launch again.
 Package Lab then records, in order, every function of the package's scripts that ran and which way each decision went,
 with the values it tested. The content doesn't pause, and behaves as it does without tracing.
 
@@ -818,12 +842,12 @@ is “I stop it”). It runs in Chromium only.
 - **Live view** (the web interface): choose **Record clicks** over the Live tab, use the course, then **Save macro**.
   Everything sent through the picture is recorded with its time into the run.
 - **A run in the desktop app**: clicks made directly in the course window can't be seen from outside, so the probe
-  records them in the course's frames instead. Choose a run, then **Use this run's clicks** under More options.
+  records them in the course's frames instead. Choose a run, then **Use this run's clicks** in the inspector's Macro segment.
   Clicks in a frame on another origin are placed relative to that frame.
 - **A file**: `--macro file.json` on the command line, or the `macro` option.
 
 What is kept in a saved run: the probe records click positions and named keys (Enter, Tab, the arrows…) in the course's
-frames. It records **typed text** only if **Keep typed text in runs (for macros)** (More options) was ticked for that
+frames. It records **typed text** only if **Keep typed text in runs (for macros)** (the inspector's Settings) was ticked for that
 run, and never from a password field or a field whose `autocomplete` names a password, a card detail or a one-time code
 (only the length of what was typed is kept, and no keys). Without the tick, a run holds no typed text. Text you type
 through the Live view while **Record clicks** is on is kept in the macro, so don't type secrets there.
@@ -837,8 +861,8 @@ their element and used their recorded position”. What is saved about the eleme
 characters of its text; never the text of a password field. A redacted report cuts the text and the values in the
 selector.
 
-**Size.** A macro remembers the window size it was recorded at ("14 events over 12.3 s, recorded at 1100×800" under
-More options), because its clicks are positions across the window. When **Device size** is "Window as it is", the
+**Size.** A macro remembers the window size it was recorded at ("14 events over 12.3 s, recorded at 1100×800" in
+the inspector’s Macro segment), because its clicks are positions across the window. When **Device size** is "Window as it is", the
 course runs at that size. If you choose a device size yourself, yours wins, and the run says so in a finding: "The macro
 was recorded at 1100×800 and played at 390×844: clicks may miss".
 
@@ -850,7 +874,7 @@ request pending for that long). Each has a timeout (30 s unless it says otherwis
 there and the run has the finding "The macro stopped at step 4: waited 30 s for “Next” and it never appeared", and
 carries on to its end. The file format is in [Macros](cli.md#macros).
 
-The macro is kept with your other options (**More options** shows how many events it has, with **Clear**), is played
+The macro is kept with your other options (the inspector's **Macro** segment shows how many events it has, with **Clear**), is played
 at the start of every launch from then on, and is saved in each run's launch options. **Use this run's clicks**, **Record**
 and **Record clicks** replace the macro you had. Macros need Chromium; with WebKit chosen, the launch says so.
 
@@ -870,14 +894,14 @@ Each says how sure it is:
 Public information about some tools is thin, so these checks are cautious: they stay information until a run or the
 files confirm them. For Xyleme, they rest on what Package Lab records for any package: requests to the platform's
 server, another site, or content that builds its own API. Their advice points to **Discover**, pins and answers. A
-package that carries no tool name is treated like any other, unless you set **Authoring tool** (under More options, or `--tool` on the command line) to the tool: its rules then run whether or not Package Lab recognises it, and say you chose it. [Findings](findings.md#from-authoring-tool-packs) lists them all.
+package that carries no tool name is treated like any other, unless you set **Authoring tool** (under Advanced in the inspector's Settings, or `--tool` on the command line) to the tool: its rules then run whether or not Package Lab recognises it, and say you chose it. [Findings](findings.md#from-authoring-tool-packs) lists them all.
 
 ## Comparing with a working copy (optional)
 
 If the course does work somewhere, such as the authoring tool's hosted preview, another LMS or SCORM Cloud, you can
 record that too:
 
-1. Enter its address in **Working copy** and choose **Record reference**. It opens in Package Lab's own browser, where
+1. Choose **File → Record a Working Copy…**, enter its address and choose **Record**. It opens in Package Lab's own browser, where
    you can sign in; sign-ins are kept between sessions. Use it the same way, then **Stop and analyse**. API calls on
    the real LMS are recorded too.
 2. In **Runs**, mark the working run **R** and the failing run **F**, then choose **Compare**.

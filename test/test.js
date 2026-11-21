@@ -21,7 +21,7 @@ import { DEFAULT_PORT, validPort, readSettings, writeSettings } from '../src/set
 import { OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB } from '../scripts/alfred-scripts.js'
 import { redactRun, kept } from '../src/redact.js'
 import { timelineModel, timelineView } from '../src/timeline.js'
-import { normaliseOptions, cliCommand, VIEWPORTS, viewportName } from '../src/options.js'
+import { normaliseOptions, cliCommand, VIEWPORTS, viewportName, optionsSummary } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
 import { markdown } from '../src/ui/markdown.js'
@@ -364,6 +364,18 @@ assert.deepEqual(normaliseOptions({ viewport: '390x844' }).viewport, { width: 39
 assert.deepEqual(normaliseOptions({ viewport: ' 1024X768 ' }).viewport, normaliseOptions({ viewport: { width: 1024, height: 768 } }).viewport, 'viewport: WxH is a plain size')
 assert.deepEqual(normaliseOptions({ viewport: normaliseOptions({ viewport: 'iphone' }).viewport }).viewport, VIEWPORTS.iphone, 'viewport: normalising twice changes nothing')
 assert.equal(viewportName(normaliseOptions({ viewport: '390x844' }).viewport), '390x844', 'viewportName: a plain size')
+// optionsSummary (E2.2): the labels for the chip beside Run.
+const sum = o => optionsSummary(normaliseOptions(o))
+assert.deepEqual(sum({}), [], 'optionsSummary: the defaults say nothing')
+assert.deepEqual(sum({ expose: '2004', profile: 'moodle', viewport: 'iphone' }), ['SCORM 2004', 'Moodle', 'iPhone'], 'optionsSummary: the spec example')
+assert.deepEqual(sum({ viewport: '500x700' }), ['500x700'], 'optionsSummary: a custom size')
+for (const [o, want] of [[{ expose: '1.2' }, 'SCORM 1.2'], [{ expose: 'both' }, 'Both APIs'], [{ expose: 'none' }, 'No API'], [{ profile: { base: 'moodle', apiDelay: 5 } }, 'Custom profile'], [{ browser: 'webkit' }, 'WebKit'],
+  [{ viewport: 'ipad' }, 'iPad'], [{ viewport: 'android-phone' }, 'Android phone'], [{ storage: 'blocked' }, 'Storage blocked'], [{ depth: 2 }, 'Frame depth 2'], [{ opener: true }, 'New window'], [{ resume: true }, 'Resume'],
+  [{ auto: 30 }, 'Stop after 30 s'], [{ auto: 120 }, 'Stop after 2 min'], [{ caught: false }, 'No caught errors'], [{ trace: true }, 'Traced'], [{ recordInput: true }, 'Typed text kept'], [{ tool: 'rise' }, 'Tool: rise'],
+  [{ launchParams: 'a=1' }, 'Parameters'], [{ macro: [{ t: 0, type: 'key', key: 'Tab' }] }, '1 macro step'], [{ pins: [{ path: 'a', value: 1 }] }, '1 pin'], [{ responses: [{ match: '/a', body: '' }, { match: '/b', body: '' }] }, '2 answers'],
+  [{ files: { 'a.js': { content: 'x' } } }, '1 changed file']]) assert.deepEqual(sum(o), [want], 'optionsSummary: ' + want)
+assert.deepEqual(sum({ expose: '2004', profile: 'moodle', browser: 'webkit', viewport: 'iphone', storage: 'blocked', trace: true }), ['SCORM 2004', 'Moodle', 'WebKit', 'iPhone', '+2 more'], 'optionsSummary: at most 4, then +N more')
+assert.deepEqual(sum({ expose: '2004', profile: 'moodle', browser: 'webkit', viewport: 'iphone' }), ['SCORM 2004', 'Moodle', 'WebKit', 'iPhone'], 'optionsSummary: exactly 4 has no +N')
 assert.equal(cliCommand({ browser: 'webkit' }), 'package-lab run package.zip --browser webkit', 'cliCommand: --browser')
 assert.equal(cliCommand({ viewport: 'iphone', browser: 'webkit' }), 'package-lab run package.zip --browser webkit --viewport iphone', 'cliCommand: --viewport preset')
 assert.equal(cliCommand({ viewport: { width: 390, height: 844 } }), 'package-lab run package.zip --viewport 390x844', 'cliCommand: --viewport WxH')

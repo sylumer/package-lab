@@ -1,0 +1,32 @@
+{
+  "options": {
+    "macro": [],
+    "recordInput": true,
+    "expose": "2004",
+    "profile": {
+      "base": "moodle",
+      "apiDelay": 250
+    },
+    "depth": 2,
+    "opener": true,
+    "resume": true,
+    "caught": false,
+    "auto": 30,
+    "pins": [
+      {
+        "path": "previewMode",
+        "value": false,
+        "frames": "content"
+      }
+    ],
+    "responses": [],
+    "launchParams": "a=1&b=2",
+    "trace": true,
+    "storage": "blocked",
+    "tool": "storyline",
+    "browser": "webkit",
+    "viewport": "500x700",
+    "item": 1
+  },
+  "cli": "package-lab run good.zip --item 1 --api 2004 --depth 2 --window --resume-from previous-run.json --no-caught --wait 30 --pin previewMode=false --launch-params 'a=1&b=2' --trace --storage blocked --browser webkit --record-input --tool storyline --viewport 500x700 --profile-file profile.json"
+}

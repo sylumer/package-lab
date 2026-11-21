@@ -3,12 +3,13 @@
 // later work packages and scripts/screenshots.js can drive the same window. The app keeps its data in a temp folder.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import electron from 'electron'
 import { _electron, chromium } from 'playwright'
+import { VIEWPORTS } from '../src/options.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 let app = null, win = null, work = null
@@ -35,7 +36,7 @@ export async function start(zip) {
 export async function close() { const a = app; app = win = null; if (a) await a.close().catch(() => {}) }
 export const page = () => win
 // Closes the app and removes the temp folder.
-export async function cleanup() { await close(); if (work) rmSync(work, { recursive: true, force: true }); work = null }
+export async function cleanup() { await close(); if (work) rmSync(work, { recursive: true, force: true, maxRetries: 5 }); work = null }
 // There is no handler to open a package in a running app, so this restarts the app with the package as an argument.
 export const open = async zip => { await start(zip); await win.locator('#pkg-name').filter({ hasText: /\.zip$/ }).waitFor() }
 // Runs the package and waits until the run is live.
@@ -67,6 +68,7 @@ async function checks() {
   assert.equal(await win.evaluate(() => getComputedStyle(document.getElementById('toolbar')).paddingLeft), process.platform === 'darwin' ? '78px' : '12px', 'room for the traffic lights')
   console.log('ui: start screen ok')
 
+  assert.ok(await win.locator('#summary').isHidden(), 'no chip in a clean state')
   await open(goodZip())
   assert.match(await text('#pkg-name'), /good\.zip/, 'the package name shows')
   assert.ok(await win.getByRole('button', { name: 'Run', exact: true }).isEnabled(), 'Run is enabled')
@@ -97,8 +99,8 @@ async function checks() {
   await win.getByRole('button', { name: 'Help', exact: true }).click()
   await win.locator('#docs:not([hidden])').waitFor()
   await win.waitForFunction(() => document.querySelector('#doc-body').innerText.length > 200)   // the user guide has loaded
-  await win.getByRole('button', { name: 'Close the documentation' }).click()
-  await win.locator('#docs[hidden]').waitFor({ state: 'attached' })
+  await win.getByRole('button', { name: 'Close the inspector' }).click()
+  await win.locator('#inspector[hidden]').waitFor({ state: 'attached' })   // Close shuts the inspector, Help being one of its segments
   console.log('ui: help panel ok')
 
   assert.equal(await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items[0].submenu.items.find(i => i.label === 'Settings…').accelerator), 'CmdOrCtrl+,', 'Settings… is ⌘,')
@@ -120,19 +122,57 @@ async function checks() {
   assert.match(await win.locator('#macro').textContent(), /1 event/, 'Discard leaves the earlier macro unchanged')
   console.log('ui: record ok')
 
-  // View → Show Inspector (⌥⌘I) toggles the right pane.
+  // View → Show Inspector (⌥⌘I) toggles the right pane (E2.2): Settings, Macro and Help in one pane, Advanced closed to begin with.
   assert.equal(await menu('Show Inspector', 'View'), 'Alt+CmdOrCtrl+I')
   await win.locator('#inspector:not([hidden])').waitFor()
+  assert.equal(await win.getByRole('tab', { name: 'Help', exact: true }).getAttribute('aria-selected'), 'true', 'the inspector opens on the segment it was last on (Help, above)')
+  await win.getByRole('tab', { name: 'Settings', exact: true }).click()
+  assert.equal(await win.locator('#advanced').evaluate(e => e.open), false, 'Advanced is closed by default')
+  assert.ok(await win.locator('#depth').isHidden(), 'the Advanced controls are not shown')
+  assert.equal((await win.locator('#inspector').boundingBox()).width, 340, 'the inspector is 340 px wide')
+  await win.getByRole('tab', { name: 'Settings', exact: true }).focus()
+  await win.keyboard.press('ArrowRight')
+  assert.equal(await win.getByRole('tab', { name: 'Macro', exact: true }).getAttribute('aria-selected'), 'true', 'the arrow keys move through the segments')
+  assert.ok(await win.locator('#macro').isVisible(), 'Macro shows the macro box')
+  await win.getByRole('tab', { name: 'Settings', exact: true }).click()
+  await win.getByRole('separator', { name: 'Resize the inspector' }).focus()
+  await win.keyboard.press('ArrowLeft')
+  assert.equal((await win.locator('#inspector').boundingBox()).width, 360, 'ArrowLeft on the handle widens the inspector')
+  await win.keyboard.press('ArrowRight')
+  // Device size iPhone: the chip beside Run names it, and a run saves the iPhone preset as its viewport.
+  assert.doesNotMatch(await win.locator('#summary').textContent(), /iPhone/, 'no iPhone chip yet (the macro recorded above shows as a chip of its own)')
+  await win.locator('#viewport').selectOption('iphone')
+  assert.match(await win.locator('#summary').innerText(), /iPhone/, 'the chip says iPhone')
   await menu('Show Inspector', 'View')
   await win.locator('#inspector[hidden]').waitFor({ state: 'attached' })
+  assert.ok(await win.locator('#summary').isVisible(), 'the chip stays beside Run with the inspector shut')
+  await win.locator('#summary').click()
+  await win.locator('#inspector:not([hidden])').waitFor()
+  assert.equal(await win.getByRole('tab', { name: 'Settings', exact: true }).getAttribute('aria-selected'), 'true', 'the chip opens Settings')
+  const before = new Set(readdirSync(join(dir(), 'data', 'runs')))
+  await launch(); await win.waitForTimeout(1500); await stop()
+  await win.waitForFunction(() => document.querySelector('#view').innerText.includes('Saved to /'))
+  const saved = readdirSync(join(dir(), 'data', 'runs')).filter(f => !before.has(f))
+  assert.equal(saved.length, 1, 'the run was saved')
+  assert.deepEqual(JSON.parse(readFileSync(join(dir(), 'data', 'runs', saved[0]), 'utf8')).launch.options.viewport, VIEWPORTS.iphone, 'the run saved the iPhone preset as launch.options.viewport')
+  await win.locator('#viewport').selectOption('')
+  await win.waitForFunction(() => !document.getElementById('summary').textContent.includes('iPhone'))
   console.log('ui: inspector ok')
+
+  // File → Record a Working Copy… opens its dialog, which has the address field.
+  await menu('Record a Working Copy…', 'File')
+  await win.locator('#ref-dialog[open]').waitFor()
+  assert.ok(await win.getByRole('textbox', { name: 'Address' }).isVisible(), 'the dialog has the address field')
+  await win.keyboard.press('Escape')
+  await win.locator('#ref-dialog:not([open])').waitFor({ state: 'attached' })
+  console.log('ui: working copy dialog ok')
   assert.deepEqual(errors, [], 'no uncaught errors in the window')
   await webChecks()
   console.log('ui: web toolbar ok')
 }
 
-// The web interface (npm run serve) in Playwright's Chromium: the same toolbar, no room kept for traffic lights, no errors in the console.
-async function webChecks() {
+// Starts the web interface (npm run serve) and Playwright's Chromium, and gives fn a page on it plus the list of console problems.
+export async function withWeb(fn) {
   const srv = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, PACKAGE_LAB_DATA: join(dir(), 'web-data') }, stdio: ['ignore', 'pipe', 'ignore'] })
   let log = ''; srv.stdout.on('data', d => { log += d })
   // Playwright's own Chromium; if this Playwright version's build isn't installed, any Chromium build in its cache will do (the page is plain HTML).
@@ -150,15 +190,55 @@ async function webChecks() {
     p.on('pageerror', e => problems.push(e.message)); p.on('console', m => { if (m.type() === 'error') problems.push(m.text() + ' ' + (m.location().url ?? '')) })
     await p.goto(url)
     await p.locator('#toolbar').waitFor()
+    await fn(p, problems)
+  } finally { await browser.close(); srv.kill() }
+}
+
+// Sets every launch-option control the window exposes to a value that isn't the default (E2.2), the way a person would, and
+// returns what launchOptions() made of it (the argument of the `options` call) and the Copy as CLI command line. It sets the
+// controls by id and fires their change events, so it works wherever the controls sit. test/fixtures/launch-options-before.json
+// holds what the window made of these choices before the inspector moved the controls; webChecks compares against it.
+export async function everyChoice(p) {
+  await p.locator('#file').setInputFiles(goodZip())
+  await p.locator('#pkg-name').filter({ hasText: /\.zip$/ }).waitFor()
+  await p.locator('#profile option[value=moodle]').waitFor({ state: 'attached' })
+  await p.evaluate(() => { window.__options = []; const o = lab.invoke; lab.invoke = (n, a) => { if (n === 'options') window.__options.push(a); return o.call(lab, n, a) } })
+  const set = (id, v) => p.evaluate(([id, v]) => { const e = document.getElementById(id); if (e.type === 'checkbox') e.checked = v; else e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })) }, [id, v])
+  await set('profile', 'moodle')
+  // A profile field changed from the preset's (the fields are drawn again when the profile changes, so this comes after it).
+  await p.evaluate(() => { const l = [...document.querySelectorAll('#profile-fields label')].find(x => x.firstChild.textContent === 'API delay (ms)'); l.querySelector('input').value = '250'; l.querySelector('input').dispatchEvent(new Event('change', { bubbles: true })) })
+  for (const [id, v] of [['expose', '2004'], ['depth', '2'], ['opener', true], ['resume', true], ['caught', false], ['auto', '30'], ['launch-params', 'a=1&b=2'], ['trace', true], ['storage', 'blocked'], ['tool', 'storyline'],
+    ['browser', 'webkit'], ['viewport', 'custom'], ['viewport-w', '500'], ['viewport-h', '700'], ['record-input', true]]) await set(id, v)
+  // A pin, through the Lookups tab's form.
+  await p.getByRole('tab', { name: 'Lookups', exact: true }).click()
+  await p.locator('#view').getByLabel('Name to pin').fill('previewMode'); await p.locator('#view').getByLabel('Value as JSON').fill('false')
+  await p.locator('#view').getByRole('button', { name: 'Add pin', exact: true }).click()
+  await set('item', await p.evaluate(() => document.getElementById('item').value))
+  await p.waitForTimeout(500)
+  return p.evaluate(() => ({ options: window.__options.at(-1), cli: document.getElementById('cli-line').textContent }))
+}
+
+// The web interface in Playwright's Chromium: the same toolbar, no room kept for traffic lights, no errors in the console.
+async function webChecks() {
+  await withWeb(async (p, problems) => {
     for (const [role, name] of [['button', 'Open package'], ['combobox', 'Item'], ['button', 'Run'], ['button', 'Test saving'], ['button', 'Inspector'], ['button', 'Help']])
       assert.ok(await p.getByRole(role, { name, exact: true }).isVisible(), `web: the toolbar has ${name}`)
+    for (const id of ['ref', 'compare-pkg', 'export']) assert.ok(await p.locator('#' + id).isVisible(), `web: #${id} is visible`)
+    assert.ok(await p.locator('#check-folder').isHidden(), 'web: Check a folder is desktop only')
     assert.ok(await p.getByRole('button', { name: 'Record macro' }).isHidden(), 'web: no Record button')
     assert.equal(await p.evaluate(() => document.body.classList.contains('mac')), false, 'web: no body.mac')
     assert.equal(await p.evaluate(() => getComputedStyle(document.getElementById('toolbar')).paddingLeft), '12px', 'web: no gap for traffic lights')
     assert.equal(await p.evaluate(() => document.documentElement.style.getPropertyValue('--accent')), '', 'web: the accent stays the CSS default')
     await p.waitForTimeout(500)
     assert.deepEqual(problems, [], 'web: no errors in the console: ' + problems.join(' | '))
-  } finally { await browser.close(); srv.kill() }
+    // E2.2: with every control set to a non-default value, launchOptions() and the Copy as CLI command line are what the window made of
+    // the same choices before the controls moved into the inspector.
+    const before = JSON.parse(readFileSync(join(root, 'test', 'fixtures', 'launch-options-before.json'), 'utf8'))
+    assert.deepEqual(await everyChoice(p), before, 'web: the same choices make the same launch options and CLI line as before the inspector')
+    await p.getByRole('button', { name: 'Inspector', exact: true }).click()
+    assert.ok(await p.locator('#summary').isVisible(), 'web: the chip shows for non-default settings')
+    assert.deepEqual(problems, [], 'web: no errors after the settings were changed: ' + problems.join(' | '))
+  })
 }
 
 // Launches with Record pressed, clicks Next in the course window, and stops. Leaves the Save/Discard dialog open.

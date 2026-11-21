@@ -34,6 +34,7 @@
     <span id="pkg-name" class="muted">No package open</span>
     <label>Item <select id="item" disabled></select></label>
     <button id="run" type="button" class="primary" disabled aria-label="Run" title="Run the item and record it. Run turns into Stop while it is going."><svg class="icon" aria-hidden="true"><use href="#i-run"/></svg><span class="tb-label" id="run-text">Run</span></button>
+    <button id="summary" type="button" class="chip" hidden title="Settings that aren’t at their defaults. Click to open them in the inspector."></button>
     <button id="record" type="button" class="record" hidden aria-pressed="false" aria-label="Record macro" title="Click through the course while this is pressed: the clicks are kept as the macro after the run stops. Desktop app only."><svg class="icon" aria-hidden="true"><use href="#i-record"/></svg><span class="tb-label" id="record-text">Record</span></button>
     <button id="cycle" type="button" disabled title="Run, leave the way a learner closing the window does, then resume from what was saved, and check the content saved and read its place." aria-label="Test saving"><svg class="icon" aria-hidden="true"><use href="#i-test-saving"/></svg><span class="tb-label">Test saving</span></button>
     <span class="spacer"></span>
@@ -41,62 +42,20 @@
     <button id="inspector-toggle" type="button" aria-pressed="false" title="Show or hide the inspector on the right." aria-label="Inspector"><svg class="icon" aria-hidden="true"><use href="#i-sidebar-right"/></svg><span class="tb-label">Inspector</span></button>
     <button id="help" type="button" title="Show or hide the documentation beside the window." aria-label="Help"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span class="tb-label">Help</span></button>
 </header>
-<div id="legacy-bar">
-  <div class="bar">
-    <label>API <select id="expose">
-      <option value="manifest">As the manifest says</option><option value="both">Both (1.2 and 2004)</option>
-      <option value="1.2">SCORM 1.2 only</option><option value="2004">SCORM 2004 only</option><option value="none">None</option></select></label>
-    <label>Profile <select id="profile" title="Host the content the way an LMS does. Presets are approximations; change their fields under More options."><option value="generic">generic</option></select></label>
-    <label>Frame depth <select id="depth"><option>0</option><option>1</option><option>2</option><option>3</option></select></label>
-    <label class="check"><input type="checkbox" id="opener"> In a new window</label>
-    <label class="check"><input type="checkbox" id="resume"> Resume last run’s data</label>
-    <label>Stop after <select id="auto" title="Stop and analyse automatically after this long">
-      <option value="0">I stop it</option><option value="10">10 s</option><option value="20">20 s</option><option value="30">30 s</option>
-      <option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
-    <button id="compare-pkg" type="button" class="secondary" disabled title="Compare this package with another one: files, manifest, loading path and findings, from the files alone.">Compare packages…</button>
-    <button id="check-folder" type="button" class="secondary" title="Check every SCORM package in a folder, from the files alone: one row each, with its verdict. Click a row to open that package.">Check a folder…</button>
-    <button id="export" type="button" class="secondary" disabled title="Save a corrected copy of the package: your changed files and the mechanical fixes (capitals, manifest version, missing files, http, layout), with a list of every change inside.">Export corrected package…</button>
-  </div>
-  <div class="bar">
-    <label class="grow">Working copy (reference) <input id="ref-url" type="url" placeholder="https://… where the course works (hosted preview, LMS, SCORM Cloud)" spellcheck="false"></label>
-    <button id="ref" type="button">Record reference</button>
-    <label class="check"><input type="checkbox" id="caught" checked> Record caught errors</label>
-  </div>
-  <div class="bar" id="export-panel" hidden></div>
-  <details id="more">
-    <summary>More options</summary>
-    <p class="muted small">The options this launch will use. To set the others, use a file with <code>--options</code> on the command line.</p>
-    <div class="row"><label>Launch parameters <input id="launch-params" type="text" placeholder="a=1&amp;b=2" spellcheck="false" title="Extra query parameters added to the launch address"></label>
-      <label>Storage <select id="storage" title="Storage in the content’s frames. Blocked: what Safari does for content inside another site’s page. Partitioned: empty at the start of the run. Normal: the profile’s Cookies field decides.">
-        <option value="normal">Normal</option><option value="blocked">Blocked (Safari-like)</option><option value="partitioned">Partitioned (empty)</option></select></label>
-      <label>Authoring tool <select id="tool" title="Apply the rules for this tool even if Package Lab doesn’t recognise it in the package. Auto uses what it recognises.">
-        <option value="">Auto</option><option value="xyleme">Xyleme</option><option value="storyline">Articulate Storyline</option><option value="rise">Articulate Rise</option><option value="captivate">Adobe Captivate</option><option value="ispring">iSpring</option><option value="lectora">Lectora</option><option value="adapt">Adapt</option><option value="dominknow">dominKnow</option><option value="evolve">Evolve</option><option value="scormdriver">SCORM Driver</option><option value="pipwerks">pipwerks wrapper</option></select></label>
-      <label>Browser <select id="browser" title="Chromium is the app’s own browser. WebKit is Safari’s engine, run through Playwright (it needs npm i -D playwright). A WebKit run has no live view, coverage, caught errors or code trace.">
-        <option value="chromium">Chromium</option><option value="webkit">WebKit (Safari’s engine)</option></select></label>
-      <label>Device size <select id="viewport" title="Run at a phone or tablet size, with touch and that device’s user agent.">
-        <option value="">Window as it is</option><option value="iphone">iPhone (390×844)</option><option value="ipad">iPad (820×1180)</option><option value="android-phone">Android phone (412×915)</option><option value="custom">Custom size…</option></select></label>
-      <span id="viewport-custom" hidden><label>Width <input id="viewport-w" type="number" min="100" max="10000" value="390" size="5"></label> <label>Height <input id="viewport-h" type="number" min="100" max="10000" value="844" size="5"></label></span>
-      <label class="check" title="Record which functions ran and which way each decision went, with the values. The content runs a little slower."><input type="checkbox" id="trace"> Trace the code</label></div>
-    <h3 class="section">Profile fields</h3>
-    <p class="muted small" id="profile-notes"></p>
-    <div id="profile-fields" class="row wrap"></div>
-    <h3 class="section">Macro</h3>
-    <label class="check" title="Keep the text typed in the course’s frames in the run, so “Use this run’s clicks” can include it. Never from password fields. Saved in the run."><input type="checkbox" id="record-input"> Keep typed text in runs (for macros)</label>
-    <div id="macro"></div>
-    <h3 class="section">Pins</h3>
-    <div id="pins"></div>
-    <h3 class="section">Answers</h3>
-    <div id="answers"></div>
-    <pre id="options-json"></pre>
-    <div class="row"><button id="copy-cli" type="button" class="secondary">Copy as CLI command</button><code id="cli-line"></code></div>
-  </details>
-</div>
 <div class="main">
   <aside>
     <h2>Runs</h2>
     <p class="muted small">Click a run to see it. To compare, choose a reference (R) and a run (F), then Compare.</p>
     <ol id="runs"></ol>
     <div class="row"><button id="compare" type="button" disabled>Compare</button><button id="open-run" type="button" class="secondary">Open saved…</button></div>
+    <h2>Package</h2>
+    <div class="stack">
+      <button id="compare-pkg" type="button" class="secondary" disabled title="Compare this package with another one: files, manifest, loading path and findings, from the files alone.">Compare packages…</button>
+      <button id="ref" type="button" class="secondary" title="Record the course where it works (a hosted preview, an LMS, SCORM Cloud), to compare a run of this package against it.">Record a working copy…</button>
+      <button id="check-folder" type="button" class="secondary" title="Check every SCORM package in a folder, from the files alone: one row each, with its verdict. Click a row to open that package.">Check a folder…</button>
+      <button id="export" type="button" class="secondary" disabled title="Save a corrected copy of the package: your changed files and the mechanical fixes (capitals, manifest version, missing files, http, layout), with a list of every change inside.">Export corrected package…</button>
+      <div id="export-panel" class="stack" hidden></div>
+    </div>
   </aside>
   <section>
     <nav id="tabs" role="tablist"></nav>
@@ -104,10 +63,62 @@
     <div id="code-pane" hidden></div>
     <div id="view"></div>
   </section>
-  <div id="inspector" hidden><p class="muted small">The inspector. Run settings will move here.</p></div>
-  <div id="docs" hidden>
-    <div class="docs-head"><select id="doc-pick" aria-label="Document"></select><button id="doc-back" type="button" class="secondary" disabled>Back</button><button id="doc-close" type="button" class="secondary" aria-label="Close the documentation">Close</button></div>
-    <div id="doc-body" class="doc"></div>
+  <div id="inspector" hidden>
+    <div id="inspector-resize" role="separator" aria-orientation="vertical" aria-label="Resize the inspector" aria-valuemin="280" aria-valuemax="800" aria-valuenow="340" tabindex="0" title="Drag, or use the left and right arrow keys, to resize the inspector."></div>
+    <div id="insp-tabs" role="tablist" aria-label="Inspector">
+      <button type="button" role="tab" id="insp-tab-settings" data-seg="settings" aria-controls="insp-settings" aria-selected="true">Settings</button>
+      <button type="button" role="tab" id="insp-tab-macro" data-seg="macro" aria-controls="insp-macro" aria-selected="false" tabindex="-1">Macro</button>
+      <button type="button" role="tab" id="insp-tab-help" data-seg="help" aria-controls="docs" aria-selected="false" tabindex="-1">Help</button>
+    </div>
+    <div id="insp-settings" class="insp-pane" role="tabpanel" aria-labelledby="insp-tab-settings">
+      <details class="group" open><summary>LMS</summary>
+        <label>Profile <select id="profile" title="Host the content the way an LMS does. Presets are approximations; change their fields below."><option value="generic">generic</option></select></label>
+        <p class="muted small" id="profile-notes"></p>
+        <div id="profile-fields" class="fields"></div>
+        <label>API <select id="expose">
+          <option value="manifest">As the manifest says</option><option value="both">Both (1.2 and 2004)</option>
+          <option value="1.2">SCORM 1.2 only</option><option value="2004">SCORM 2004 only</option><option value="none">None</option></select></label>
+        <label class="check"><input type="checkbox" id="resume"> Resume last run’s data</label>
+      </details>
+      <details class="group" open><summary>Browser and device</summary>
+        <label>Browser <select id="browser" title="Chromium is the app’s own browser. WebKit is Safari’s engine, run through Playwright (it needs npm i -D playwright). A WebKit run has no live view, coverage, caught errors or code trace.">
+          <option value="chromium">Chromium</option><option value="webkit">WebKit (Safari’s engine)</option></select></label>
+        <label>Device size <select id="viewport" title="Run at a phone or tablet size, with touch and that device’s user agent.">
+          <option value="">Window as it is</option><option value="iphone">iPhone (390×844)</option><option value="ipad">iPad (820×1180)</option><option value="android-phone">Android phone (412×915)</option><option value="custom">Custom size…</option></select></label>
+        <div id="viewport-custom" class="fields" hidden><label>Width <input id="viewport-w" type="number" min="100" max="10000" value="390"></label> <label>Height <input id="viewport-h" type="number" min="100" max="10000" value="844"></label></div>
+        <label>Storage <select id="storage" title="Storage in the content’s frames. Blocked: what Safari does for content inside another site’s page. Partitioned: empty at the start of the run. Normal: the profile’s Cookies field decides.">
+          <option value="normal">Normal</option><option value="blocked">Blocked (Safari-like)</option><option value="partitioned">Partitioned (empty)</option></select></label>
+      </details>
+      <details class="group" open><summary>Recording</summary>
+        <label>Stop after <select id="auto" title="Stop and analyse automatically after this long">
+          <option value="0">I stop it</option><option value="10">10 s</option><option value="20">20 s</option><option value="30">30 s</option>
+          <option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option></select></label>
+        <label class="check"><input type="checkbox" id="caught" checked> Record caught errors</label>
+        <label class="check" title="Record which functions ran and which way each decision went, with the values. The content runs a little slower."><input type="checkbox" id="trace"> Trace the code</label>
+        <label class="check" title="Keep the text typed in the course’s frames in the run, so “Use this run’s clicks” can include it. Never from password fields. Saved in the run."><input type="checkbox" id="record-input"> Keep typed text in runs (for macros)</label>
+      </details>
+      <details class="group" id="advanced"><summary>Advanced</summary>
+        <p class="muted small">The options the next run will use. To set the others, use a file with <code>--options</code> on the command line.</p>
+        <label>Frame depth <select id="depth"><option>0</option><option>1</option><option>2</option><option>3</option></select></label>
+        <label class="check"><input type="checkbox" id="opener"> In a new window</label>
+        <label>Launch parameters <input id="launch-params" type="text" placeholder="a=1&amp;b=2" spellcheck="false" title="Extra query parameters added to the launch address"></label>
+        <label>Authoring tool <select id="tool" title="Apply the rules for this tool even if Package Lab doesn’t recognise it in the package. Auto uses what it recognises.">
+          <option value="">Auto</option><option value="xyleme">Xyleme</option><option value="storyline">Articulate Storyline</option><option value="rise">Articulate Rise</option><option value="captivate">Adobe Captivate</option><option value="ispring">iSpring</option><option value="lectora">Lectora</option><option value="adapt">Adapt</option><option value="dominknow">dominKnow</option><option value="evolve">Evolve</option><option value="scormdriver">SCORM Driver</option><option value="pipwerks">pipwerks wrapper</option></select></label>
+        <h3 class="section">Pins</h3>
+        <div id="pins"></div>
+        <h3 class="section">Answers</h3>
+        <div id="answers"></div>
+        <pre id="options-json"></pre>
+        <div class="stack"><button id="copy-cli" type="button" class="secondary">Copy as CLI command</button><code id="cli-line"></code></div>
+      </details>
+    </div>
+    <div id="insp-macro" class="insp-pane" role="tabpanel" aria-labelledby="insp-tab-macro" hidden>
+      <div id="macro"></div>
+    </div>
+    <div id="docs" role="tabpanel" aria-labelledby="insp-tab-help" hidden>
+      <div class="docs-head"><select id="doc-pick" aria-label="Document"></select><button id="doc-back" type="button" class="secondary" disabled>Back</button><button id="doc-close" type="button" class="secondary" aria-label="Close the inspector">Close</button></div>
+      <div id="doc-body" class="doc"></div>
+    </div>
   </div>
 </div>
 <dialog id="saved"><h2>Saved runs</h2><p class="muted small">Runs saved on the Mac running Package Lab, newest first.</p><ul id="saved-list"></ul><form method="dialog"><button class="secondary">Close</button></form></dialog>
@@ -118,6 +129,11 @@
   <form method="dialog"><button class="secondary" id="set-cancel">Cancel</button> <button type="button" id="set-save">Save</button></form></dialog>
 <dialog id="record-dialog" aria-labelledby="record-title"><h2 id="record-title"></h2><p id="record-note" class="muted small"></p>
   <div class="row"><button type="button" class="secondary" id="record-discard">Discard</button> <button type="button" id="record-save">Save</button></div></dialog>
+<dialog id="ref-dialog" aria-labelledby="ref-title"><h2 id="ref-title">Record a working copy</h2>
+  <p class="muted small">Open the course where it works (a hosted preview, an LMS, SCORM Cloud). Package Lab records it in its own browser, so you can compare it with a run of this package.</p>
+  <p><label class="grow">Address <input id="ref-url" type="url" placeholder="https://… where the course works" spellcheck="false"></label></p>
+  <p class="muted small" id="ref-note" role="status"></p>
+  <div class="row"><button type="button" class="secondary" id="ref-cancel">Cancel</button> <button type="button" id="ref-go">Record</button></div></dialog>
 <script src="bridge.js"></script>
 <script src="codeview.js"></script>
 <script type="module" src="app.js"></script>

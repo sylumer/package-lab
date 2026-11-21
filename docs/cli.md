@@ -310,7 +310,7 @@ start of its text), the counts (API calls, requests, failures, uncaught errors),
 
 #### Copy as CLI command
 
-**Copy as CLI command** (under More options, in the desktop app and the web interface) copies the `package-lab run` line
+**Copy as CLI command** (in the inspector's Settings, under Advanced, in the desktop app and the web interface) copies the `package-lab run` line
 for the current launch. It starts with the package's file name and adds `--item` when the item isn't the first. Each
 setting that a flag can express gets one; the rest go in a file the line names:
 
@@ -322,7 +322,7 @@ setting that a flag can express gets one; the rest go in a file the line names:
 | `--macro macro.json` | A macro. Save it as a JSON list of events first |
 | `--profile name` or `--profile-file profile.json` | A preset by name, or a changed profile: save its fields in that file |
 | `--launch-params`, `--storage`, `--browser`, `--viewport`, `--tool`, `--trace`, `--record-input` | As the flags in the run table above |
-| `--options options.json` | Any other setting that is not the default. Save the options JSON shown under More options as that file |
+| `--options options.json` | Any other setting that is not the default. Save the options JSON shown under Advanced in the inspector's Settings as that file |
 
 The line is a starting point: the files it names must be made before it runs.
 

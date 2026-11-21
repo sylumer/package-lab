@@ -398,7 +398,7 @@ export function drill(input) {
   const { trace } = input
   if (!trace?.sites || !(trace.exec ?? []).length) {
     return { traced: !!trace?.sites, decisions: [], chain: [], watch: [], watched: !!input.watch, cause: null, summary: '',
-      findings: [{ sev: 'info', title: 'Why it stopped: nothing to drill into', detail: trace?.sites ? 'The traced run recorded no decisions in the package’s scripts.' : 'The run wasn’t traced, so there are no decisions to follow.', evidence: [], fix: 'Drill down on a traced run (Trace the code under More options, or package-lab drill).' }] }
+      findings: [{ sev: 'info', title: 'Why it stopped: nothing to drill into', detail: trace?.sites ? 'The traced run recorded no decisions in the package’s scripts.' : 'The run wasn’t traced, so there are no decisions to follow.', evidence: [], fix: 'Drill down on a traced run (Trace the code in the inspector’s Settings, or package-lab drill).' }] }
   }
   const ctx = context({ ...input, files: input.files ?? new Map() }), de = deadEnd(ctx.all, ctx.milestones)
   const decisions = keyDecisions(ctx, de)

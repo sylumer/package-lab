@@ -231,3 +231,30 @@ export function cliCommand(options, { zip = 'package.zip', item } = {}) {
   if (rest.length) a.push('--options', 'options.json')
   return a.join(' ')
 }
+
+// Short labels for the fields of normalised options that differ from DEFAULTS, for the summary chip beside Run (E2.2). Fixed order;
+// at most 4 labels, then "+N more". Not every field has one: wait is the command line's, and files are the Files tab's (shown as a count).
+const VIEWPORT_LABEL = { iphone: 'iPhone', ipad: 'iPad', 'android-phone': 'Android phone' }
+const count = (n, one, many) => `${n} ${n === 1 ? one : many}`
+export function optionsSummary(o) {
+  const d = DEFAULTS, differs = k => JSON.stringify(o[k]) !== JSON.stringify(d[k]), out = []
+  if (differs('expose')) out.push({ manifest: '', both: 'Both APIs', '1.2': 'SCORM 1.2', 2004: 'SCORM 2004', none: 'No API' }[o.expose])
+  if (differs('profile')) out.push(typeof o.profile === 'string' ? o.profile[0].toUpperCase() + o.profile.slice(1) : 'Custom profile')
+  if (differs('browser')) out.push(o.browser === 'webkit' ? 'WebKit' : o.browser)
+  if (differs('viewport')) out.push(VIEWPORT_LABEL[viewportName(o.viewport)] ?? viewportName(o.viewport))
+  if (differs('storage')) out.push(`Storage ${o.storage}`)
+  if (differs('depth')) out.push(`Frame depth ${o.depth}`)
+  if (differs('opener')) out.push('New window')
+  if (differs('resume')) out.push('Resume')
+  if (differs('auto')) out.push(o.auto >= 60 && o.auto % 60 === 0 ? `Stop after ${o.auto / 60} min` : `Stop after ${o.auto} s`)
+  if (differs('caught')) out.push('No caught errors')
+  if (differs('trace')) out.push('Traced')
+  if (differs('recordInput')) out.push('Typed text kept')
+  if (differs('tool')) out.push(`Tool: ${o.tool}`)
+  if (differs('launchParams')) out.push('Parameters')
+  if (differs('macro')) out.push(count(o.macro.length, 'macro step', 'macro steps'))
+  if (differs('pins')) out.push(count(o.pins.length, 'pin', 'pins'))
+  if (differs('responses')) out.push(count(o.responses.length, 'answer', 'answers'))
+  if (differs('files')) out.push(count(Object.keys(o.files).length, 'changed file', 'changed files'))
+  return out.length > 4 ? [...out.slice(0, 4), `+${out.length - 4} more`] : out
+}
