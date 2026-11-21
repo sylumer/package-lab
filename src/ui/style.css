@@ -1,5 +1,5 @@
-:root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d9d9de; --panel: #f5f5f7; --accent: #0a66d8; --err: #c4281c; --warn: #a15c00; --info: #4b5563; --code: #f0f0f3; --sidebar: var(--panel); }
-@media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #3a3a3c; --panel: #2c2c2e; --accent: #4c9bff; --err: #ff6b5e; --warn: #ffb340; --info: #b0b0b8; --code: #2a2a2d; } }
+:root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d9d9de; --panel: #f5f5f7; --accent: #0a66d8; --err: #c4281c; --warn: #a15c00; --info: #4b5563; --good: #1e7d32; --code: #f0f0f3; --sidebar: var(--panel); }
+@media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #3a3a3c; --panel: #2c2c2e; --accent: #4c9bff; --err: #ff6b5e; --warn: #ffb340; --info: #b0b0b8; --good: #4cd964; --code: #2a2a2d; } }
 body.mac { --sidebar: color-mix(in srgb, var(--panel) 55%, transparent); }
 /* Vibrancy (macOS only): the page is see-through and only the content areas are opaque, so just the sidebar shows the desktop. */
 html:has(body.mac), body.mac { background: transparent; }
@@ -56,8 +56,12 @@ pre { background: var(--code); padding: 8px; border-radius: 6px; white-space: pr
 .finding { border: 1px solid var(--line); border-left: 4px solid var(--info); border-radius: 6px; padding: 8px 10px; margin: 8px 0; }
 .finding.error { border-left-color: var(--err); } .finding.warn { border-left-color: var(--warn); }
 .finding h3 { margin: 0 0 4px; font-size: 13px; }
-.finding .sev { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-right: 6px; }
+.finding .sev { font-size: 12px; font-weight: 600; margin-right: 6px; white-space: nowrap; }
 .finding.error .sev { color: var(--err); } .finding.warn .sev { color: var(--warn); } .finding.info .sev { color: var(--info); }
+/* The verdict banner at the top of Findings (E2.4): the icon and the word carry the severity; the colour is the same as the card's. */
+.verdict { --sev: var(--info); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1px solid var(--line); border-left: 4px solid var(--sev); border-radius: 6px; padding: 8px 10px; margin: 8px 0 4px; }
+.verdict.error { --sev: var(--err); } .verdict.warn { --sev: var(--warn); } .verdict.ok { --sev: var(--good); }
+.verdict .icon, .verdict b { color: var(--sev); } .verdict b { font-weight: 600; }
 .finding ul { margin: 4px 0; padding-left: 18px; } .finding li { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-word; }
 .fix { margin: 4px 0 0; } .fix b { font-weight: 600; }
 .milestones { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; margin: 6px 0; }

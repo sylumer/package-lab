@@ -93,7 +93,7 @@ src/
                         the confidence sentences; one file per tool: adapt, captivate, dominknow, evolve, ispring,
                         lectora, pipwerks, rise, scormdriver, storyline, xyleme (P3.2)
   diff.js               Comparison of two runs
-  report.js             HTML reports, verdict, counts, the redaction banner, the experiment's variants table (experimentHtml, P5.2)
+  report.js             HTML reports, verdict, runVerdict (the Findings banner, E2.4), counts, the redaction banner, the experiment's variants table (experimentHtml, P5.2)
   completion.js         The command table (names, summaries, flags, value kinds) and the zsh completion script (P5.2)
   redact.js             Redacted reports (P4.4): redactRun, the copy of a run with the course content taken out
   fixes.js              Corrected package export: FIXES (the six autofixes, in run order), correct, prove, exportFixed (P3.1)
@@ -241,7 +241,7 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `settings-set` | `{ port }` | `{ settings, free }`: the saved settings and whether the port was free. A bad port is refused (desktop only) |
 
 Package info is `{ name, loaded, analysis, overrides: [{ path, size, binary, added }], findings, items: [{ index, title, type, depth, href }] }`. A run summary is
-the run without script sources and raw coverage, with `boot.nodes` already matched against the run (`bootRun`).
+the run without script sources and raw coverage, with `boot.nodes` already matched against the run (`bootRun`). It also has `verdict` (`runVerdict(milestones, findings)`, E2.4: `{ sev, text }`, `null` when the run has no milestones), which the Findings banner shows; the interfaces can't import `src/`, so the verdict comes through here, as the milestones and findings do.
 
 ## Serving the package: lab://
 
@@ -998,7 +998,7 @@ A finding is:
 | `compareFindings(cmp)` | `compare()` | First divergence, branches, differing files, errors only in the run |
 
 `sortFindings` orders by severity (stable, so each function's own order is kept within a severity). `verdict()` in
-`report.js` is the first error, else the first warning, else ok. Every finding is listed for users in
+`report.js` is the first error, else the first warning, else ok. `runVerdict(milestones, findings)` (E2.4, UI only) adds the sentence: the furthest step reached and the first missed, or "Ran through" when all were reached; its `sev` is the same worst finding, with an info finding counting as ok. Every finding is listed for users in
 [findings.md](findings.md); keep that file in step.
 
 **Writing findings:** the title states what happened, in plain words. `detail` says why it matters. `evidence` lines

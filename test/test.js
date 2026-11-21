@@ -15,7 +15,7 @@ import { analyze, pkgPath } from '../src/analyze.js'
 import { matchByPath, branchDiff, compare, segs } from '../src/diff.js'
 import { staticFindings, runFindings, launchFindings } from '../src/rules.js'
 import { bootGraph, resolveRef } from '../src/bootpath.js'
-import { renderReport, verdict, timelineHtml, experimentHtml } from '../src/report.js'
+import { renderReport, verdict, runVerdict, timelineHtml, experimentHtml } from '../src/report.js'
 import { COMMANDS, zshCompletion } from '../src/completion.js'
 import { DEFAULT_PORT, validPort, readSettings, writeSettings } from '../src/settings.js'
 import { OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB } from '../scripts/alfred-scripts.js'
@@ -325,6 +325,17 @@ assert.throws(() => progress(null, mk('looked')), /two milestone lists/); assert
 assert.equal(progress(milestones(trace(), bg), milestones(trace(), bg)).better, 0)
 assert.deepEqual(runCounts(trace({ requests: [{ url: 'lab://run/pkg/a', status: 404 }, { url: 'lab://run/pkg/b', status: 200 }], exceptions: [{}], probe: [call('x'), { type: 'dom', frame: pf, text: 30 }, { type: 'dom', frame: pf, text: 40 }] })),
   { apiCalls: 1, requests: 2, failedRequests: 1, uncaught: 1, visibleText: 40 }, 'runCounts: last report of each frame')
+// runVerdict (E2.4): the banner's sentence and severity, over the same milestone data.
+const ran = 'Ran through: launched, talked to the LMS and saved its progress'
+assert.deepEqual(runVerdict(milestones(trace(), bg), []), { sev: 'ok', text: 'Didn’t reach any step. The first missing one is “Launch page loaded”.' }, 'runVerdict: nothing reached')
+assert.deepEqual(runVerdict(milestones(trace({ requests: reqs('lesson.html') }), bg), []), { sev: 'ok', text: 'Got as far as “Launch page loaded”, but didn’t reach “Scripts loaded”.' }, 'runVerdict: launched only')
+assert.deepEqual(runVerdict(mk('looked'), []), { sev: 'ok', text: 'Got as far as “Looked for the API”, but didn’t reach “Content shown”.' }, 'runVerdict: looked but not found')
+assert.deepEqual(runVerdict(milestones(trace({ requests: allReqs, probe: [shownT.probe[0], { type: 'lookup', t: 1, name: 'API', found: true, frame: pf }, call('LMSInitialize')] }), bg), []), { sev: 'ok', text: 'Got as far as “Initialised”, but didn’t reach “Read saved data”.' }, 'runVerdict: initialised but never wrote')
+assert.deepEqual(runVerdict(full, []), { sev: 'ok', text: ran }, 'runVerdict: all reached')
+assert.deepEqual(runVerdict(full, [{ sev: 'info', title: 'i' }, { sev: 'warn', title: 'w' }]), { sev: 'warn', text: ran }, 'runVerdict: all reached with a warning')
+assert.equal(runVerdict(full, [{ sev: 'error', title: 'e' }, { sev: 'warn', title: 'w' }]).sev, 'error', 'runVerdict: the worst finding decides')
+assert.equal(runVerdict(full, [{ sev: 'info', title: 'i' }]).sev, 'ok', 'runVerdict: info-only findings give ok')
+assert.deepEqual(runVerdict([], []), { sev: 'ok', text: 'Didn’t reach any step.' }, 'runVerdict: an empty milestone list is nothing reached')
 const html = renderReport({ title: 'T', findings: [{ sev: 'error', title: '<img src=x onerror=alert(1)>', evidence: ['a & b'] }], fragment: true })
 assert.ok(html.includes('&lt;img src=x') && !html.includes('<img src=x') && html.includes('a &amp; b'), 'report escapes')
 assert.deepEqual(verdict([{ sev: 'warn', title: 'w' }, { sev: 'error', title: 'e' }]), { sev: 'error', title: 'e' })

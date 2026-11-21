@@ -3,7 +3,7 @@
 // with its own scoped styles, for embedding (the Concierge module prints it inside its page).
 import { bootRun } from './bootpath.js'
 import { isLab, isLrs } from './diff.js'
-import { milestones } from './milestones.js'
+import { milestones, furthest, firstMissing } from './milestones.js'
 import { timelineView } from './timeline.js'
 import { excerptor, urlPath } from './codeview.js'
 import { entryBuffer, isText } from './overlay.js'
@@ -19,6 +19,15 @@ const where = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 export function verdict(findings = []) {
   const e = findings.find(f => f.sev === 'error'), w = findings.find(f => f.sev === 'warn')
   return e ? { sev: 'error', title: e.title } : w ? { sev: 'warn', title: w.title } : { sev: 'ok', title: 'No problems found' }
+}
+// The verdict at the top of a run's Findings (E2.4; the UI only, the report keeps verdict()). sev is the worst finding's (an info finding
+// counts as ok). The text names the furthest step reached and the first one missed, or says all were reached. Pure.
+export function runVerdict(milestones, findings = []) {
+  const sev = findings.some(f => f.sev === 'error') ? 'error' : findings.some(f => f.sev === 'warn') ? 'warn' : 'ok'
+  const f = furthest(milestones), m = firstMissing(milestones)
+  if (milestones.length && !m) return { sev, text: 'Ran through: launched, talked to the LMS and saved its progress' }
+  if (!f) return { sev, text: m ? `Didn’t reach any step. The first missing one is “${m.label}”.` : 'Didn’t reach any step.' }
+  return { sev, text: `Got as far as “${f.label}”, but didn’t reach “${m.label}”.` }
 }
 export function counts(findings = [], trace) {
   const c = { errors: findings.filter(f => f.sev === 'error').length, warnings: findings.filter(f => f.sev === 'warn').length, info: findings.filter(f => f.sev === 'info').length }

@@ -159,7 +159,7 @@ Each view below says what it shows and what its buttons do. Where a feature has 
 
 **Views**
 
-- **Findings**: the problems, worst first, with the **Milestones** strip above them. **Save report…** (with **Take the
+- **Findings**: a banner at the top says how the run went in one sentence, then the **Milestones** strip, then the problems, worst first. **Save report…** (with **Take the
   course content out** ticked for a redacted report) is at the top of the tab. See [Reading a run](#reading-a-run) and
   [Sending a report](#sending-a-report-without-the-course-content).
 - **Boot path**: the loading path of the selected item, and in a run, when each file was asked for. See [Before
@@ -235,11 +235,11 @@ The package is checked like this:
 ## Before running: Findings and Boot path
 
 **Findings** lists problems, worst first:
-- **error** means this will stop it working;
-- **warning** means it may stop it working, or has a side effect worth knowing about;
-- **info** is context.
+- **Problem** (error) means this will stop it working;
+- **Warning** means it may stop it working, or has a side effect worth knowing about;
+- **Note** (info) is context.
 
-Each finding has an explanation, the evidence (file and line, or what happened), and **Try:** with what to do.
+Each card shows its icon and that word, so the colour is not the only sign. Each finding has an explanation, the evidence (file and line, or what happened), and **Try:** with what to do.
 [Findings](findings.md) explains every one. **What this means** opens that finding's row in [Findings](findings.md) in the
 docs panel, where the row is briefly highlighted.
 
@@ -283,7 +283,7 @@ Package Lab then collects code coverage and scripts, works out the findings, sav
 
 ## Reading a run
 
-Start with **Findings**. At the top is the **Milestones** strip, then the run's findings, then the ones from the files.
+Start with **Findings**. At the top is a banner with an icon and one of three words: **Problem**, **Warning** or **Good** (**Note** appears only on finding cards). Its sentence says how far the run got: "Got as far as “…”, but didn’t reach “…”." If every step was reached, it says "Ran through" instead. The word is the worst finding's: **Good** means there was no problem or warning. Under the banner is the **Milestones** strip, then the run's findings, then the ones from the files.
 
 ### Milestones
 

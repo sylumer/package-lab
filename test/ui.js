@@ -91,11 +91,14 @@ async function checks() {
   await launch()
   await win.locator('#status').filter({ hasText: 'Recording' }).waitFor()   // the run is live
   await win.waitForTimeout(3000)
+  await clickCourse(await runWindow(), '#exit')   // Save and exit: the course finishes, so the run reaches every step (E2.4)
   await stop()
   assert.ok(await win.locator('#runs li').count() >= 1, 'a run is listed')
   await view('Findings')
   await win.locator('#view .finding').first().waitFor()
   assert.ok(await win.locator('#view .finding').count() >= 1, 'Findings shows at least one finding')
+  // E2.4: the banner at the top of Findings says how the run went: the icon and the word, then the sentence.
+  assert.match(await text('#view .verdict'), /^Good\s+Ran through: /, 'after a run of good, the banner says Good and Ran through')
   console.log('ui: launch, stop, findings ok')
   await viewChecks()
 
@@ -283,7 +286,7 @@ async function recordRound() {
   await launch()
   await win.getByRole('button', { name: 'Record macro', exact: true }).click()
   await win.locator('#record[aria-pressed="true"]').waitFor()
-  await clickNext(await runWindow())
+  await clickCourse(await runWindow(), '#next')
   await stop()
   await win.locator('#record-dialog[open]').waitFor()
 }
@@ -297,17 +300,17 @@ async function runWindow() {
   }
   throw new Error('The run window never opened')
 }
-// Clicks the middle of the course's Next button with the run window's mouse, at its measured position (in whichever frame it is).
-async function clickNext(run) {
+// Clicks the middle of a course button (Next, or Save and exit) with the run window's mouse, at its measured position (in whichever frame it is).
+async function clickCourse(run, sel) {
   for (let i = 0; i < 100; i++) {
     for (const f of run.frames()) {
-      if (!await f.locator('#next').count()) continue
-      const box = await f.locator('#next').boundingBox()
+      if (!await f.locator(sel).count()) continue
+      const box = await f.locator(sel).boundingBox()
       if (box) return run.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
     }
     await run.waitForTimeout(200)
   }
-  throw new Error('Next never appeared in the run window')
+  throw new Error(`${sel} never appeared in the run window`)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

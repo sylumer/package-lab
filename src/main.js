@@ -38,7 +38,7 @@ import { drill, watchPins } from './drilldown.js'
 import { PROFILES, launchProfile } from './profiles.js'
 import { answerFor, buildAnswer } from './pins.js'
 import { serveRequest, toLab, WEBKIT_ORIGINS, launchPlan, withProgress, runAnalysis, savedRun } from './launch.js'
-import { renderReport } from './report.js'
+import { renderReport, runVerdict } from './report.js'
 import { codeViewAsync } from './codeview.js'
 import { timelineView } from './timeline.js'
 import { createLrs, maskTokens, MAX_BODY } from './lrs.js'
@@ -122,6 +122,7 @@ function traceFile(path, buf) {
 const slim = l => l?.options?.files && { ...l, options: { ...l.options, files: Object.fromEntries(Object.entries(l.options.files).map(([p, e]) => [p, { size: entryBuffer(e).length }])) } }
 // A traced run's events are replaced by the last 500, described (the Execution tab).
 const summary = r => ({ id: r.id, label: r.label, kind: r.kind, launch: slim(r.launch) ?? r.launch, findings: r.findings, milestones: r.milestones, file: r.file,
+  verdict: r.milestones ? runVerdict(r.milestones, r.findings) : null,   // the banner at the top of Findings (E2.4)
   boot: r.boot && { ...r.boot, nodes: bootRun(r.boot, r.trace) },
   trace: { ...r.trace, sources: undefined, coverage: undefined, exec: undefined, sites: undefined, coveredScripts: r.trace.coverage?.length ?? 0,
     ...(r.trace.sites ? { execEvents: eventCount(r.trace), execTail: r.execTail ??= lastEvents(r.trace, 500) } : {}) } })

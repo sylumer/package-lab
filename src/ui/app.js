@@ -8,6 +8,11 @@ function h(tag, props = {}, ...kids) {
   e.append(...kids.flat(Infinity).filter(x => x != null && x !== false).map(x => typeof x === 'object' ? x : String(x)))
   return e
 }
+// An icon from the sprite in index.html. h() makes HTML elements, so an SVG <use> needs the SVG namespace.
+const icon = id => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), u = document.createElementNS('http://www.w3.org/2000/svg', 'use')
+  s.setAttribute('class', 'icon'); s.setAttribute('aria-hidden', 'true'); u.setAttribute('href', '#' + id); s.append(u); return s }
+// The icon and word for each severity: findings and the verdict banner. Colour is never the only signal.
+const SEV = { error: ['i-error', 'Problem'], warn: ['i-warn', 'Warning'], info: ['i-info', 'Note'], ok: ['i-ok', 'Good'] }
 // Desktop only: the Mac's accent colour (lab.accent is undefined in the web interface, which keeps the CSS default), and the class that leaves room for the traffic lights.
 if (!lab.web && navigator.platform.startsWith('Mac')) document.body.classList.add('mac')
 const setAccent = c => { if (/^#[0-9a-f]{6}$/i.test(c)) { const root = document.documentElement.style, [r, g, b] = [1, 3, 5].map(i => { const v = parseInt(c.slice(i, i + 2), 16) / 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4 })
@@ -40,7 +45,7 @@ const link = text => CodeView.parts(text).map(p => p.path ? h('button', { type: 
 
 function findingsList(fs) {
   if (!fs?.length) return h('p', { class: 'muted' }, 'No findings.')
-  return fs.map(f => h('div', { class: 'finding ' + f.sev }, h('h3', {}, h('span', { class: 'sev' }, f.sev === 'warn' ? 'warning' : f.sev), f.title),
+  return fs.map(f => h('div', { class: 'finding ' + f.sev }, h('h3', {}, h('span', { class: 'sev' }, icon(SEV[f.sev]?.[0] ?? 'i-info'), ' ' + (SEV[f.sev]?.[1] ?? 'Note')), f.title),
     f.detail && h('p', {}, f.detail), f.evidence?.length && h('ul', {}, f.evidence.map(e => h('li', {}, link(e)))), f.fix && h('p', { class: 'fix' }, h('b', {}, 'Try: '), f.fix),
     h('p', { class: 'small' }, h('button', { type: 'button', class: 'link', title: 'Open what this finding means in the help panel', onclick: () => findingHelp(f.title) }, 'What this means'))))
 }
@@ -64,7 +69,9 @@ const VIEWS = {
     const r = run()
     if (!r) return [h('h3', { class: 'section' }, 'Package'), findingsList(st.pkg?.findings ?? [])]
     const redact = h('input', { type: 'checkbox', id: 'report-redact' })
-    return [h('p', { class: 'muted small' }, `${r.label}. Saved to ${r.file || '(not saved)'}.`),
+    const v = r.verdict
+    return [v && h('div', { class: 'verdict ' + v.sev }, icon(SEV[v.sev][0]), h('b', {}, SEV[v.sev][1]), h('span', {}, v.text)),
+      h('p', { class: 'muted small' }, `${r.label}. Saved to ${r.file || '(not saved)'}.`),
       r.milestones && h('p', { class: 'milestones' }, r.milestones.map(s => h('span', { class: s.reached ? 'ok' : 'bad', title: s.evidence }, `${s.reached ? '✓' : '✗'} ${s.label}`))),
       findingsList(r.findings),
       h('div', { class: 'row' }, h('label', { class: 'muted small' }, redact, ' Take the course content out'),
