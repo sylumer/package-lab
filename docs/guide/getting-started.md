@@ -13,6 +13,8 @@ Only one Package Lab window runs at a time. Opening another package sends it to 
 
 Before a package is open, the window says what Package Lab does and lists common symptoms. Find the one that matches, press what it says, and choose **Steps** to read the recipe for it.
 
+![The start screen, with no package open: the symptoms and what to press](../images/start-screen-light.png)
+
 | Symptom | What to press | Steps |
 |---|---|---|
 | The page is blank | Run, then read **Findings**, **Boot path** and **Errors** | [Steps](../recipes.md#shows-a-blank-page) |
@@ -44,6 +46,8 @@ On the desktop, the menu bar has the toolbar's actions and a few more. Reload is
 
 Choose **Open package…** and pick the `.zip`. Package Lab reads it in memory; nothing is unpacked to disk. **Findings** fills at once with what can be told from the files, and the status line counts the errors and warnings. **File › Open Recent** lists packages you opened before.
 
+![The window with good.zip open and nothing run yet: the toolbar, the sidebar's views and Findings](../images/package-open-light.png)
+
 You can also drag the `.zip` from Finder onto the window. A **Drop to open** overlay shows while the file is over the window, and the package opens when you let go. In the web interface the file is uploaded to the Mac running Package Lab. Dropping any other kind of file shows *Only .zip packages can be opened* and changes nothing.
 
 The package is checked like this:
@@ -67,6 +71,8 @@ Package Lab then collects code coverage and scripts, works out the findings, sav
 
 Start with **Findings**. A banner at the top says how the run went, with one word and one sentence: **Problem**, **Warning** or **Good**, then “Got as far as “…”, but didn’t reach “…”.” The word is the worst finding's, so **Good** means there was no problem and no warning. Under the banner come the **Milestones** strip and then the findings, worst first. [Reading a run](reading-a-run.md) explains each part.
 
+![Findings after a run of good.zip: the banner says Good and Ran through](../images/findings-light.png)
+
 ## Settings
 
 **Package Lab › Settings…** (⌘,) sets the port the [web interface](../web.md) listens on. The default is 4880. The dialog has **Web interface port** (1024 to 65535), **Reset to default**, **Cancel** and **Save**.
@@ -78,6 +84,8 @@ The settings are kept in `settings.json` in the data folder (`~/Library/Applicat
 ## The docs panel
 
 **Help** (at the right end of the toolbar, or **Show Docs** in the Help menu) opens the docs in the **Help** segment of the inspector. Choose a doc from the list, which is grouped as Guide, Recipes and findings, Reference and Authoring tools. **Back** returns to the doc you were reading, and **Close** shuts the inspector. Links to other docs open there; web links open in your browser. Package Lab remembers which doc it showed.
+
+![The docs panel in the inspector's Help segment, showing this page](../images/help-light.png)
 
 The **Search the docs** field at the top searches every doc as you type, up to 20 results. Each shows the doc, the heading above the match and the words around it. Click one to open that heading. **On this page** lists the open doc's headings. The small **ⓘ** beside a Settings group, a view group in the sidebar, the Storage setting and the verdict on Findings opens the part of the guide that explains it.
 

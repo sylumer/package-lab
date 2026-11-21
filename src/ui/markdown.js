@@ -1,12 +1,16 @@
 // Small Markdown to HTML renderer for the docs panel. Line-based blocks, one inline function, no DOM.
-// Covers what the repo's docs use: headings, paragraphs, nested lists, fenced code, tables, code/bold/italic/links.
-// Not CommonMark: no images, raw HTML, blockquotes or rules; underscores are never emphasis.
+// Covers what the repo's docs use: headings, paragraphs, nested lists, fenced code, tables, code/bold/italic/links/images.
+// Not CommonMark: no raw HTML, blockquotes or rules; underscores are never emphasis.
+// Images are drawn from PNG data: URIs (docs.js inlines them for the panel) or relative paths; any other source shows its alt text.
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const SAFE = /^(https?:|mailto:|[^:]*$)/i // http(s), mailto, or no scheme (relative path, #anchor)
+const IMG_SRC = /^(data:image\/png;base64,|(?!\/\/)[^:]*$)/i   // not a protocol-relative //host address
 
 function inline(raw) {
   const code = []
-  let s = esc(raw).replace(/`([^`]+)`/g, (_, c) => '\u0001' + (code.push('<code>' + c + '</code>') - 1) + '\u0001')
+  const hold = html => '\u0001' + (code.push(html) - 1) + '\u0001'   // kept out of the emphasis and link rules
+  let s = esc(raw).replace(/`([^`]+)`/g, (_, c) => hold('<code>' + c + '</code>'))
+  s = s.replace(/!\[([^\]\u0001]*)\]\(([^)\s]+)\)/g, (_, alt, src) => hold(IMG_SRC.test(src) ? `<img alt="${alt}" src="${src}">` : alt))
   s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*([^*\s][^*]*?)\*/g, '<em>$1</em>')
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, h) => SAFE.test(h) ? `<a href="${h}">${t}</a>` : `<a>${t}</a>`)
   return s.replace(/\u0001(\d+)\u0001/g, (_, i) => code[i])
@@ -95,7 +99,7 @@ export function searchDocs(texts, query, max = 20) {
     const seen = {}
     let fence = false, heading = '', id = ''
     for (const raw of String(text).replace(/\r\n?/g, '\n').split('\n')) {
-      let line = raw, m
+      let line = raw.replace(/\(data:[^)]*\)/g, '()'), m   // an inlined image's data is not text to search
       if (/^\s*```/.test(raw)) fence = !fence
       else if (!fence && (m = raw.match(/^(#{1,6})\s+(.*?)\s*#*$/))) { line = m[2]; heading = headings(raw)[0].text; id = slugOf(m[2], seen) }
       const i = line.toLowerCase().indexOf(q)   // ponytail: offsets assume lowercasing keeps lengths (true outside a few odd letters)

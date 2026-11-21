@@ -108,6 +108,8 @@ The server requests of the run, with **Discover all server requests**, **Rounds*
 
 The course window as it runs, in Package Lab (desktop app and web interface). It is listed while a run is going, and **Show in Package Lab** in the toolbar opens it. Click the picture to click the course; with the picture focused, keys go to the course too.
 
+![The Live view: the course's first page in the picture, with the coordinates bar and its buttons under it](../images/live-light.png)
+
 Under the picture, the coordinates bar follows the pointer:
 
 ```

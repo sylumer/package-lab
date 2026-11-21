@@ -8,7 +8,7 @@
 //   --serve[=port]       start the web interface (default: the port in Settings, 4880 unless changed); --host=<address> (default 127.0.0.1)
 //   --no-window          no desktop window (with --serve: a server only)
 //   --show-runs          with --no-window: show the content windows anyway
-import { app, BrowserWindow, ipcMain, dialog, net, protocol, session, Menu, shell, systemPreferences } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, net, protocol, session, Menu, shell, systemPreferences, nativeTheme } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, statSync, rmSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
@@ -24,7 +24,7 @@ import { bootGraph, bootRun } from './bootpath.js'
 import { runCounts, milestones as stepsReached } from './milestones.js'
 import { startWeb } from './web.js'
 import { DEFAULT_PORT, readSettings, writeSettings } from './settings.js'
-import { DOCS } from './docs.js'
+import { DOCS, inlineImages } from './docs.js'
 import { normaliseOptions, cliCommand, packagePath, optionsSummary } from './options.js'
 import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
@@ -690,9 +690,10 @@ const handlers = {
   settings: () => ({ ...readSettings(app.getPath('userData')), defaults: { port: DEFAULT_PORT }, path: join(app.getPath('userData'), 'settings.json') }),
   'settings-set': async ({ port }) => { const settings = writeSettings(app.getPath('userData'), { port: +port }); return { settings, free: await portFree(settings.port) } },
   docs: () => DOCS,
-  doc: ({ name }) => {   // name comes from a browser in the web interface: only the bundled docs
+  doc: ({ name }) => {   // name comes from a browser in the web interface: only the bundled docs. Their PNG images come inline (docs.js inlineImages).
     if (!DOCS.some(d => d.name === name)) throw new Error('No such document.')
-    return readFileSync(join(import.meta.dirname, '..', 'docs', name), 'utf8')
+    const docs = join(import.meta.dirname, '..', 'docs')
+    return inlineImages(readFileSync(join(docs, name), 'utf8'), name, p => { try { return readFileSync(join(docs, p)) } catch { return null } })
   },
   'open-package': async () => {
     const r = await dialog.showOpenDialog(ui, { title: 'Open a SCORM package', filters: [{ name: 'SCORM package', extensions: ['zip'] }], properties: ['openFile'] })
@@ -955,6 +956,8 @@ function buildMenu() {
 
 app.whenReady().then(async () => {
   if (WINDOW) buildMenu()
+  // The screenshots (scripts/screenshots.js) pick the theme with PACKAGE_LAB_THEME; otherwise the window follows the system.
+  if (['light', 'dark'].includes(process.env.PACKAGE_LAB_THEME)) nativeTheme.themeSource = process.env.PACKAGE_LAB_THEME
   const lab = session.fromPartition('lab')
   lab.protocol.handle('lab', serve)
   // The content sees https://lms.lab.invalid/ and https://cdn.content.invalid/ (WEBKIT_ORIGINS); they are served as lab://run and lab://content. Any other

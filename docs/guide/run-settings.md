@@ -2,6 +2,8 @@
 
 The settings the next run will use are in the inspector's **Settings** segment (⌥⌘I, then **Settings**), in four groups. All but **Advanced** start open. The summary chip beside **Run** lists the settings that aren't at their defaults; click it to open them here. The inspector remembers whether it is open, which segment it was on and its width: it starts 340 pixels wide, and you can drag its left edge or focus the edge and use the arrow keys.
 
+![The inspector's Settings segment, with the LMS group open](../images/settings-light.png)
+
 Change one setting, run again, and see whether the content gets further.
 
 ## Testing a theory
