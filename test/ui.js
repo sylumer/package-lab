@@ -326,18 +326,20 @@ async function themeChecks() {
   assert.equal((await themeState(win)).attr, 'dark', 'theme: the arrow keys change the choice')
   await win.keyboard.press('Escape')
   console.log('ui: theme ok')
-  // The course sees the real system appearance: with the choice opposite to the Mac's, a run of `good` still reports the Mac's.
-  const osDark = await app.evaluate(({ systemPreferences }) => systemPreferences.getUserDefault('AppleInterfaceStyle', 'string') === 'Dark')
-  await chooseTheme(osDark ? 'Light' : 'Dark')
-  await open(goodZip())
-  assert.equal(await themeSource(), osDark ? 'light' : 'dark', 'theme: the app is set opposite to the Mac')
-  await launch()
-  const run = await runWindow()
-  await run.waitForLoadState('domcontentloaded')
-  assert.equal(await run.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches), osDark, 'theme: the run window reports the Mac’s appearance, not the app’s')
-  await stop()
-  await chooseTheme('System')
-  console.log('ui: theme in run windows ok')
+  if (process.platform === 'darwin') {   // the Mac's appearance is read with systemPreferences.getUserDefault, which only the Mac has
+    // The course sees the real system appearance: with the choice opposite to the Mac's, a run of `good` still reports the Mac's.
+    const osDark = await app.evaluate(({ systemPreferences }) => systemPreferences.getUserDefault('AppleInterfaceStyle', 'string') === 'Dark')
+    await chooseTheme(osDark ? 'Light' : 'Dark')
+    await open(goodZip())
+    assert.equal(await themeSource(), osDark ? 'light' : 'dark', 'theme: the app is set opposite to the Mac')
+    await launch()
+    const run = await runWindow()
+    await run.waitForLoadState('domcontentloaded')
+    assert.equal(await run.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches), osDark, 'theme: the run window reports the Mac’s appearance, not the app’s')
+    await stop()
+    await chooseTheme('System')
+    console.log('ui: theme in run windows ok')
+  } else console.log('skipped (needs a Mac): theme in run windows')
 }
 
 // The grouped view list (E2.3), after a run of `good`: every group, the table filter, ⌘1, arrow keys, and every visible view drawn without an error.
@@ -354,7 +356,7 @@ async function viewChecks() {
   await win.locator('#view table').waitFor()
   assert.ok(await win.locator('#filter').isVisible(), 'the filter box shows over a table')
   await view('Boot path')
-  await win.keyboard.press('Meta+1')
+  await win.keyboard.press(process.platform === 'darwin' ? 'Meta+1' : 'Control+1')
   assert.equal(await views.locator('[aria-current=page]').innerText(), 'Findings', '⌘1 selects Findings')
   await views.locator('[aria-current=page]').focus()
   await win.keyboard.press('ArrowDown')
@@ -376,6 +378,7 @@ export async function withWeb(fn) {
   let log = ''; srv.stdout.on('data', d => { log += d })
   // Playwright's own Chromium; if this Playwright version's build isn't installed, any Chromium build in its cache will do (the page is plain HTML).
   const browser = await chromium.launch().catch(() => {
+    // Mac-only fallback: the Playwright cache and the Chrome for Testing .app bundle are looked for where the Mac keeps them.
     const cache = join(homedir(), 'Library', 'Caches', 'ms-playwright'), found = existsSync(cache) ? readdirSync(cache).filter(d => /^chromium-\d+$/.test(d)).sort().reverse() : []
     const exe = found.map(d => join(cache, d)).flatMap(d => readdirSync(d).filter(x => x.startsWith('chrome-')).map(x => join(d, x))).map(d => join(d, 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing')).find(existsSync)
     if (!exe) throw new Error('No Chromium for Playwright: run npx playwright install chromium')

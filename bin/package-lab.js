@@ -6,6 +6,8 @@ import { randomBytes } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { tmpdir, homedir } from 'node:os'
+import { fileURLToPath } from 'node:url'
+import { dataDir as platformDataDir, appBinaries, executable, openCommand, installHint } from '../src/platform.js'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { unzip } from '../src/zip.js'
 import { exportFixed, fixedName, FIX_IDS, FIXES } from '../src/fixes.js'
@@ -37,11 +39,16 @@ import { readMacro, withMacroSize, cycleFindings, cycleRows, resumeOptions } fro
 import { availableParallelism } from 'node:os'
 import { batchFiles, staticRows, runRow, failedRun, batchSummary, summaryText, batchTable, batchCsv, batchHtml } from '../src/batch.js'
 
-const APP_DIR = new URL('..', import.meta.url).pathname
+const APP_DIR = fileURLToPath(new URL('..', import.meta.url))
 const VERSION = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')).version
-const INSTALLED = '/Applications/Package Lab.app'
-const DATA_DIR = join(homedir(), 'Library', 'Application Support', 'Package Lab')
-const dataDir = () => process.env.PACKAGE_LAB_DATA ?? DATA_DIR
+// Where the installed app might be (PACKAGE_LAB_APP first), and the data folder: src/platform.js.
+const knownApps = () => appBinaries(process.platform, process.env, homedir(), APP_DIR, process.arch)
+const installedApps = () => knownApps().filter(p => existsSync(p))   // doctor looks in all of them
+// What electron() and open start: on a Mac only PACKAGE_LAB_APP and the first (system-wide) place, as before; the per-user Applications folder is for doctor alone.
+// Off the Mac an unpacked build in dist/ is a fallback after the repo's Electron (isDist), so a stale build never wins.
+const isDist = p => p.startsWith(join(APP_DIR, 'dist'))
+const launchApps = () => (process.platform === 'darwin' ? knownApps().slice(0, (process.env.PACKAGE_LAB_APP ? 1 : 0) + 1) : knownApps()).filter(p => existsSync(p))
+const dataDir = () => process.env.PACKAGE_LAB_DATA ?? platformDataDir(process.platform, process.env, homedir())
 
 const HELP = `Package Lab ${VERSION}: find out why an e-learning package (SCORM, cmi5, xAPI) doesn't work.
 
@@ -276,17 +283,24 @@ function printVerdict(findings) {
 
 // The version of an installed app, from its Info.plist (plutil ships with macOS). null if it can't be read.
 function appVersion(app) {
+  if (process.platform !== 'darwin') return null   // no plutil elsewhere
   const r = spawnSync('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', join(app, 'Contents', 'Info.plist')], { encoding: 'utf8' })
   return r.status === 0 ? r.stdout.trim() || null : null
 }
 
 // ---- Electron ----
+// Starts a program and leaves it running; if it can't start, say so (the error arrives after this returns).
+function detach(bin, args) {
+  const child = spawn(bin, args, { detached: true, stdio: 'ignore' })
+  child.on('error', e => { console.error(`Couldn’t start ${bin}: ${e.message}`); process.exit(2) })   // after the command returned, so not fail()
+  child.unref()
+}
 function electron() {
   const env = process.env.PACKAGE_LAB_ELECTRON
-  if (env) return /(^|\/)electron$/i.test(env) ? [env, [APP_DIR]] : [env, []]
+  if (env) return /(^|[\\/])electron(\.exe)?$/i.test(env) ? [env, [APP_DIR]] : [env, []]
   try { const bin = createRequire(import.meta.url)('electron'); if (typeof bin === 'string' && existsSync(bin)) return [bin, [APP_DIR]] } catch { /* not installed here */ }
-  const app = join(INSTALLED, 'Contents', 'MacOS', 'Package Lab')
-  if (existsSync(app)) return [app, []]
+  const app = launchApps()[0]
+  if (app) return [executable(process.platform, app), []]
   fail('Electron isn’t installed: run npm install in the package-lab folder, or install Package Lab.app.')
 }
 
@@ -549,8 +563,8 @@ const commands = {
     const free = (await bindable('127.0.0.1')) && (await bindable('0.0.0.0'))
     add('port', `Port ${port} free, for serve`, free, free ? `Nothing is listening on ${port}.` : `Something is already listening on ${port}: use serve --port.`)
     // The installed desktop app is reported as the top-level `app`, not as a check: packages run without it, and the Concierge module reads checks[].
-    const installed = [INSTALLED, join(homedir(), 'Applications', 'Package Lab.app')].find(p => existsSync(p)) ?? null, version = installed ? appVersion(installed) : null
-    const appDetail = installed ? `${installed}${version ? `, version ${version}` : ''}` : 'Not installed: npm run install-app puts it in /Applications. Packages run from this repo’s Electron without it.'
+    const installed = installedApps()[0] ?? null, version = installed ? appVersion(installed) : null
+    const appDetail = installed ? `${installed}${version ? `, version ${version}` : ''}` : `Not installed: ${installHint(process.platform)} Packages run from this repo’s Electron without it.`
     const json = { version: VERSION, ok: checks.every(c => c.ok), checks, capabilities: { analyze: major >= 20, run: !!app, webkit },
       profiles: PROFILE_NAMES, tools: PACKS.map(p => p.id), viewports: Object.keys(VIEWPORTS), presets: Object.keys(PRESETS), fixes: FIX_IDS.map(id => ({ id, label: FIXES[id].label })),
       app: installed ? { path: installed, version } : null }
@@ -816,7 +830,7 @@ const commands = {
     if (out) { writeFileSync(out, html); if (!o.open && !o.json) console.error(`Report written to ${out}`) } else process.stdout.write(html)
     // The key goes last, and only once the report is out: a failed report leaves no key behind. A new file ('wx'), readable by the owner only.
     if (red?.names && o['key-out']) writeFileSync(resolve(o['key-out']), JSON.stringify({ format: 'package-lab-redaction-key', version: 1, key: red.key.toString('hex'), names: Object.fromEntries(red.map) }, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
-    if (o.open && out) spawnSync('open', [out])
+    if (o.open && out) { const [cmd, args] = openCommand(process.platform, out); spawnSync(cmd, args) }
     // A redacted report's JSON leaves out the findings and the verdict's title: they quote the course's own text.
     // With --redact-names the file names are hashed, so the paths (input and out) are left out of the JSON as well.
     const paths = red?.names ? {} : { input, out }
@@ -828,10 +842,12 @@ const commands = {
     const zip = o._[0] ? resolve(o._[0]) : null
     if (zip && !existsSync(zip)) fail(`No such file: ${zip}`)
     let app, path
-    if (existsSync(INSTALLED) && !process.env.PACKAGE_LAB_ELECTRON) { spawnSync('open', ['-a', INSTALLED, ...(zip ? [zip] : [])]); app = 'installed'; path = INSTALLED }
+    const installed = process.env.PACKAGE_LAB_ELECTRON ? undefined : launchApps().find(p => !isDist(p))
+    if (installed && process.platform === 'darwin') { spawnSync('open', ['-a', installed, ...(zip ? [zip] : [])]); app = 'installed'; path = installed }
+    else if (installed) { detach(installed, zip ? [zip] : []); app = 'installed'; path = installed }
     else {
       const [bin, pre] = electron()
-      spawn(bin, [...pre, ...(zip ? [zip] : [])], { detached: true, stdio: 'ignore' }).unref()
+      detach(bin, [...pre, ...(zip ? [zip] : [])])
       app = 'repo'; path = bin
     }
     if (o.json) console.log(JSON.stringify({ app, path, package: zip }, null, 1))

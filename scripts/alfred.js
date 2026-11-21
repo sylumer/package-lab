@@ -10,10 +10,11 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync, copyFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB } from './alfred-scripts.js'
 
-const root = new URL('..', import.meta.url).pathname, dist = join(root, 'dist'), dir = join(dist, 'alfred')
+const root = fileURLToPath(new URL('..', import.meta.url)), dist = join(root, 'dist'), dir = join(dist, 'alfred')
 const cli = join(root, 'bin', 'package-lab.js')
 rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true })
 
@@ -28,7 +29,7 @@ const action = (name, x, y, filetypes = ['public.zip-archive']) => add('alfred.w
 
 // Keyword: open the app.
 const kwApp = add('alfred.workflow.input.keyword', { argumenttype: 2, keyword: 'packagelab', subtext: 'Open the desktop app', text: 'Package Lab', withspace: false }, 1, 30, 30)
-link(kwApp, script(`if [ -d "/Applications/Package Lab.app" ]; then open -a "Package Lab"; else "$node" "$cli" open; fi`, 300, 30))
+link(kwApp, script(`if [ -d "/Applications/Package Lab.app" ]; then open -a "Package Lab"; else "$node" "$cli" open; fi`, 300, 30))   // darwin-only
 // Keyword: web interface.
 const kwWeb = add('alfred.workflow.input.keyword', { argumenttype: 2, keyword: 'packageweb', subtext: 'Start the web interface on this Mac and open it', text: 'Package Lab web interface', withspace: false }, 1, 30, 150)
 link(kwWeb, script(WEB, 300, 150))

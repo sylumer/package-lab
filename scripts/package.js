@@ -1,13 +1,14 @@
 // Builds Package Lab.app in dist/ (for this Mac's architecture) with its icon, signed ad hoc so it runs on this Mac.
-// With --install, also copies it to /Applications (replacing an older copy) and registers it with Finder, so
+// With --install, also copies it to /Applications (replacing an older copy) and registers it with Finder, so // darwin-only
 // Open With, `open -a "Package Lab"` and Alfred find it. See docs/developer-guide.md.
 import { packager } from '@electron/packager'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { DOCS } from '../src/docs.js'
 
-const root = new URL('..', import.meta.url).pathname, build = join(root, 'build')
+const root = fileURLToPath(new URL('..', import.meta.url)), build = join(root, 'build')
 const electron = join(root, 'node_modules', '.bin', 'electron'), run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' })
 
 // The icon: SVG, rendered by Electron, then every size macOS wants, then .icns.
@@ -43,8 +44,8 @@ console.log(`Built ${app}`)
 
 if (process.argv.includes('--install')) {
   try { execFileSync('osascript', ['-e', 'if application id "com.sylumer.package-lab" is running then tell application id "com.sylumer.package-lab" to quit']) } catch { /* not running */ }
-  rmSync('/Applications/Package Lab.app', { recursive: true, force: true })
-  run('ditto', [app, '/Applications/Package Lab.app'])
-  run('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', '/Applications/Package Lab.app'])
-  console.log('Installed /Applications/Package Lab.app')
+  rmSync('/Applications/Package Lab.app', { recursive: true, force: true })   // darwin-only
+  run('ditto', [app, '/Applications/Package Lab.app'])   // darwin-only
+  run('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', '/Applications/Package Lab.app'])   // darwin-only
+  console.log('Installed /Applications/Package Lab.app')   // darwin-only
 }

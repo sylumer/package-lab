@@ -152,6 +152,16 @@ The Concierge module is in the Concierge repo at `modules/package-lab/run`.
 `PACKAGE_LAB_DATA` replaces the data folder (`app.getPath('userData')`, by default
 `~/Library/Application Support/Package Lab`) for the first two modes.
 
+**Platforms (E6.1).** `src/platform.js` is the one place that knows where things live on each platform. Its functions are pure (platform, environment and home folder come in as arguments, and `path.win32` or `path.posix` builds the answer), so the Mac tests the Windows paths:
+
+- `dataDir(platform, env, home)` is the folder Electron uses for `userData`: `~/Library/Application Support/Package Lab` on a Mac, `%APPDATA%\Package Lab` on Windows (`~/AppData/Roaming` if `APPDATA` is missing), `$XDG_CONFIG_HOME` or `~/.config` then `Package Lab` on Linux. The CLI reads it for `doctor`, `serve --url` and `settings`; `PACKAGE_LAB_DATA` still wins. E6.2 extends it with the portable `Package Lab Data` folder.
+- `appBinaries(platform, env, home, appDir, arch)` lists where the installed app may be, `PACKAGE_LAB_APP` first (a trailing slash dropped); `doctor` looks in all of them, but `open` and `electron()` use, on a Mac, only `PACKAGE_LAB_APP` and `/Applications`, and off the Mac the unpacked build in `dist/` only after this repo's Electron; `executable` turns a Mac bundle into its program; `openCommand` is the command that shows a file in its usual program (`open`, `explorer.exe`, `xdg-open`).
+- File paths are made from URLs with `fileURLToPath(new URL(…, import.meta.url))`, never `.pathname`, which gives `/C:/…` on Windows. The `lab://` URLs are not file paths: their `.pathname` is a path inside the package, always with `/`.
+- Mac-only code sits behind `process.platform === 'darwin'` (the window's vibrancy, the accent colour, `plutil` for an installed app's version, `open -a`) or on a line marked `// darwin-only`. A unit check lints `src`, `bin` and `scripts` for `.pathname` on a URL from `import.meta.url`, and for `/Applications/`, `Library/Application Support` and `.app/Contents` outside `src/platform.js` and marked lines (the Mac-only lines of `scripts/package.js` carry the mark until E6.2 splits it).
+- Shortcut text in the window goes through `keys()` in `app.js` (`keysFor` in `src/ui/markdown.js`): `⌥⌘I` is `Ctrl+Alt+I` off the Mac. It is applied to the docs as they load into the panel; the Markdown files keep the Mac symbols. Menu accelerators are all `CmdOrCtrl+…` and `Alt`.
+- Off the Mac the window has its own frame and menu bar. The toolbar's drag regions are set only under `body.mac`, so they never cover the menu.
+- Shell-outs at run time: `main.js` starts `process.execPath` for WebKit runs (with `ELECTRON_RUN_AS_NODE`; the environment it passes includes Windows's `Path`, `SystemRoot`, `TEMP` and profile variables); the CLI starts Electron, `process.execPath` (WebKit runs and `batch --run`'s children), the installed app (`open -a` on a Mac, the program itself elsewhere), `plutil` for the installed app's version (Mac only; elsewhere the version is `null`), and the command from `openCommand` for `report --open`.
+
 The web port is `--serve=N` if given, else the port in the settings (`src/settings.js`), else 4880. The desktop app's
 `--serve` and `package-lab serve --port` follow the same order.
 
@@ -1340,7 +1350,7 @@ folder:
 The job also carries `options`, the normalised launch options (P0.1); the headless run normalises them again. It then
 runs Electron with `--run=<job>` (stdout ignored, stderr to a log), waits for `out`, and reads the run back. With `--browser webkit` it runs `src/webkit-runner.js` in Node instead (see Other browsers and device sizes).
 `item` here is the manifest item index; the CLI's `--item` numbers are positions among launchable items. Electron is
-chosen from `PACKAGE_LAB_ELECTRON`, then this repo's `electron` package, then `/Applications/Package Lab.app`.
+chosen from `PACKAGE_LAB_ELECTRON`, then this repo's `electron` package, then `/Applications/Package Lab.app` (or `~/Applications`, or what `PACKAGE_LAB_APP` names; see `appBinaries` in `src/platform.js`).
 
 ## Data formats
 
@@ -1556,10 +1566,11 @@ The end-to-end part covers:
   Discover, Test saving and Try variants end to end.
 - **doctor (P5.1):** the check ids in order, capabilities following the checks, the name lists, `PACKAGE_LAB_NO_PLAYWRIGHT`
   turning WebKit off, and a busy port reported. `experiment --out` also keeps `experiment.json`.
+- **Platforms (E6.1):** a unit check of `src/platform.js` (`dataDir`, `appBinaries`, `executable` and `openCommand` for darwin, win32 with and without `APPDATA` or `LOCALAPPDATA`, and linux with and without `XDG_CONFIG_HOME`; `PACKAGE_LAB_APP` first; the darwin answers equal the old hard-coded paths), of `keysFor` on both platforms, and the portability lint over `src`, `bin` and `scripts`. The checks that need a Mac (Alfred's build and scripts, the installed app's version read with `plutil`, the course's system appearance in `test/ui.js`) run only on `darwin` and print one `skipped (needs a Mac)` line elsewhere. `zip`, `unzip` and `zsh` are still used by the tests and are not on a stock Windows.
 - **CLI and Alfred (P5.2):** unit checks cover the command table (every command has `--json`), the zsh script (its header,
   every command's case, every flag, the preset choices), and `experimentHtml` (escaped, above the findings). The CLI checks
   (no Electron) cover every command and flag in `help`, `help`/`version`/`completion` JSON, `zsh -n` on the script when zsh
-  is installed, `report --json` (and its redacted form), `serve --url --json` and `open --json` (pointed at `/usr/bin/true`
+  is installed, `report --json` (and its redacted form), `serve --url --json` and `open --json` (pointed at Node
   with `PACKAGE_LAB_ELECTRON`, so nothing opens), the doctor's top-level `app` (a fake home with an `Info.plist`; it is not one of `checks`), and
   the Alfred build: `plutil -lint`, the ⇧↩ and Fix and folder actions in the plist, `bash -n` on each script, and the Fix
   script run on a file with a space in its name (`-fixed`, `-fixed-2`, `-fixed-3`, and no file when nothing needs fixing).

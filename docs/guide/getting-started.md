@@ -26,7 +26,7 @@ Before a package is open, the window says what Package Lab does and lists common
 
 ## The menus
 
-On the desktop, the menu bar has the toolbar's actions and a few more. Reload is ⇧⌥⌘R, so ⌘R is **Run**, and Developer Tools is ⇧⌥⌘I, so ⌥⌘I is **Show Inspector**.
+On the desktop, the menu bar has the toolbar's actions and a few more. On Windows, Ctrl replaces ⌘ and Alt replaces ⌥ in every shortcut. Reload is ⇧⌥⌘R, so ⌘R is **Run**, and Developer Tools is ⇧⌥⌘I, so ⌥⌘I is **Show Inspector**.
 
 | Menu | Items |
 |---|---|

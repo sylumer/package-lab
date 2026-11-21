@@ -3,7 +3,7 @@
 // keeps its CLI's standard error in a log file made with mktemp in $TMPDIR (the system clears it); the notification shows its
 // last line. Exported so the tests can run them (test/test.js). See docs/alfred.md.
 
-export const OPEN = `if [ -d "/Applications/Package Lab.app" ]; then open -a "Package Lab" "$1"; else "$node" "$cli" open "$1"; fi`
+export const OPEN = `if [ -d "/Applications/Package Lab.app" ]; then open -a "Package Lab" "$1"; else "$node" "$cli" open "$1"; fi`   // darwin-only
 
 export const CHECK = `log="$(mktemp "\${TMPDIR:-/tmp}/package-lab-alfred.XXXXXX")"
 if "$node" "$cli" report "$1" --open >/dev/null 2>"$log"; then echo "Checked $(basename "$1")"; else echo "Couldn’t check it: $(tail -1 "$log")"; fi`

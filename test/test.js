@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, homedir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:net'
 import { dirname, join, relative, sep } from 'node:path'
@@ -24,7 +25,8 @@ import { timelineModel, timelineView } from '../src/timeline.js'
 import { normaliseOptions, cliCommand, VIEWPORTS, viewportName, optionsSummary } from '../src/options.js'
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
-import { markdown, slugOf, headings, searchDocs } from '../src/ui/markdown.js'
+import { markdown, slugOf, headings, searchDocs, keysFor } from '../src/ui/markdown.js'
+import { dataDir, appBinaries, executable, openCommand, installHint } from '../src/platform.js'
 import { DOCS, MAX_IMAGE, inlineImages } from '../src/docs.js'
 import { comparePackages, compareFiles, compareManifests, compareBoots, compareFindings, compareBehaviour } from '../src/pkgdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
@@ -48,7 +50,7 @@ import './codeview.js'
 import './batch.js'
 import vm from 'node:vm'
 
-const base = new URL('./fixtures/base/', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'package-lab-'))
+const base = fileURLToPath(new URL('./fixtures/base/', import.meta.url)), work = mkdtempSync(join(tmpdir(), 'package-lab-'))
 function fixture(name, edit = () => {}) {
   const dir = join(work, name)
   cpSync(base, dir, { recursive: true })
@@ -1644,7 +1646,7 @@ console.log('settings: unit ok')
 }
 console.log('markdown: unit ok')
 {   // The docs' links (E3.1): every relative link in a doc in DOCS names a file that exists, and every #anchor is a heading there, slugged as the panel slugs them. The guide pages and the index link only to docs the panel can open. Code blocks are not read for links.
-  const docsDir = new URL('../docs/', import.meta.url).pathname
+  const docsDir = fileURLToPath(new URL('../docs/', import.meta.url))
   const names = new Set(DOCS.map(d => d.name))
   const anchorsOf = file => {
     const seen = {}, out = new Set()
@@ -1710,12 +1712,53 @@ console.log('markdown: unit ok')
   assert.deepEqual(searchDocs([{ name: 'a.md', title: 'A', text: '![Pic](' + data(files['images/a.png']) + ')' }], 'QUJD'), [], 'searchDocs: an inlined image is not searched')
   assert.equal(searchDocs([{ name: 'a.md', title: 'A', text: '![Pic](' + data(files['images/a.png']) + ')' }], 'pic')[0].html, '![<mark>Pic</mark>]()', 'searchDocs: the alt text is searched')
 }
+{   // E6.1: where things live on each platform, shortcut text and the portability lint
+  const home = '/Users/a', winHome = 'C:\\Users\\a'
+  assert.equal(dataDir('darwin', {}, home), '/Users/a/Library/Application Support/Package Lab', 'dataDir: darwin')
+  assert.equal(dataDir('win32', { APPDATA: 'D:\\Roam' }, winHome), 'D:\\Roam\\Package Lab', 'dataDir: win32 with APPDATA')
+  assert.equal(dataDir('win32', {}, winHome), 'C:\\Users\\a\\AppData\\Roaming\\Package Lab', 'dataDir: win32 without APPDATA')
+  assert.equal(dataDir('linux', { XDG_CONFIG_HOME: '/x/cfg' }, home), '/x/cfg/Package Lab', 'dataDir: linux with XDG_CONFIG_HOME')
+  assert.equal(dataDir('linux', {}, home), '/Users/a/.config/Package Lab', 'dataDir: linux without XDG_CONFIG_HOME')
+  assert.deepEqual(appBinaries('darwin', {}, home, '/r'), ['/Applications/Package Lab.app', '/Users/a/Applications/Package Lab.app'], 'appBinaries: darwin is the two .app paths bin/package-lab.js used to look in')
+  assert.equal(executable('darwin', '/Applications/Package Lab.app'), '/Applications/Package Lab.app/Contents/MacOS/Package Lab', 'executable: the Mac bundle’s program')
+  assert.equal(executable('darwin', '/x/Package Lab'), '/x/Package Lab', 'executable: a program stays as it is')
+  assert.deepEqual(appBinaries('win32', { LOCALAPPDATA: 'D:\\Local' }, winHome, 'C:\\lab', 'arm64'), ['D:\\Local\\Programs\\Package Lab\\Package Lab.exe', 'C:\\lab\\dist\\Package Lab-win32-arm64\\Package Lab.exe'], 'appBinaries: win32')
+  assert.equal(appBinaries('win32', {}, winHome, 'C:\\lab')[0], 'C:\\Users\\a\\AppData\\Local\\Programs\\Package Lab\\Package Lab.exe', 'appBinaries: win32 without LOCALAPPDATA')
+  assert.deepEqual(appBinaries('linux', {}, home, '/r', 'x64'), ['/r/dist/Package Lab-linux-x64/Package Lab'], 'appBinaries: linux')
+  assert.equal(appBinaries('darwin', { PACKAGE_LAB_APP: '/p/Package Lab.app/' }, home, '/r')[0], '/p/Package Lab.app', 'appBinaries: a trailing slash is dropped')
+  assert.equal(executable('darwin', appBinaries('darwin', { PACKAGE_LAB_APP: '/p/Package Lab.app/' }, home, '/r')[0]), '/p/Package Lab.app/Contents/MacOS/Package Lab', 'executable: so a bundle given with a slash still works')
+  assert.equal(appBinaries('win32', { PACKAGE_LAB_APP: 'D:\\P\\Package Lab.exe\\' }, winHome, 'C:\\lab')[0], 'D:\\P\\Package Lab.exe', 'appBinaries: or a backslash')
+  assert.equal(installHint('darwin'), 'npm run install-app puts it in /Applications.', 'installHint: darwin is the old text')
+  for (const pl of ['darwin', 'win32', 'linux']) assert.equal(appBinaries(pl, { PACKAGE_LAB_APP: '/portable/Package Lab' }, home, '/r')[0], '/portable/Package Lab', `appBinaries: PACKAGE_LAB_APP wins on ${pl}`)
+  assert.deepEqual([openCommand('darwin', '/t/r.html'), openCommand('win32', 'C:\\t\\r.html'), openCommand('linux', '/t/r.html')], [['open', ['/t/r.html']], ['explorer.exe', ['C:\\t\\r.html']], ['xdg-open', ['/t/r.html']]], 'openCommand: one per platform')
+  assert.equal(keysFor(true, '⌥⌘I and ⌘R'), '⌥⌘I and ⌘R', 'keys: unchanged on a Mac')
+  assert.equal(keysFor(false, '⌘R'), 'Ctrl+R', 'keys: ⌘ is Ctrl')
+  assert.equal(keysFor(false, '⌥⌘I, ⇧⌘R and ⇧⌥⌘I.'), 'Ctrl+Alt+I, Ctrl+Shift+R and Ctrl+Alt+Shift+I.', 'keys: Option is Alt, in the order Ctrl, Alt, Shift')
+  assert.equal(keysFor(false, '⌘1 to ⌘5, ⌘, and ⌘.'), 'Ctrl+1 to Ctrl+5, Ctrl+, and Ctrl+.', 'keys: digits and punctuation')
+  assert.equal(keysFor(false, '# ⌘R\n`⌘R` and ⌘R\n```\n⌘R\n```\n⌘R'), '# ⌘R\n`⌘R` and Ctrl+R\n```\n⌘R\n```\nCtrl+R', 'keys: headings, inline code and fenced code are left alone')
+  assert.equal(keysFor(false, '**⇧↩** and ⌘ alone and ⌘Cmd'), '**⇧↩** and ⌘ alone and ⌘Cmd', 'keys: only a modifier followed by a key is changed')
+  // The lint: no .pathname on a URL built from import.meta.url, and no Mac paths outside src/platform.js and `// darwin-only` lines.
+  const lint = [], top = fileURLToPath(new URL('..', import.meta.url)), P = '(?:[^()]|\\([^()]*\\))*'   // P: text with one level of nested parentheses
+  const urlPath = new RegExp(`new URL\\(${P}import\\.meta\\.url${P}\\)\\.pathname`)
+  const macPath = /\/Applications\b|Library\/Application Support|\.app\/Contents|'Library'\s*,\s*'Application Support'|['"]Applications['"]/
+  for (const dir of ['src', 'bin', 'scripts']) {
+    const walk = d => readdirSync(d, { withFileTypes: true }).flatMap(e => e.name === 'vendor' ? [] : e.isDirectory() ? walk(join(d, e.name)) : /\.(c|m)?js$/.test(e.name) ? [join(d, e.name)] : [])
+    for (const f of walk(join(top, dir))) readFileSync(f, 'utf8').split('\n').forEach((l, i) => {
+      const rel = relative(top, f).split(sep).join('/'), at = `${rel}:${i + 1}`
+      if (urlPath.test(l)) lint.push(`${at}: .pathname of a URL from import.meta.url`)
+      if (macPath.test(l) && !/\/\/ darwin-only/.test(l) && rel !== 'src/platform.js') lint.push(`${at}: a Mac path outside src/platform.js`)
+    })
+  }
+  assert.ok(urlPath.test("const a = new URL(f('x', 1), import.meta.url).pathname") && macPath.test("join(h, 'Library', 'Application Support')") && macPath.test("join(h, 'Applications')") && macPath.test('see /Applications.'), 'portability lint: the patterns catch what they should')
+  assert.deepEqual(lint, [], 'portability lint: ' + lint.join('; '))
+  console.log('platform: unit ok')
+}
 console.log('unit: ok')
 
 // ---- End to end ----
 const slow = process.argv.includes('--slow')   // the slower end-to-end checks: run at phase ends (see docs/developer-guide.md)
 if (!process.argv.includes('--unit')) {
-  const root = new URL('..', import.meta.url).pathname, cli = join(root, 'bin', 'package-lab.js'), electron = join(root, 'node_modules', '.bin', 'electron')
+  const root = fileURLToPath(new URL('..', import.meta.url)), cli = join(root, 'bin', 'package-lab.js'), electron = join(root, 'node_modules', '.bin', 'electron')
   const node = (args, opts = {}) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', timeout: 120000, ...opts })
   const run = (zip, ...args) => { const r = node(['run', zip, '--wait', '3', '--json', ...args]); assert.ok(r.stdout, 'run printed nothing: ' + r.stderr); return JSON.parse(r.stdout) }
   const calls = r => r.api.map(a => a.call + ' ' + a.el)
@@ -1836,8 +1879,8 @@ if (!process.argv.includes('--unit')) {
     const zfile = join(work, '_package-lab'); writeFileSync(zfile, cz.stdout)
     if (spawnSync('zsh', ['-c', 'true']).status === 0) { const zn = spawnSync('zsh', ['-n', zfile], { encoding: 'utf8' }); assert.equal(zn.status, 0, 'completion: zsh -n accepts it: ' + zn.stderr) }
     else console.log('completion: zsh not installed, syntax check skipped')
-    // open: where it went, as JSON. PACKAGE_LAB_ELECTRON names /usr/bin/true, so nothing opens.
-    assert.deepEqual(JSON.parse(node(['open', '--json'], { env: { ...process.env, PACKAGE_LAB_ELECTRON: '/usr/bin/true' } }).stdout), { app: 'repo', path: '/usr/bin/true', package: null }, 'json: open')
+    // open: where it went, as JSON. PACKAGE_LAB_ELECTRON names node with no script, so nothing opens.
+    assert.deepEqual(JSON.parse(node(['open', '--json'], { env: { ...process.env, PACKAGE_LAB_ELECTRON: process.execPath } }).stdout), { app: 'repo', path: process.execPath, package: null }, 'json: open')
     // report: JSON with the HTML in a file; a redacted report's JSON has no findings or verdict title.
     const rj = JSON.parse(node(['report', good, '--json', '--out', join(work, 'static.html')]).stdout)
     assert.ok(rj.out && rj.verdict && Array.isArray(rj.findings) && rj.counts && existsSync(join(work, 'static.html')), 'json: report')
@@ -1848,51 +1891,57 @@ if (!process.argv.includes('--unit')) {
     assert.equal(node(['report', good, '--json']).status, 2, 'json: report needs --out or --open'); assert.match(node(['report', good, '--json']).stderr, /needs --out or --open/)
     const sj = node(['serve', '--json']); assert.equal(sj.status, 2, 'json: serve --json without --url is refused'); assert.match(sj.stderr, /serve --json needs --url/)
     // serve --url: the address with its token, as text or JSON. The token file is in a fake home.
-    const fakeHome = mkdtempSync(join(work, 'home-')), env = { ...process.env, HOME: fakeHome }, tokenDir = join(fakeHome, 'Library', 'Application Support', 'Package Lab')
+    const fakeHome = mkdtempSync(join(work, 'home-')), env = { ...process.env, HOME: fakeHome }, tokenDir = dataDir(process.platform, {}, fakeHome)
     mkdirSync(tokenDir, { recursive: true }); writeFileSync(join(tokenDir, 'web-token'), 'tok123\n')
     assert.equal(node(['serve', '--url', '--port', '4999'], { env }).stdout.trim(), 'http://127.0.0.1:4999/?token=tok123', 'serve --url')
     assert.deepEqual(JSON.parse(node(['serve', '--url', '--port', '4999', '--json'], { env }).stdout), { url: 'http://127.0.0.1:4999/?token=tok123' }, 'json: serve --url')
 
+    const isMac = process.platform === 'darwin', skipped = []   // E6.1: what needs a Mac is counted and reported in one line below
     // doctor: the installed app is an optional check (last, and not part of ok); its version comes from Info.plist.
     const dj = JSON.parse(node(['doctor', '--json'], { env }).stdout)
     assert.ok(!dj.checks.some(c => c.id === 'app') && 'app' in dj, 'doctor: the app is reported at the top level, not in checks')
     assert.equal(dj.ok, dj.checks.every(c => c.ok), 'doctor: ok is the checks')
-    const appDir = join(fakeHome, 'Applications', 'Package Lab.app', 'Contents')
-    mkdirSync(appDir, { recursive: true })
-    writeFileSync(join(appDir, 'Info.plist'), '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>9.8.7</string></dict></plist>\n')
-    const withApp = JSON.parse(node(['doctor', '--json'], { env }).stdout)
-    if (!existsSync('/Applications/Package Lab.app')) assert.deepEqual(withApp.app, { path: join(fakeHome, 'Applications', 'Package Lab.app'), version: '9.8.7' }, 'doctor: ~/Applications is found, with its version')
-    assert.match(node(['doctor'], { env }).stdout, /Package Lab\.app, the installed desktop app/)
+    if (isMac) {   // the version comes from Info.plist, read with plutil
+      const appDir = join(fakeHome, 'Applications', 'Package Lab.app', 'Contents')
+      mkdirSync(appDir, { recursive: true })
+      writeFileSync(join(appDir, 'Info.plist'), '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>9.8.7</string></dict></plist>\n')
+      const withApp = JSON.parse(node(['doctor', '--json'], { env }).stdout)
+      if (!existsSync('/Applications/Package Lab.app')) assert.deepEqual(withApp.app, { path: join(fakeHome, 'Applications', 'Package Lab.app'), version: '9.8.7' }, 'doctor: ~/Applications is found, with its version')
+      assert.match(node(['doctor'], { env }).stdout, /Package Lab\.app, the installed desktop app/)
+    } else skipped.push('doctor: the installed app’s version (plutil)')
     const noApp = JSON.parse(node(['doctor', '--json'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout)
     if (!existsSync('/Applications/Package Lab.app')) assert.ok(noApp.app === null, 'doctor: no app is reported as null')
     assert.match(node(['doctor'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout, /(no|ok) +Package Lab\.app/, 'doctor: text reports the app (installed or not: it looks in /Applications, not HOME)')
     assert.match(node(['doctor']).stdout, /Ready:|To do:/, 'doctor: text summary with advice')
 
     // Alfred (P5.2): the build lints, the ⇧↩ action runs the standard experiment, the scripts are valid shell, and Fix never overwrites.
-    const alf = spawnSync(process.execPath, [join(root, 'scripts', 'alfred.js'), '--no-open'], { encoding: 'utf8' }); assert.equal(alf.status, 0, 'alfred build: ' + alf.stderr)
-    const info = join(root, 'dist', 'alfred', 'info.plist')
-    assert.equal(spawnSync('plutil', ['-lint', info], { encoding: 'utf8' }).status, 0, 'alfred: plutil -lint')
-    const wf = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', info], { encoding: 'utf8' }))
-    const filterUid = wf.objects.find(o => o.type === 'alfred.workflow.input.filefilter' && o.config.keyword === 'scorm').uid
-    const shift = wf.connections[filterUid].find(c => c.modifiers === 131072), target = wf.objects.find(o => o.uid === shift?.destinationuid)
-    assert.ok(target && /experiment "\$1" --preset standard/.test(target.config.script), 'alfred: shift-return on scorm runs the standard experiment')
-    assert.ok(wf.objects.some(o => o.type === 'alfred.workflow.trigger.action' && o.config.name === 'Fix with Package Lab'), 'alfred: the fix action')
-    assert.ok(wf.objects.some(o => o.type === 'alfred.workflow.trigger.action' && o.config.filetypes?.includes('public.folder')), 'alfred: the folder batch action')
-    for (const [n, body] of Object.entries({ OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB })) { const sh = spawnSync('/bin/bash', ['-n', '-c', body], { encoding: 'utf8' }); assert.equal(sh.status, 0, `alfred ${n} is valid shell: ${sh.stderr}`) }
-    const fixDir = mkdtempSync(join(work, 'alfred-fix-')), pkgCopy = join(fixDir, 'my course.zip')
-    cpSync(blank, pkgCopy)
-    const fixRun = file => spawnSync('/bin/bash', ['-c', FIX, 'bash', file], { encoding: 'utf8', env: { PATH: process.env.PATH, node: process.execPath, cli } })
-    const symDir = mkdtempSync(join(work, 'alfred-sym-')), symPkg = join(symDir, 'c.zip'), symTarget = join(symDir, 'target.txt')
-    cpSync(blank, symPkg); writeFileSync(symTarget, 'keep me'); symlinkSync(symTarget, join(symDir, 'c-fixed.zip'))
-    assert.equal(spawnSync('/bin/bash', ['-c', FIX, 'bash', symPkg], { encoding: 'utf8', env: { PATH: process.env.PATH, node: process.execPath, cli } }).stdout.trim(), 'Wrote c-fixed-2.zip', 'alfred fix: a symlink at the name is not followed or replaced')
-    assert.equal(readFileSync(symTarget, 'utf8'), 'keep me', 'alfred fix: the symlink target is untouched')
-    assert.equal(fixRun(pkgCopy).stdout.trim(), 'Wrote my course-fixed.zip', 'alfred fix: the first copy')
-    assert.equal(fixRun(pkgCopy).stdout.trim(), 'Wrote my course-fixed-2.zip', 'alfred fix: never overwrites, -2')
-    assert.equal(fixRun(pkgCopy).stdout.trim(), 'Wrote my course-fixed-3.zip', 'alfred fix: -3')
-    assert.ok(existsSync(join(fixDir, 'my course-fixed-3.zip')) && readFileSync(join(fixDir, 'my course-fixed.zip')).equals(readFileSync(join(fixDir, 'my course-fixed-2.zip'))), 'alfred fix: the copies are written next to the original')
-    const quiet = join(fixDir, 'good.zip'); cpSync(good, quiet)
-    assert.equal(fixRun(quiet).stdout.trim(), 'Nothing to fix in good.zip', 'alfred fix: nothing to change writes no file'); assert.ok(!existsSync(join(fixDir, 'good-fixed.zip')))
-    assert.deepEqual(readdirSync(fixDir).filter(f => f.startsWith('.package-lab-fix')), [], 'alfred fix: no temporary file is left behind')
+    if (isMac) {
+      const alf = spawnSync(process.execPath, [join(root, 'scripts', 'alfred.js'), '--no-open'], { encoding: 'utf8' }); assert.equal(alf.status, 0, 'alfred build: ' + alf.stderr)
+      const info = join(root, 'dist', 'alfred', 'info.plist')
+      assert.equal(spawnSync('plutil', ['-lint', info], { encoding: 'utf8' }).status, 0, 'alfred: plutil -lint')
+      const wf = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', info], { encoding: 'utf8' }))
+      const filterUid = wf.objects.find(o => o.type === 'alfred.workflow.input.filefilter' && o.config.keyword === 'scorm').uid
+      const shift = wf.connections[filterUid].find(c => c.modifiers === 131072), target = wf.objects.find(o => o.uid === shift?.destinationuid)
+      assert.ok(target && /experiment "\$1" --preset standard/.test(target.config.script), 'alfred: shift-return on scorm runs the standard experiment')
+      assert.ok(wf.objects.some(o => o.type === 'alfred.workflow.trigger.action' && o.config.name === 'Fix with Package Lab'), 'alfred: the fix action')
+      assert.ok(wf.objects.some(o => o.type === 'alfred.workflow.trigger.action' && o.config.filetypes?.includes('public.folder')), 'alfred: the folder batch action')
+      for (const [n, body] of Object.entries({ OPEN, CHECK, RUN, EXPERIMENT, FIX, BATCH, WEB })) { const sh = spawnSync('/bin/bash', ['-n', '-c', body], { encoding: 'utf8' }); assert.equal(sh.status, 0, `alfred ${n} is valid shell: ${sh.stderr}`) }
+      const fixDir = mkdtempSync(join(work, 'alfred-fix-')), pkgCopy = join(fixDir, 'my course.zip')
+      cpSync(blank, pkgCopy)
+      const fixRun = file => spawnSync('/bin/bash', ['-c', FIX, 'bash', file], { encoding: 'utf8', env: { PATH: process.env.PATH, node: process.execPath, cli } })
+      const symDir = mkdtempSync(join(work, 'alfred-sym-')), symPkg = join(symDir, 'c.zip'), symTarget = join(symDir, 'target.txt')
+      cpSync(blank, symPkg); writeFileSync(symTarget, 'keep me'); symlinkSync(symTarget, join(symDir, 'c-fixed.zip'))
+      assert.equal(spawnSync('/bin/bash', ['-c', FIX, 'bash', symPkg], { encoding: 'utf8', env: { PATH: process.env.PATH, node: process.execPath, cli } }).stdout.trim(), 'Wrote c-fixed-2.zip', 'alfred fix: a symlink at the name is not followed or replaced')
+      assert.equal(readFileSync(symTarget, 'utf8'), 'keep me', 'alfred fix: the symlink target is untouched')
+      assert.equal(fixRun(pkgCopy).stdout.trim(), 'Wrote my course-fixed.zip', 'alfred fix: the first copy')
+      assert.equal(fixRun(pkgCopy).stdout.trim(), 'Wrote my course-fixed-2.zip', 'alfred fix: never overwrites, -2')
+      assert.equal(fixRun(pkgCopy).stdout.trim(), 'Wrote my course-fixed-3.zip', 'alfred fix: -3')
+      assert.ok(existsSync(join(fixDir, 'my course-fixed-3.zip')) && readFileSync(join(fixDir, 'my course-fixed.zip')).equals(readFileSync(join(fixDir, 'my course-fixed-2.zip'))), 'alfred fix: the copies are written next to the original')
+      const quiet = join(fixDir, 'good.zip'); cpSync(good, quiet)
+      assert.equal(fixRun(quiet).stdout.trim(), 'Nothing to fix in good.zip', 'alfred fix: nothing to change writes no file'); assert.ok(!existsSync(join(fixDir, 'good-fixed.zip')))
+      assert.deepEqual(readdirSync(fixDir).filter(f => f.startsWith('.package-lab-fix')), [], 'alfred fix: no temporary file is left behind')
+    } else skipped.push('Alfred: the workflow build and its shell scripts (plutil, bash)')
+    if (skipped.length) console.log(`skipped (needs a Mac): ${skipped.join('; ')}`)
   }
 
   // Batch checks (P4.3), without Electron: every fixture in one folder, and a file that isn't a ZIP. One row each, with the verdict
@@ -2858,7 +2907,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     const median = f => [f(), f(), f()].sort((a, b) => a - b)[1], plainMs = median(() => loaded()), tracedMs = median(() => loaded('--trace'))
     console.log(`trace overhead: good loaded in ${plainMs} ms, ${tracedMs} ms traced`)
     assert.ok(tracedMs < 2 * plainMs + 50, `trace: under twice the time (${plainMs} → ${tracedMs} ms)`)
-    const t0 = Date.now(), all = spawnSync(process.execPath, [new URL(import.meta.url).pathname, '--slow'], { env: { ...process.env, PACKAGE_LAB_FORCE_TRACE: '1' }, encoding: 'utf8', maxBuffer: 64 * 1024 ** 2 })
+    const t0 = Date.now(), all = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--slow'], { env: { ...process.env, PACKAGE_LAB_FORCE_TRACE: '1' }, encoding: 'utf8', maxBuffer: 64 * 1024 ** 2 })
     assert.equal(all.status, 0, 'forced trace pass:\n' + all.stdout.slice(-2000) + all.stderr.slice(-4000))
     console.log(`forced trace pass: ok (${Math.round((Date.now() - t0) / 1000)} s)`)
   }

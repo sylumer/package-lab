@@ -1,5 +1,5 @@
 // Package Lab's window: toolbar, runs list and the views (grouped in the sidebar) that show a run.
-import { markdown, headings, searchDocs } from './markdown.js'
+import { markdown, headings, searchDocs, keysFor } from './markdown.js'
 const $ = id => document.getElementById(id)
 const runBtn = $('run')
 function h(tag, props = {}, ...kids) {
@@ -14,7 +14,10 @@ const icon = id => { const s = document.createElementNS('http://www.w3.org/2000/
 // The icon and word for each severity: findings and the verdict banner. Colour is never the only signal.
 const SEV = { error: ['i-error', 'Problem'], warn: ['i-warn', 'Warning'], info: ['i-info', 'Note'], ok: ['i-ok', 'Good'] }
 // Desktop only: the Mac's accent colour (lab.accent is undefined in the web interface, which keeps the CSS default), and the class that leaves room for the traffic lights.
-if (!lab.web && navigator.platform.startsWith('Mac')) document.body.classList.add('mac')
+const isMac = navigator.platform.startsWith('Mac')
+if (!lab.web && isMac) document.body.classList.add('mac')
+// Shortcut text: ⌘R on a Mac, Ctrl+R elsewhere. The docs keep the Mac symbols; they are changed as they are loaded into the panel.
+const keys = s => keysFor(isMac, s)
 const setAccent = c => { if (/^#[0-9a-f]{6}$/i.test(c)) { const root = document.documentElement.style, [r, g, b] = [1, 3, 5].map(i => { const v = parseInt(c.slice(i, i + 2), 16) / 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4 })
   root.setProperty('--accent', c); root.setProperty('--on-accent', .2126 * r + .7152 * g + .0722 * b > .4 ? '#000' : '#fff') } }
 lab.accent?.().then(setAccent).catch(() => {}); lab.onAccent?.(setAccent)
@@ -451,7 +454,7 @@ const liveText = h('input', { type: 'text', placeholder: 'Text to type into the 
 const livePanel = h('div', { class: 'live' },
   h('p', { class: 'muted small' }, 'The course is running on the Mac. Click the picture to click the course; with the picture focused, keys go to the course too.'),
   h('div', { class: 'live-wrap' }, liveImg, guideH, guideV), liveInfo,
-  h('div', { class: 'row live-bar' }, liveBar, crossBtn, h('button', { type: 'button', class: 'secondary', title: 'Copy the position and the element (⌘C with the picture focused).', onclick: () => copyPos() }, 'Copy'), copied),
+  h('div', { class: 'row live-bar' }, liveBar, crossBtn, h('button', { type: 'button', class: 'secondary', title: keys('Copy the position and the element (⌘C with the picture focused).'), onclick: () => copyPos() }, 'Copy'), copied),
   h('div', { class: 'row' }, liveText, h('button', { type: 'button', onclick: () => { if (liveText.value) { liveInput({ type: 'text', text: liveText.value }); liveText.value = '' } } }, 'Type'),
     ...['Enter', 'Tab', 'Escape', 'Backspace', 'Space', 'Up', 'Down', 'Left', 'Right'].map(k => h('button', { type: 'button', class: 'secondary', onclick: () => liveInput({ type: 'key', key: k }) }, k))),
   h('div', { class: 'row' }, recordBtn, h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => { st.macro = await lab.invoke('macro-save'); recording(false); showMacro(); showOptions(); say(`Macro saved: ${st.macro.events.length} events. It plays at the start of each launch.`) }) }, 'Save macro'), liveMacro))
@@ -615,7 +618,7 @@ const openDoc = (name, anchor = '', back) => act(async () => {
   }
   if (!docs.list.some(d => d.name === name)) name = docs.cur ?? docs.list[0]?.name
   if (!name) return
-  const text = docs.text[name] ??= await lab.invoke('doc', { name })
+  const text = docs.text[name] ??= keys(await lab.invoke('doc', { name }))
   if (docs.cur && !back) docs.hist.push([docs.cur, docs.anchor])
   Object.assign(docs, { cur: name, anchor })
   docBody.innerHTML = markdown(text, 'doc-')
@@ -666,7 +669,7 @@ $('doc-search').addEventListener('keydown', e => { if (e.key === 'Escape') { cle
 $('doc-search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => act(async () => {
   const q = $('doc-search').value, box = $('doc-results')
   if (!q.trim() || !docs.list) return clearSearch()
-  await Promise.all(docs.list.map(async d => { docs.text[d.name] ??= await lab.invoke('doc', { name: d.name }) }))
+  await Promise.all(docs.list.map(async d => { docs.text[d.name] ??= keys(await lab.invoke('doc', { name: d.name })) }))
   if ($('doc-search').value !== q) return   // typed on, or cleared, while the docs loaded: a newer search owns the list
   const hits = searchDocs(docs.list.map(d => ({ ...d, text: docs.text[d.name] })), q)
   box.replaceChildren(...hits.map(r => { const li = h('li', {}, h('button', { type: 'button', class: 'link', 'data-doc': r.name, 'data-id': r.id }, h('b', {}, r.title + (r.heading ? ' › ' + r.heading : '')), h('span', { class: 'snip' }))); li.querySelector('.snip').innerHTML = r.html; return li }))
@@ -720,7 +723,6 @@ $('views').addEventListener('keydown', e => {
   if (!j || e.metaKey || e.ctrlKey || e.altKey) return
   e.preventDefault(); const t = names[names.indexOf(st.tab) + j]; if (t) { st.tab = t; render() }
 })
-const isMac = navigator.platform.startsWith('Mac')
 document.addEventListener('keydown', e => {
   const g = (isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && !e.shiftKey && /^[1-5]$/.test(e.key) && !$('views').hidden ? visibleGroups()[+e.key - 1]?.[1][0] : null
   if (g) { e.preventDefault(); document.activeElement?.blur?.(); st.tab = g; render() }   // blur: render() keeps #view while the file editor or a pins field has focus, which would leave it on the old view

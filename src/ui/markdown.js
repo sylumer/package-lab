@@ -111,3 +111,15 @@ export function searchDocs(texts, query, max = 20) {
   }
   return out
 }
+
+// Mac key symbols as words, off the Mac: keysFor(false, '⌥⌘I') is 'Ctrl+Alt+I'. Only a modifier run followed by a key is changed,
+// and only in prose: fenced code, inline code and headings (whose text makes the anchors) are left as written.
+const keyRun = s => s.replace(/([⌃⌥⇧⌘]+)([A-Z0-9.,])(?![A-Za-z])/g, (_, m, k) => [['⌘', 'Ctrl'], ['⌃', 'Ctrl'], ['⌥', 'Alt'], ['⇧', 'Shift']].filter(([c]) => m.includes(c)).map(x => x[1]).filter((v, i, a) => a.indexOf(v) === i).concat(k).join('+'))
+export const keysFor = (mac, s) => {
+  if (mac) return s
+  let fence = false
+  return String(s).split('\n').map(l => {
+    if (/^\s*(```|~~~)/.test(l)) { fence = !fence; return l }
+    return fence || /^#{1,6}\s/.test(l) ? l : l.split(/(`+[^`]*`+)/).map((p, i) => i % 2 ? p : keyRun(p)).join('')
+  }).join('\n')
+}

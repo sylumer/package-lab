@@ -1049,8 +1049,9 @@ Input goes to the newest open window of the run: a popup the content opened, or 
 
 | Variable | Effect |
 |---|---|
-| `PACKAGE_LAB_ELECTRON` | The Electron or Package Lab binary to use. A path ending in `electron` is given the repo as its app; anything else (such as `/Applications/Package Lab.app/Contents/MacOS/Package Lab`) runs on its own |
-| `PACKAGE_LAB_DATA` | Moves Package Lab's data folder (saved runs, web token, reference sign-ins, settings) for `serve`, `open` and `settings`. Default `~/Library/Application Support/Package Lab` |
+| `PACKAGE_LAB_ELECTRON` | The Electron or Package Lab binary to use. A path ending in `electron` or `electron.exe` is given the repo as its app; anything else (such as `/Applications/Package Lab.app/Contents/MacOS/Package Lab`) runs on its own |
+| `PACKAGE_LAB_APP` | A copy of the desktop app (the `.app` on a Mac, `Package Lab.exe` on Windows), for portable copies. `open` starts it in place of the installed app. `run` and `serve` use it only when this repo's Electron isn't installed. `doctor` reports it as the installed app |
+| `PACKAGE_LAB_DATA` | Moves Package Lab's data folder (saved runs, web token, reference sign-ins, settings) for `serve`, `open` and `settings`. Default `~/Library/Application Support/Package Lab` on a Mac, `%APPDATA%\Package Lab` on Windows, and `$XDG_CONFIG_HOME/Package Lab` (or `~/.config/Package Lab`) on Linux |
 | `NO_COLOR` | Plain text output |
 | `PACKAGE_LAB_NO_PLAYWRIGHT` | `1` makes Playwright fail to load, as it does where it isn't installed, so `--browser webkit` refuses with its how-to-install message. For Package Lab's own tests |
 | `PACKAGE_LAB_FORCE_TRACE` | `1` traces every package run, as `--trace` does. For Package Lab's own tests |

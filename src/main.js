@@ -451,7 +451,7 @@ async function beginWebkit({ plan, itemIndex, cmi }) {
   writeFileSync(zip, pkg.zip)
   writeFileSync(job, JSON.stringify({ zip, name: pkg.name, item: itemIndex, options: o, cmi, out: join(dir, 'run.json'), stop: join(dir, 'stop'), ready: join(dir, 'ready'), wait: o.auto || 3600 }))
   // This binary as plain Node: the Electron it is, with ELECTRON_RUN_AS_NODE.
-  const child = spawn(process.execPath, [join(import.meta.dirname, 'webkit-runner.js'), job], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|HOME|TMPDIR|PACKAGE_LAB_.*|PLAYWRIGHT_.*)$/.test(k))), ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'pipe'] })
+  const child = spawn(process.execPath, [join(import.meta.dirname, 'webkit-runner.js'), job], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|Path|HOME|TMPDIR|USERPROFILE|APPDATA|LOCALAPPDATA|SystemRoot|TEMP|TMP|PACKAGE_LAB_.*|PLAYWRIGHT_.*)$/.test(k))), ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'pipe'] })
   let err = ''
   child.stderr.on('data', d => { err = (err + d).slice(-4000) })
   const exited = new Promise(r => child.on('exit', code => { r(code); a.webkit && (a.webkit.done = true) })), ready = join(dir, 'ready')
@@ -947,7 +947,7 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: app.name, submenu: [
       { role: 'about' }, { type: 'separator' }, item('Settings…', 'CmdOrCtrl+,', 'settings'), { type: 'separator' },
-      { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' } ] },
+      ...(process.platform === 'darwin' ? [{ role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }] : []), { role: 'quit' } ] },
     { label: 'File', submenu: [
       item('Open Package…', 'CmdOrCtrl+O', 'open'),
       { role: 'recentDocuments', submenu: [{ role: 'clearRecentDocuments' }] },
