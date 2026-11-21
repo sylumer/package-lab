@@ -263,9 +263,11 @@ const HIT = (x, y) => `(function(w,x,y){try{var px=x*w.innerWidth,py=y*w.innerHe
 // frame (0 also for one that can't be clicked: no size, or out of the window after scrolling it to the middle); x and y only when found is 1.
 const FIND = target => `(function(sel,path){try{var w=window,i;for(i=0;i<path.length;i++)w=w.frames[path[i]];var l=w.document.querySelectorAll(sel);if(l.length!==1)return{found:l.length};var el=l[0];el.scrollIntoView({block:'center',inline:'center',behavior:'instant'});var r=el.getBoundingClientRect();if(!(r.width>0&&r.height>0))return{found:0};var x=r.left+r.width/2,y=r.top+r.height/2;for(var f=w;f!==window;f=f.parent){var b=f.frameElement.getBoundingClientRect();x+=b.left+f.frameElement.clientLeft;y+=b.top+f.frameElement.clientTop}if(x<0||y<0||x>window.innerWidth||y>window.innerHeight)return{found:0};return{found:1,x:x/window.innerWidth,y:y/window.innerHeight}}catch(err){return{found:0}}})(${JSON.stringify(target.sel)},${JSON.stringify(target.frame ?? [])})`
 const live = {
-  watchers: 0, dir: null, timer: null, last: null, busy: false,
+  watchers: 0, uiOn: false, web: 0, dir: null, timer: null, last: null, busy: false,
   // The newest open window of the run: a popup the content opened, or the run's own window.
   target() { return active?.wins.filter(w => !w.isDestroyed()).at(-1) ?? null },
+  // The desktop UI's Live view is one watcher while uiOn (E4.1); it is cleared when the window reloads or closes.
+  setUi(on) { if (on === this.uiOn) return; this.uiOn = on; this.watchers += on ? 1 : -1; this.restart() },
   restart() {
     clearInterval(this.timer); this.timer = null; this.last = null
     if (active && (this.watchers > 0 || this.dir)) this.timer = setInterval(() => this.capture().catch(() => {}), 400)
@@ -282,7 +284,9 @@ const live = {
       if (this.last && this.last.equals(jpeg)) return
       this.last = jpeg
       const [w0, h0] = w.getContentSize(), frame = { w: w0, h: h0, t: active ? Date.now() - active.started : 0 }
-      if (this.watchers > 0) web?.broadcastLive({ ...frame, jpeg: jpeg.toString('base64') })
+      const msg = { ...frame, jpeg: jpeg.toString('base64') }
+      if (this.web > 0) web?.broadcastLive(msg)
+      if (this.uiOn && ui && !ui.isDestroyed()) ui.webContents.send('live', msg)   // the desktop window's Live view (E4.1)
       if (this.dir) {
         writeFileSync(join(this.dir, 'frame.jpg.tmp'), jpeg); renameSync(join(this.dir, 'frame.jpg.tmp'), join(this.dir, 'frame.jpg'))
         writeFileSync(join(this.dir, 'frame.json'), JSON.stringify(frame))
@@ -410,7 +414,8 @@ async function playMacro(a, events, from = 0, to = events.length) {
     else while (!(await waitMet(a, e))) {
       if (active !== a) return
       if (Date.now() - start >= timeout) {
-        a.rec.push('probe', { type: 'macro-wait', event: i, waited: Date.now() - start, for: e.text !== undefined ? { text: e.text } : e.milestone ? { milestone: e.milestone } : { quiet: e.quiet }, t: a.rec.t(), sid: '' })
+        a.rec.push('probe', { type: 'macro-wait', event: i, waited: Math.min(Date.now() - start, timeout),   // the last check can run past the timeout on a busy machine; the wait was for the timeout
+           for: e.text !== undefined ? { text: e.text } : e.milestone ? { milestone: e.milestone } : { quiet: e.quiet }, t: a.rec.t(), sid: '' })
         return
       }
       await sleep(Math.min(250, start + timeout - Date.now()))
@@ -724,7 +729,7 @@ const handlers = {
     if (!batchPaths.has(path)) throw new Error('Check the folder again to open its packages.')
     return loadPackage(path)
   },
-  state: () => ({ pkg: pkgInfo(), runs: [...runs.values()].map(summary), running: active ? { running: active.kind, label: active.label } : null, web: web ? { url: web.url } : null }),
+  state: () => ({ pkg: pkgInfo(), runs: [...runs.values()].map(summary), running: active ? { running: active.kind, label: active.label } : null, web: web ? { url: web.url } : null, liveWatchers: live.watchers }),
   boot: ({ item }) => { const res = pkg?.analysis.manifest?.items[item]?.res; return res?.path ? bootFor(res.path) : null },
   launch: o => launchItem(o),
   // The normalised options for the current controls, and the CLI line that repeats the launch.
@@ -819,6 +824,14 @@ const handlers = {
     return timelineView(r.trace, r.milestones ?? undefined, win)
   },
   'live-input': e => live.input(e),
+  // The desktop UI's Live view counts as one watcher while it is open (E4.1); frames go out as the 'live' channel.
+  'live-watch': ({ on }) => { live.setUi(!!on); return live.watchers },
+  // The element under (x, y), 0–1 across the run window, as the probe describes it ({ sel, text, role }), or null. x and y come from the UI: clamped to numbers before they are put in the expression.
+  'live-hit': async ({ x, y }) => {
+    const w = live.target(), c = n => Math.min(1, Math.max(0, +n || 0))
+    const r = w ? await w.webContents.executeJavaScript(HIT(c(x), c(y))).catch(() => null) : null
+    return r && typeof r.sel === 'string' ? { sel: r.sel.slice(0, 300), text: String(r.text ?? '').slice(0, 60), role: String(r.role ?? '').slice(0, 40) } : null
+  },
   // Macros: Record clicks starts keeping live-input events; Save macro stops and returns { events, viewport } (the window size at the first event). 'macro-from-run' returns the clicks and keys the probe saw in a run's content frames, with the run window's size.
   'macro-record': ({ on = true }) => { macro.recording = !!on; if (macro.recording) { macro.events = []; macro.text = 0; macro.viewport = null } return macro.recording },
   'macro-save': () => { macro.recording = false; return { events: normaliseOptions({ macro: macro.events }).macro, viewport: (() => { try { return macroSize(macro.viewport) } catch { return null } })() } },
@@ -857,7 +870,8 @@ function createWindow() {
   // Links in the docs panel open in the user's browser; the window never navigates away from the app page.
   ui.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' } })
   ui.webContents.on('will-navigate', (e, url) => { if (url === ui.webContents.getURL()) return; e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url) })
-  ui.on('closed', () => { ui = null; if (!web && process.platform !== 'darwin') app.quit() })
+  ui.webContents.on('did-start-navigation', (_e, _url, _inPlace, isMainFrame) => { if (isMainFrame) live.setUi(false) })   // a reload sends no live-watch off
+  ui.on('closed', () => { live.setUi(false); ui = null; if (!web && process.platform !== 'darwin') app.quit() })
   ui.webContents.once('did-finish-load', () => { if (pendingOpen) { openPath(pendingOpen); pendingOpen = null } })
 }
 
@@ -912,7 +926,7 @@ app.whenReady().then(async () => {
     const port = flagValue('serve', '') === '0' ? 0 : +flagValue('serve', '') || readSettings(app.getPath('userData')).port, host = flagValue('host', '127.0.0.1')
     web = await startWeb({ host, port, uiDir: join(import.meta.dirname, 'ui'), dataDir: app.getPath('userData'), handlers, accept: role => { if (role === 'compare') { if (!pkg) throw new Error('Open a package first, then choose the one to compare it with.'); if (active || experiment) throw new Error('Stop the run first.') } },
       upload: (name, buf, role) => role === 'compare' ? comparePackageData(name, buf) : loadPackageData(name, buf),
-      download: o => { const { zip, file, summary } = buildExport(o); if (!zip) throw new Error('Nothing to change: no autofix found anything to correct, and no file has been changed.'); return { name: file, buf: zip, summary } }, onLive: n => { live.watchers = n; live.restart() } })
+      download: o => { const { zip, file, summary } = buildExport(o); if (!zip) throw new Error('Nothing to change: no autofix found anything to correct, and no file has been changed.'); return { name: file, buf: zip, summary } }, onLive: n => { live.watchers += n - live.web; live.web = n; live.restart() } })
     console.log(`Package Lab web interface: ${web.url}`)
   }
   if (WINDOW) createWindow()

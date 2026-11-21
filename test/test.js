@@ -2492,6 +2492,12 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
       assert.equal(await invoke('macro-record', { on: true }), true, 'web: recording starts')
       await invoke('launch', { item: 0, auto: 6 })
       await new Promise(r => setTimeout(r, 1500))
+      // live-hit (E4.1): the element at Next's position, nothing or a body outside the content, bad numbers clamped; live-watch counts up and down, never below 0.
+      assert.equal((await invoke('live-hit', { x: 0.631, y: 0.328 }))?.text, 'Next', 'web: live-hit finds Next')
+      const away = await invoke('live-hit', { x: 0.99, y: 0.99 }); assert.ok(away === null || /^(body|html)/i.test(away.sel) || away.role === 'body', 'web: live-hit outside the content: ' + JSON.stringify(away))
+      await invoke('live-hit', { x: '1);throw 1;(', y: {} })
+      assert.equal((await invoke('state')).liveWatchers, 0, 'web: nobody watches'); await assert.rejects(invoke('live-watch', { on: true }), /./, 'web: live-watch is desktop only')
+      assert.equal((await invoke('state')).liveWatchers, 0, 'web: and it changed nothing')
       assert.equal(await invoke('live-input', { type: 'click', x: 0.631, y: 0.328 }), true)
       const saved = await invoke('macro-save'), rec = saved.events
       assert.ok(Number.isInteger(saved.viewport?.width) && saved.viewport.width > 100 && saved.viewport.height > 100, 'web: the macro has the window size: ' + JSON.stringify(saved.viewport))

@@ -25,7 +25,7 @@ If it starts from the beginning, look in the second run's **API** view: did it r
 There are four ways to make one:
 
 - **Record** (the desktop app): launch the item, press **Record** in the toolbar (or **Run › Record Macro**, ⌥⌘R), then click through the course. The button reads **Recording…** while it is on. Press **Record** again, or choose **Stop**, and Package Lab asks “Save 14 steps as the macro?”. **Save** replaces the macro with those clicks, and **Discard** keeps the macro you had. Only clicks made after Record was pressed are kept. Typed text is kept only if **Keep typed text in runs (for macros)** was ticked for that run.
-- **Live view** (the web interface): choose **Record clicks** over the Live tab, use the course, then **Save macro**. Everything sent through the picture is recorded with its time into the run.
+- **Live view** (the desktop app and the web interface): open **Live** (or **Show in Package Lab** in the toolbar), choose **Record clicks** over the Live tab, use the course, then **Save macro**. Everything sent through the picture is recorded with its time into the run. The coordinates bar under the picture shows where a click will land and which element is there (see [Live](views.md#live)).
 - **A run in the desktop app**: clicks made directly in the course window can't be seen from outside, so the probe records them in the course's frames instead. Choose a run, then **Use this run's clicks** in the inspector's **Macro** segment. Clicks in a frame on another origin are placed relative to that frame.
 - **A file**: the `--macro` option on the command line, or `"macro"` in an options file.
 

@@ -106,7 +106,15 @@ The server requests of the run, with **Discover all server requests**, **Rounds*
 
 ### Live
 
-Web interface only: the course window as it runs, with clicks and keys sent back. See [Live view](../web.md#live-view).
+The course window as it runs, in Package Lab (desktop app and web interface). It is listed while a run is going, and **Show in Package Lab** in the toolbar opens it. Click the picture to click the course; with the picture focused, keys go to the course too.
+
+Under the picture, the coordinates bar follows the pointer:
+
+```
+x 412  y 233 px · 37.5% 29.1% · button#next “Next”      [Crosshair] [Copy]
+```
+
+The pixels are in the course window's own size, and the percentages are the same position as fractions across it, which is what a macro's click holds. The last part is the element under the pointer: its role and id, or its selector, and its text. **Crosshair** draws guide lines through the pointer. **Copy** (or ⌘C with the picture focused) copies `x=412 y=233 (37.5%, 29.1%)`, with the selector on a second line when it is known, and says “Copied”. For the web interface, see also [Live view](../web.md#live-view).
 
 ## On the command line
 

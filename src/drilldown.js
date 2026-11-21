@@ -267,8 +267,11 @@ function keyDecisions(ctx, de) {
 }
 
 // ---- Where a value came from ----
+// A request and a decision are stamped when the recorder handles each message, and the two kinds of message can arrive a few milliseconds
+// out of order, so a request a little after the decision still counts as before it (it caused it: the callback runs after the request).
+const SKEW_MS = 100
 function requestFrom(ctx, file, t) {
-  return (ctx.trace.requests ?? []).filter(r => /^(XHR|Fetch)$/.test(r.type) && r.t <= t && (r.from ?? []).some(f => pkgPath(f.url) === file)).at(-1) ?? null
+  return (ctx.trace.requests ?? []).filter(r => /^(XHR|Fetch)$/.test(r.type) && r.t <= t + SKEW_MS && (r.from ?? []).some(f => pkgPath(f.url) === file)).at(-1) ?? null
 }
 // root came from the response to req; rest is the path below it.
 function fromResponse(ctx, req, root, rest) {

@@ -128,6 +128,35 @@ async function checks() {
   // E2.4: the banner at the top of Findings says how the run went: the icon and the word, then the sentence.
   assert.match(await text('#view .verdict'), /^Good\s+Ran through: /, 'after a run of good, the banner says Good and Ran through')
   console.log('ui: launch, stop, findings ok')
+
+  // The live view (E4.1): no frame is captured while nobody watches; Show in Package Lab opens it; a frame comes within 3 s; hovering fills
+  // the coordinates bar; Copy puts the position on the clipboard.
+  await launch()
+  await app.evaluate(({ webContents }) => { globalThis.captures = 0; for (const w of webContents.getAllWebContents()) { const f = w.capturePage.bind(w); w.capturePage = (...a) => { globalThis.captures++; return f(...a) } } })
+  await win.waitForTimeout(1200)
+  assert.equal(await app.evaluate(() => globalThis.captures), 0, 'live: nothing is captured while nobody watches')
+  await win.getByRole('button', { name: 'Show in Package Lab', exact: true }).click()
+  await win.locator('#view img.live-frame[src^="data:image/jpeg"]').waitFor({ timeout: 3000 })
+  assert.ok(await app.evaluate(() => globalThis.captures) > 0, 'live: frames are captured once Live is open')
+  assert.ok(await win.getByRole('button', { name: 'Show in Package Lab', exact: true }).isHidden(), 'live: the link goes when Live is open')
+  await win.locator('.live-frame').hover({ position: { x: 40, y: 40 } })
+  await win.locator('.live-pos').filter({ hasText: /^x \d+ {2}y \d+ px · [\d.]+% [\d.]+%/ }).waitFor({ timeout: 3000 })
+  await win.getByRole('button', { name: 'Copy', exact: true }).click()
+  await win.locator('.live-bar').getByText('Copied', { exact: true }).waitFor()
+  assert.match(await app.evaluate(({ clipboard }) => clipboard.readText()), /^x=\d+ y=\d+/, 'live: Copy puts the position on the clipboard')
+  await win.getByRole('button', { name: 'Crosshair', exact: true }).click()
+  assert.equal(await win.getByRole('button', { name: 'Crosshair', exact: true }).getAttribute('aria-pressed'), 'true', 'live: Crosshair toggles')
+  await win.getByRole('button', { name: 'Crosshair', exact: true }).click()
+  // live-watch on then off leaves 0; a reload of the window with Live open leaves no watcher.
+  const watchers = () => win.evaluate(() => lab.invoke('state').then(s => s.liveWatchers))
+  assert.equal(await watchers(), 1, 'live: the open Live view is one watcher')
+  await win.reload(); await win.waitForLoadState('domcontentloaded')
+  assert.equal(await watchers(), 0, 'live: a reload leaves no watcher')
+  await win.evaluate(() => lab.invoke('live-watch', { on: true })); await win.evaluate(() => lab.invoke('live-watch', { on: true })); await win.evaluate(() => lab.invoke('live-watch', { on: false }))
+  assert.equal(await watchers(), 0, 'live: on twice then off leaves 0')
+  await win.evaluate(() => lab.invoke('stop'))
+  await open(goodZip())   // the reload dropped the package and the run: start again for what follows
+  console.log('ui: live view ok')
   await viewChecks()
 
   await win.getByRole('button', { name: 'Help', exact: true }).click()
@@ -219,7 +248,7 @@ async function viewChecks() {
   const views = win.locator('#views'), names = () => views.getByRole('button').allInnerTexts()
   assert.deepEqual(await views.locator('h2').allTextContents(), GROUPS, 'every group shows after a run of good')
   assert.ok(!(await names()).includes('Compare'), 'Compare is hidden until a comparison exists')
-  assert.ok(!(await names()).includes('Live'), 'Live is web only')
+  assert.ok((await names()).includes('Live'), 'Live is listed on the desktop too (E4.1)')
   await view('Network')
   assert.equal(await views.locator('[aria-current=page]').innerText(), 'Network', 'the chosen view is aria-current')
   await win.locator('#view table').waitFor()

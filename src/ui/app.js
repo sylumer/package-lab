@@ -24,8 +24,8 @@ const at = f => f ? `${f.fn || '(anonymous)'} ${short(f.url)}:${f.line}` : ''
 const secs = t => (t / 1000).toFixed(2)
 
 const st = { macro: { events: [], viewport: null }, cyc: { busy: false, note: '', rows: [], findings: [], runs: [] }, pins: [], responses: [], pinDraft: { path: '', value: '', frames: 'content' }, answer: null, running: null, boots: {}, pkg: null, runs: [], sel: null, ref: null, fail: null, cmp: null, tab: 'Findings', live: [] }
-const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'xAPI', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', ...(lab.web ? [] : ['Folder check']), 'Experiments', 'Test saving', 'Server needs', ...(lab.web ? ['Live'] : [])]
-// The sidebar's view lists. Every name in TABS is in exactly one group; a name that isn't in TABS (Live on the desktop, Folder check on the web) is left out when the lists are drawn.
+const TABS = ['Findings', 'Boot path', 'Package', 'Files', 'API', 'xAPI', 'Lookups', 'Network', 'Scripts', 'Execution', 'Drill-down', 'Timeline', 'Errors', 'Console', 'Frames', 'Compare', 'Package diff', ...(lab.web ? [] : ['Folder check']), 'Experiments', 'Test saving', 'Server needs', 'Live']
+// The sidebar's view lists. Every name in TABS is in exactly one group; a name that isn't in TABS (Folder check on the web) is left out when the lists are drawn.
 const GROUPS = [['Summary', ['Findings', 'Timeline']], ['Package', ['Boot path', 'Files', 'Package']], ['What happened', ['API', 'xAPI', 'Network', 'Errors', 'Console', 'Frames', 'Lookups', 'Scripts']],
   ['Deep dive', ['Execution', 'Drill-down', 'Experiments']], ['Tools', ['Compare', 'Package diff', 'Folder check', 'Test saving', 'Server needs', 'Live']]]
 console.assert(TABS.every(t => GROUPS.flat(2).filter(n => n === t).length === 1) && new Set(GROUPS.flatMap(g => g[1])).size === GROUPS.flatMap(g => g[1]).length, 'every view is in exactly one group')
@@ -432,7 +432,7 @@ VIEWS['Drill-down'] = () => {
   return out
 }
 
-// ---- Live view (web interface only): the running content, with clicks and keys sent back to it ----
+// ---- Live view: the running content, with clicks and keys sent back to it, and the position under the pointer (E4.1) ----
 const KEYS = { Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', PageUp: 'PageUp', PageDown: 'PageDown', Home: 'Home', End: 'End' }
 // Record clicks (macros, P2.4): what is sent through the picture is kept, with its time into the run, until Save macro.
 const recordBtn = h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => recording(await lab.invoke('macro-record', { on: !st.recording }))) }, 'Record clicks')
@@ -440,26 +440,55 @@ const liveMacro = h('span', { class: 'muted small' })
 const recording = on => { st.recording = on; recordBtn.textContent = on ? 'Stop recording (not saved)' : 'Record clicks'; liveMacro.textContent = on ? 'Recording: use the picture, then Save macro.' : '' }
 const liveInput = e => lab.invoke('live-input', e).catch(() => {})
 const liveImg = h('img', { class: 'live-frame', alt: 'The running content', tabindex: '0' })
+const guideH = h('div', { class: 'live-guide live-guide-h', hidden: true }), guideV = h('div', { class: 'live-guide live-guide-v', hidden: true })
+const liveBar = h('span', { class: 'live-pos' }, 'Move over the picture to see where the pointer is.'), copied = h('span', { class: 'muted small', role: 'status' })
+const crossBtn = h('button', { type: 'button', class: 'secondary', 'aria-pressed': 'false', title: 'Show guide lines through the pointer.', onclick: () => { st.cross = !st.cross; crossBtn.setAttribute('aria-pressed', String(st.cross)); if (!st.cross) guideH.hidden = guideV.hidden = true } }, 'Crosshair')
 const liveInfo = h('p', { class: 'muted small' }, 'Waiting for the first frame…')
 const liveText = h('input', { type: 'text', placeholder: 'Text to type into the course', spellcheck: 'false', 'aria-label': 'Text to type into the course' })
 const livePanel = h('div', { class: 'live' },
   h('p', { class: 'muted small' }, 'The course is running on the Mac. Click the picture to click the course; with the picture focused, keys go to the course too.'),
-  liveImg, liveInfo,
+  h('div', { class: 'live-wrap' }, liveImg, guideH, guideV), liveInfo,
+  h('div', { class: 'row live-bar' }, liveBar, crossBtn, h('button', { type: 'button', class: 'secondary', title: 'Copy the position and the element (⌘C with the picture focused).', onclick: () => copyPos() }, 'Copy'), copied),
   h('div', { class: 'row' }, liveText, h('button', { type: 'button', onclick: () => { if (liveText.value) { liveInput({ type: 'text', text: liveText.value }); liveText.value = '' } } }, 'Type'),
     ...['Enter', 'Tab', 'Escape', 'Backspace', 'Space', 'Up', 'Down', 'Left', 'Right'].map(k => h('button', { type: 'button', class: 'secondary', onclick: () => liveInput({ type: 'key', key: k }) }, k))),
   h('div', { class: 'row' }, recordBtn, h('button', { type: 'button', class: 'secondary', onclick: () => act(async () => { st.macro = await lab.invoke('macro-save'); recording(false); showMacro(); showOptions(); say(`Macro saved: ${st.macro.events.length} events. It plays at the start of each launch.`) }) }, 'Save macro'), liveMacro))
 const at01 = e => ({ x: e.offsetX / liveImg.clientWidth, y: e.offsetY / liveImg.clientHeight })
+// The pointer over the picture: pixels are the fraction times the run window's size (from the frame), the element comes from live-hit, one call per 150 ms.
+const livePos = { has: false, x: 0, y: 0, hit: null }
+const hitLabel = t => { const l = /^#[\w-]+$/.test(t.sel) ? t.role + t.sel : t.sel; return (l.length > 40 ? l.slice(0, 39) + '…' : l) + (t.text ? ` “${t.text}”` : '') }
+const pxOf = () => { const f = st.liveFrame; return f ? [Math.round(livePos.x * f.w), Math.round(livePos.y * f.h)] : null }
+const pct = v => (v * 100).toFixed(1)
+function showPos() {
+  const px = pxOf()
+  liveBar.textContent = !livePos.has || !px ? 'Move over the picture to see where the pointer is.' : `x ${px[0]}  y ${px[1]} px · ${pct(livePos.x)}% ${pct(livePos.y)}%` + (livePos.hit ? ` · ${hitLabel(livePos.hit)}` : '')
+}
+function copyPos() {
+  const px = pxOf(); if (!livePos.has || !px) return
+  navigator.clipboard.writeText(`x=${px[0]} y=${px[1]} (${pct(livePos.x)}%, ${pct(livePos.y)}%)` + (livePos.hit ? `\n${livePos.hit.sel}` : '')).then(() => { copied.textContent = 'Copied'; setTimeout(() => { copied.textContent = '' }, 2000) }).catch(() => {})
+}
+let hitAt = 0, hitTimer = null
+liveImg.addEventListener('mousemove', e => {
+  Object.assign(livePos, { has: true, hit: null, ...at01(e) }); showPos()   // the element of the last position is no longer this one
+  if (st.cross) { guideH.hidden = guideV.hidden = false; guideH.style.top = liveImg.offsetTop + e.offsetY + 'px'; guideV.style.left = liveImg.offsetLeft + e.offsetX + 'px' }
+  if (!hitTimer) hitTimer = setTimeout(() => { hitTimer = null; hitAt = Date.now(); lab.invoke('live-hit', { x: livePos.x, y: livePos.y }).then(t => { livePos.hit = t; showPos() }).catch(() => {}) }, Math.max(0, 150 - (Date.now() - hitAt)))
+})
+liveImg.addEventListener('mouseleave', () => { guideH.hidden = guideV.hidden = true })
 liveImg.addEventListener('click', e => { liveImg.focus(); liveInput({ type: 'click', ...at01(e) }) })
 let wheelAt = 0
 liveImg.addEventListener('wheel', e => { e.preventDefault(); if (Date.now() - wheelAt < 60) return; wheelAt = Date.now(); liveInput({ type: 'wheel', ...at01(e), dy: e.deltaY }) }, { passive: false })
 liveImg.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'c') { e.preventDefault(); copyPos(); return }
   if (e.metaKey || e.ctrlKey) return
   if (KEYS[e.key]) { e.preventDefault(); liveInput({ type: 'key', key: KEYS[e.key] }) } else if (e.key.length === 1) { e.preventDefault(); liveInput({ type: 'text', text: e.key }) }
 })
-let liveStop = null
+let liveStop = null, liveFn = null
+const liveFrame = f => { st.liveFrame = { w: f.w, h: f.h }; liveImg.src = 'data:image/jpeg;base64,' + f.jpeg; liveInfo.textContent = `${f.w} × ${f.h} · ${secs(f.t)} s into the run`; showPos() }
+if (!lab.web) lab.on('live', f => liveFn?.(f))   // the desktop app's frames come over IPC while live-watch is on
 function liveWatch(on) {
-  if (on && !liveStop) liveStop = lab.live(f => { liveImg.src = 'data:image/jpeg;base64,' + f.jpeg; liveInfo.textContent = `${f.w} × ${f.h} · ${secs(f.t)} s into the run` })
-  else if (!on && liveStop) { liveStop(); liveStop = null; liveImg.removeAttribute('src'); liveInfo.textContent = 'Waiting for the first frame…' }
+  if (on && !liveStop) {
+    if (lab.web) liveStop = lab.live(liveFrame)
+    else { liveFn = liveFrame; lab.invoke('live-watch', { on: true }).catch(() => {}); liveStop = () => { liveFn = null; lab.invoke('live-watch', { on: false }).catch(() => {}) } }
+  } else if (!on && liveStop) { liveStop(); liveStop = null; liveImg.removeAttribute('src'); st.liveFrame = null; liveInfo.textContent = 'Waiting for the first frame…' }
 }
 // ---- Timeline (P4.2): one run's events on a time axis. The lanes come from the timeline handler (src/timeline.js), for the window the
 // sliders ask for; a click on an item opens its tab (not its row). The SVG is built with createElementNS, text as text nodes. ----
@@ -515,7 +544,7 @@ VIEWS.Timeline = () => {
     h('div', { class: 'tl-holder' }, ...timelineBody(d)),
     d.missing.length ? h('p', { class: 'muted' }, `Not reached: ${d.missing.join(', ')}.`) : null]
 }
-VIEWS.Live = () => st.running ? livePanel : h('p', { class: 'muted' }, 'Run an item to see it here. It runs on the Mac; this view lets you watch and use it from here.')
+VIEWS.Live = () => st.running ? livePanel : h('p', { class: 'muted' }, lab.web ? 'Run an item to see it here. It runs on the Mac; this view lets you watch and use it from here.' : 'Run an item to see it here.')
 
 // Views with nothing to show are left out of the sidebar (never the chosen one, and never the ones the user starts things from:
 // Lookups holds the pins, and Experiments, Test saving, Server needs, Drill-down, Folder check and Live are not listed here).
@@ -666,7 +695,8 @@ document.addEventListener('keydown', e => {
 
 function render() {
   if (!codePane.hidden && codePane.dataset.run !== '' && +codePane.dataset.run !== st.sel) { codePane.hidden = true; codePane.replaceChildren() }   // its run isn't the chosen one any more
-  if (lab.web) liveWatch(st.tab === 'Live' && !!st.running)
+  liveWatch(st.tab === 'Live' && !!st.running)
+  $('show-live').hidden = lab.web || !st.running || st.tab === 'Live'
   const welcome = !st.pkg && !st.runs.length && !st.live.length && !st.batch && !st.running
   $('views').hidden = $('filter').parentElement.hidden = welcome
   const hadFocus = $('views').contains(document.activeElement)
@@ -851,6 +881,7 @@ for (const id of ['item', 'expose', 'profile', 'depth', 'opener', 'resume', 'cau
 $('viewport').addEventListener('change', () => { $('viewport-custom').hidden = $('viewport').value !== 'custom' })
 $('advanced').addEventListener('toggle', showOptions)
 $('cycle').onclick = startCycle
+$('show-live').onclick = () => { st.tab = 'Live'; render() }
 // ---- Record (E1.3, desktop only): press Record during a run and click through the course. When the run stops, its clicks
 // (from the press on) become the macro, once the user says Save in the dialog. Discard leaves the macro as it was. ----
 st.recordFrom = null; st.recordPending = null; st.recordRun = null   // recordFrom: ms into the run where Record was pressed; recordRun: that run's start (state event); null when not recording

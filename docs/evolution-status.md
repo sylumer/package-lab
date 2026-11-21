@@ -9,6 +9,8 @@ Phase 0 done: `test/ui.js` drives the real app through Playwright's Electron dri
 
 Phase 1 done: macro format 2 (window size, wait steps, a player on one clock), clicks tied to the element clicked with a position fallback, and a Record button in the desktop app. Each took one review round; the slow suite passed and main was fast-forwarded to b2eb223. Phase 2 done: a Mac toolbar with the system accent and hand-drawn icons, run settings in a right-hand inspector with a summary chip, views grouped in the sidebar, a verdict banner on Findings, and drop-to-open with one-line tooltips. Each took one review round. The slow suite passed on the final E2.5 tree (run by its builder under the lock). From E2.5 on, the plan runs in lanes (see evolution-plan.md, "Parallel lanes"); lane C needed no change.
 
+Note: the Phase 6 plan amendment ("Add Phase 6: a first Windows build") landed in the working tree while E3.1's merge was being staged, so it is part of merge commit 8dc83cf rather than a commit of its own. History wasn't rewritten, because the docs worktree had already moved to that commit.
+
 Each commit column is filled in by the following work package's commit, since a commit can't name its own hash.
 
 ## Work packages
@@ -24,12 +26,15 @@ Each commit column is filled in by the following work package's commit, since a 
 | E2.3 | Views grouped in the sidebar | sonnet | done | ce36740 | One review round: ⌘1–⌘5 blurs an editing field first so sidebar and content agree, Ctrl+1–5 off a Mac, the list stays reachable by Tab, Live checked in the web interface, "tab" wording swept to "view". The old Package actions sit under the views as "Actions". |
 | E2.4 | A verdict at the top of Findings | haiku | done | 3e5f348 | One review round: an empty milestone list no longer reads "Ran through", the banner has no live-region role, the guide says the banner is Problem, Warning or Good. `runVerdict` never returns `info` (an info finding counts as ok). The verdict reaches the UI through the run summary. Banner checked by text, not by eye. |
 | E2.5 | Drop a package on the window; short tooltips | haiku | done | 11ee98a | One review round: no drop while a dialog is open, load errors show in the status, the real path is checked, the first .zip of several opens, the overlay has role status. The desktop drop of good.zip is tested through `open-path`, because a File built in the page has no path. Long tooltip text moved into the user guide's "The settings, in full". |
-| E3.1 | Split the user guide; docs link check | haiku | done | 32fb0fa | Lane B. One Sonnet accuracy review round (Save report at the bottom, no Compare-view button, one findings list, a missing index link, anchors, and the link check also requires panel-openable targets from guide pages). Eight pages of 54–113 lines. scripts/package.js now packages docs/guide/. Merged into evolve with E2.5's drop paragraph carried into getting-started.md. |
-| E3.2 | Docs search, contents and context help | sonnet | todo | | |
+| E3.1 | Split the user guide; docs link check | haiku | done | 32fb0fa | Lane B. One Sonnet accuracy review round (Save report at the bottom, no Compare-view button, one findings list, a missing index link, anchors, and the link check also requires panel-openable targets from guide pages). Eight pages of 54–113 lines. scripts/package.js now packages docs/guide/. Merged into evolve as 8dc83cf with E2.5's drop paragraph carried into getting-started.md; the slow suite passed on the merge. |
+| E3.2 | Docs search, contents and context help | sonnet | in progress | | Lane B. |
 | E3.3 | Screenshots by script; images in the docs panel | haiku | todo | | |
 | E3.4 | Light, dark or follow the system | sonnet | todo | | |
-| E4.1 | The live view in the desktop app, with coordinates | sonnet | todo | | |
+| E4.1 | The live view in the desktop app, with coordinates | sonnet | done | | Lane A. Two review rounds. Round 2 traced a slow-suite drill-down failure that also happens without E4.1 (about 1 in 5 forced-trace runs): requests are stamped when the recorder handles them, a few ms after the decision they caused, so `requestFrom` now allows 100 ms of skew. A macro wait that times out now reports the timeout, not the last check's time. The slow suite passed twice in a row. |
 | E4.2 | The macro editor | sonnet | todo | | |
 | E5.1 | CLI, web, Alfred and Concierge in step | sonnet | todo | | Lane C (Concierge) done with no change: the module has no macro field (see decisions.md). The rest waits for Phase 5. |
 | E5.2 | Documentation pass | haiku | todo | | |
 | E5.3 | Final check and release build | sonnet | todo | | |
+| E6.1 | Paths, data folder and shortcuts that work anywhere | sonnet | todo | | |
+| E6.2 | A Windows build | sonnet | todo | | |
+| E6.3 | Try it on Windows, or leave it ready to try | haiku | todo | | |
