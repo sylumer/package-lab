@@ -1,6 +1,6 @@
 // The test LMS. On host.html it makes the SCORM API objects the launch asks for, then frames the content (through
-// empty LMS frames, wrap.html#n, for depth) or opens it in a window. API calls go to the recorder through __labReport.
-// wrap.html loads this too: wrap.html#n is an LMS frame n frames above the content, which frames the next one down.
+// empty LMS frames, wrap.html?n#n, for depth) or opens it in a window. API calls go to the recorder through __labReport.
+// wrap.html loads this too: wrap.html?n#n is an LMS frame n frames above the content, which frames the next one down.
 // Where the API goes, and when, follows the run's LMS profile (config.json: apiAt, apiDelay; see src/profiles.js).
 (async () => {
   const cfg = await (await fetch('config.json')).json()
@@ -29,7 +29,7 @@
   }
   // The LMS page that holds the API: this run's host.html is the top window, or the opener of the content's window.
   if (n === (cfg.apiAt ?? 0)) (n ? top.__labPlace ? top : top.opener : window).__labPlace(window)
-  const depth = n ? n - 1 : cfg.depth, next = depth > 0 ? 'wrap.html#' + depth : cfg.launch
+  const depth = n ? n - 1 : cfg.depth, next = depth > 0 ? 'wrap.html?' + depth + '#' + depth : cfg.launch   // a query of its own: a browser won't load a frame whose address (less its #) is an ancestor's, beyond two deep
   if (!n && cfg.opener) {
     document.body.textContent = 'The content is in its own window (window-opener profile).'
     // Opened blank; main.js calls __labPopupReady once the run's recorder is attached to the new window, and only then does it load.

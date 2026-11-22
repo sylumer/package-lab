@@ -171,7 +171,8 @@ The full format is in the [command line reference](../cli.md#macros).
 
 The practice kit includes a macro for this package, `14-next-button-late.macro.json`.
 
-1. Open `14-next-button-late.zip`. In the **Macro** segment, choose **Import…** and pick the macro file. Read it: when
+1. Open `14-next-button-late.zip`, then choose `14-next-button-late.macro.json` here to load it into the **Macro**
+   segment (or **Import…** it from the practice folder). Read it: when
    do the clicks come?
 2. Run it for 10 seconds. In **API**, how far did the lesson location get? Did the clicks do anything?
 3. Use **Live**, or run with **I stop it** and watch the course window. When does **Next** appear?
@@ -184,7 +185,7 @@ Check your answer in [the answers](appendix-a-answers.md#14-next-button-late).
 
 *“The macro works on my screen but not on the test machine.”*
 
-1. Open `15-button-moves.zip` and **Import…** `15-button-moves.macro.json`. Run for 10 seconds. Does it move pages?
+1. Open `15-button-moves.zip` and load `15-button-moves.macro.json`. Run for 10 seconds. Does it move pages?
 2. Set **Device size** to **iPhone** and run again. Read the note about the size. Did the clicks still work? Why?
 3. Now break the tie: **Export…** the macro, open the file in a text editor, change both `"#next"` to `"#nope"`, save
    it and **Import…** it again. Run at **iPhone** size. Did it still work? Read the notes.

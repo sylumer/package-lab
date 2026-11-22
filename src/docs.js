@@ -1,39 +1,18 @@
 import { posix } from 'node:path'
 
-// The user-facing docs bundled with the app and shown in its docs panel; names are paths relative to docs/.
+// The user-facing docs bundled with the app and shown in its Help panel; names are paths relative to docs/.
 // group is the heading the panel's list puts them under; the order here is the order in the list.
 export const DOCS = [
-  { name: 'README.md', title: 'Contents', group: 'Guide' },
-  { name: 'user-guide.md', title: 'User guide', group: 'Guide' },
-  { name: 'guide/getting-started.md', title: 'Getting started', group: 'Guide' },
-  { name: 'guide/reading-a-run.md', title: 'Reading a run', group: 'Guide' },
-  { name: 'guide/run-settings.md', title: 'Run settings', group: 'Guide' },
-  { name: 'guide/views.md', title: 'Views', group: 'Guide' },
-  { name: 'guide/macros.md', title: 'Macros and test saving', group: 'Guide' },
-  { name: 'guide/changing-and-exporting.md', title: 'Changing and exporting', group: 'Guide' },
-  { name: 'guide/experiments-and-servers.md', title: 'Experiments and servers', group: 'Guide' },
-  { name: 'guide/other-formats.md', title: 'cmi5, Tin Can and authoring tools', group: 'Guide' },
-  { name: 'handbook/README.md', title: 'Handbook contents', group: 'Handbook' },
-  { name: 'handbook/01-welcome.md', title: '1. Welcome', group: 'Handbook' },
-  { name: 'handbook/02-elearning-basics.md', title: '2. E-learning in ten minutes', group: 'Handbook' },
-  { name: 'handbook/03-install-and-practice-kit.md', title: '3. Install and practice kit', group: 'Handbook' },
-  { name: 'handbook/04-tour-of-the-window.md', title: '4. A tour of the window', group: 'Handbook' },
-  { name: 'handbook/05-first-run.md', title: '5. Your first run', group: 'Handbook' },
-  { name: 'handbook/06-reading-the-evidence.md', title: '6. Reading the evidence', group: 'Handbook' },
-  { name: 'handbook/07-first-diagnoses.md', title: '7. Your first diagnoses', group: 'Handbook' },
-  { name: 'handbook/08-testing-a-theory.md', title: '8. Testing a theory', group: 'Handbook' },
-  { name: 'handbook/09-macros.md', title: '9. Macros', group: 'Handbook' },
-  { name: 'handbook/10-saving-and-resuming.md', title: '10. Saving and resuming', group: 'Handbook' },
-  { name: 'handbook/11-browsers-devices-and-lmss.md', title: '11. Browsers, devices and LMSs', group: 'Handbook' },
-  { name: 'handbook/12-going-deeper.md', title: '12. Going deeper', group: 'Handbook' },
-  { name: 'handbook/13-delivering-the-answer.md', title: '13. Delivering the answer', group: 'Handbook' },
-  { name: 'handbook/14-working-at-scale.md', title: '14. Working at scale', group: 'Handbook' },
-  { name: 'handbook/15-thinking-like-an-analyst.md', title: '15. Thinking like an analyst', group: 'Handbook' },
-  { name: 'handbook/appendix-a-answers.md', title: 'A. Exercise answers', group: 'Handbook' },
-  { name: 'handbook/appendix-b-quick-reference.md', title: 'B. Quick reference', group: 'Handbook' },
-  { name: 'handbook/appendix-c-troubleshooting.md', title: 'C. Troubleshooting', group: 'Handbook' },
-  { name: 'handbook/glossary.md', title: 'Glossary', group: 'Handbook' },
-  { name: 'handbook/changelog.md', title: 'Change log', group: 'Handbook' },
+  { name: 'README.md', title: 'Contents', group: 'Help' },
+  { name: 'help.md', title: 'Help topics', group: 'Help' },
+  { name: 'help/getting-started.md', title: 'Getting started', group: 'Help' },
+  { name: 'help/reading-a-run.md', title: 'Reading a run', group: 'Help' },
+  { name: 'help/run-settings.md', title: 'Run settings', group: 'Help' },
+  { name: 'help/views.md', title: 'Views', group: 'Help' },
+  { name: 'help/macros.md', title: 'Macros and test saving', group: 'Help' },
+  { name: 'help/changing-and-exporting.md', title: 'Changing and exporting', group: 'Help' },
+  { name: 'help/experiments-and-servers.md', title: 'Experiments and servers', group: 'Help' },
+  { name: 'help/other-formats.md', title: 'cmi5, Tin Can and authoring tools', group: 'Help' },
   { name: 'recipes.md', title: 'Recipes', group: 'Recipes and findings' },
   { name: 'findings.md', title: 'Findings', group: 'Recipes and findings' },
   { name: 'web.md', title: 'Web interface', group: 'Reference' },
@@ -52,6 +31,24 @@ export const DOCS = [
   { name: 'packs/scormdriver.md', title: 'SCORM Driver', group: 'Authoring tools' },
   { name: 'packs/storyline.md', title: 'Storyline', group: 'Authoring tools' },
   { name: 'packs/xyleme.md', title: 'Xyleme', group: 'Authoring tools' },
+]
+
+// The User Guide: a book of its own, read in its own window (src/ui/guide.html), not in the Help panel. part groups the
+// contents; the order here is the reading order, which Previous and Next follow. Names are paths relative to docs/.
+const G = (file, title, part) => ({ name: 'user-guide/' + file, title, part })
+export const GUIDE = [
+  G('README.md', 'About this guide', 'Start here'),
+  G('01-welcome.md', '1. Welcome', 'Part 1: Foundations'), G('02-elearning-basics.md', '2. E-learning in ten minutes', 'Part 1: Foundations'),
+  G('03-install-and-practice-kit.md', '3. Install, and build your practice kit', 'Part 1: Foundations'), G('04-tour-of-the-window.md', '4. A tour of the window', 'Part 1: Foundations'),
+  G('05-first-run.md', '5. Your first run', 'Part 2: Beginner'), G('06-reading-the-evidence.md', '6. Reading the evidence', 'Part 2: Beginner'),
+  G('07-first-diagnoses.md', '7. Your first diagnoses', 'Part 2: Beginner'),
+  G('08-testing-a-theory.md', '8. Testing a theory', 'Part 3: Practitioner'), G('09-macros.md', '9. Macros: playing the learner', 'Part 3: Practitioner'),
+  G('10-saving-and-resuming.md', '10. Saving and resuming', 'Part 3: Practitioner'), G('11-browsers-devices-and-lmss.md', '11. Browsers, devices and LMSs', 'Part 3: Practitioner'),
+  G('12-going-deeper.md', '12. Going deeper', 'Part 4: Expert'), G('13-delivering-the-answer.md', '13. Delivering the answer', 'Part 4: Expert'),
+  G('14-working-at-scale.md', '14. Working at scale', 'Part 4: Expert'), G('15-thinking-like-an-analyst.md', '15. Thinking like an analyst', 'Part 4: Expert'),
+  G('appendix-a-answers.md', 'A. Exercise answers', 'Appendices'), G('appendix-b-quick-reference.md', 'B. Quick reference', 'Appendices'),
+  G('appendix-c-troubleshooting.md', 'C. Troubleshooting Package Lab', 'Appendices'), G('glossary.md', 'Glossary', 'Appendices'),
+  G('changelog.md', 'Change log', 'Appendices'),
 ]
 
 // Images in the docs panel (E3.3): every ![alt](path) becomes a data: URI, so the page's CSP (img-src 'self' data:) stays as it is.

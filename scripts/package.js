@@ -7,7 +7,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DOCS } from '../src/docs.js'
+import { DOCS, GUIDE } from '../src/docs.js'
+import { guideHtml } from './guide-html.js'
 import { zip } from '../src/zip.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url)), build = join(root, 'build')
@@ -33,7 +34,8 @@ if (platform === 'darwin' && !existsSync(join(build, 'icon.icns'))) {
 }
 
 // Drops dist, tests, scripts etc. and every .md file, except the docs shown in the app (docs/ itself and the folders they sit in, such as packs/ and guide/, stay as directories).
-const kept = new Set(DOCS.map(d => '/docs/' + d.name)), keptDirs = new Set(['/docs', ...DOCS.filter(d => d.name.includes('/')).map(d => '/docs/' + d.name.split('/')[0])])
+const shown = [...DOCS, ...GUIDE]   // the Help panel's docs and the User Guide's chapters
+const kept = new Set(shown.map(d => '/docs/' + d.name)), keptDirs = new Set(['/docs', ...shown.filter(d => d.name.includes('/')).map(d => '/docs/' + d.name.split('/')[0])])
 // The guide's light pictures (docs/images/*-light.png, E3.3) are kept too: the panel draws them from the packaged docs.
 const shot = p => p === '/docs/images' || /^\/docs\/images\/[^/]+-light\.png$/.test(p)
 const ignore = p => kept.has(p) || keptDirs.has(p) || shot(p) ? false : /^\/(dist|test|docs|scripts|build|alfred)(\/|$)/.test(p) || /^\/\.git/.test(p) || /\.md$/.test(p)
@@ -73,11 +75,14 @@ if (platform === 'win32') {
   const top = `Package Lab-win32-${arch}`, files = new Map(), walk = d => readdirSync(d, { withFileTypes: true }).forEach(e => e.isSymbolicLink() ? 0 : e.isDirectory() ?   // symlinks (node_modules/.bin) mean nothing on Windows
     walk(join(d, e.name)) : files.set(`${top}/${relative(out, join(d, e.name)).split(sep).join('/')}`, readFileSync(join(d, e.name))))
   walk(out)
+  files.set(`${top}/Package Lab User Guide.html`, Buffer.from(guideHtml()))   // the User Guide to read without the app (scripts/guide-html.js)
   const zipPath = join(root, 'dist', `Package Lab-${version}-win32-${arch}.zip`)
   writeFileSync(zipPath, zip(files))
   console.log(`Built ${out}\nand ${zipPath}`)
   process.exit(0)
 }
+// The User Guide as one file, beside the builds (scripts/guide-html.js).
+writeFileSync(join(root, 'dist', 'Package Lab User Guide.html'), guideHtml())
 const app = join(out, 'Package Lab.app')
 run('codesign', ['--force', '--deep', '--sign', '-', app])
 console.log(`Built ${app}`)

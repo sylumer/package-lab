@@ -32,6 +32,15 @@ Node, Electron, WebKit, the data folder and the web interface's port, and ends w
 | The course needs a sign-in or licence server | Its requests show in **Network**. If they fail, that's a finding in itself: the course depends on a server. Use **Server needs**, or record a working copy where it can sign in |
 | **Trace the code** has no effect, or the code view is empty | The run was in WebKit, which can't be traced, or the script is over 2 MB, built with `eval`, or from another site |
 
+## The User Guide
+
+| Symptom | Cause and cure |
+|---|---|
+| Practice package names aren't buttons, or a button says the package isn't there | Choose **Build practice kit** under the guide's contents first. Names are buttons only in the guide's own window or tab, not on GitHub or in the one-file copy |
+| Choosing a package name seems to do nothing | It opened in the Package Lab window, which may be behind the guide. In the web interface, it opened in the other tab |
+| The guide opens at the wrong place | It reopens where you last read. Choose a chapter in the contents |
+| Your ticks have gone | They're kept per browser (or for the desktop app's guide window): another browser, or cleared site data, starts again |
+
 ## The web interface
 
 | Symptom | Cause and cure |
@@ -51,5 +60,5 @@ Node, Electron, WebKit, the data folder and the web interface's port, and ends w
 
 ## Still stuck
 
-The [user guide](../user-guide.md) covers every view and setting, and the
-[getting started troubleshooting](../guide/getting-started.md#troubleshooting) has the same basics in brief.
+The [Help](../help.md) covers every view and setting, and the
+[getting started troubleshooting](../help/getting-started.md#troubleshooting) has the same basics in brief.

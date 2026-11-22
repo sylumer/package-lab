@@ -1,7 +1,7 @@
 # Recipes: diagnosing a package step by step
 
 Each recipe is one problem you might bring to Package Lab, with the steps to take, in order. Every step uses a feature
-that is described in full elsewhere: the [user guide](user-guide.md) for the desktop app, the [CLI](cli.md) for the
+that is described in full elsewhere: the [help](help.md) for the desktop app, the [CLI](cli.md) for the
 commands, and [Findings](findings.md) for what each message means.
 
 The commands here use the CLI, because each one saves its result to a folder you can keep. The desktop app has the same
@@ -51,7 +51,7 @@ package-lab run course.zip --tool xyleme --wait 20 --out run.json
 ```
 
 Read the **Milestones** line. If the run didn't reach **Looked for the API**, the content never started its LMS code.
-Look at **Got as far as** and **Didn't reach**. In the user guide, the Findings view shows the same.
+Look at **Got as far as** and **Didn't reach**. In the desktop app, the Findings view shows the same.
 
 **3. Find out what it wants from its server (Server needs).** Each request to the server's root or another site is
 listed, and each field the content reads from the answer is named.
@@ -354,4 +354,4 @@ When you have a diagnosis, send the author or the vendor a report without the co
 package-lab report course.zip --run --wait 20 --redact --out report.html
 ```
 
-The redaction rules and what they keep are in the [user guide](guide/changing-and-exporting.md#sending-a-report-without-the-course-content).
+The redaction rules and what they keep are in the [help](help/changing-and-exporting.md#sending-a-report-without-the-course-content).

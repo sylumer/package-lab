@@ -8,7 +8,7 @@ Every finding Package Lab can report, grouped by where it comes from. Each has a
 Titles below are as Package Lab shows them, with *italic* parts filled in.
 
 Some findings name an **Autofix**: a mechanical correction Package Lab can make for you when it exports a
-[corrected package](guide/changing-and-exporting.md#exporting-a-corrected-package). They are `manifest-case`, `manifest-not-root`,
+[corrected package](help/changing-and-exporting.md#exporting-a-corrected-package). They are `manifest-case`, `manifest-not-root`,
 `file-missing`, `manifest-version`, `case`, `http-to-https` and `xyleme-player-type`. Everything else needs a person to decide.
 
 The verdict at the top of a report, in the CLI and in the Concierge widget is the first error, or the first warning
@@ -64,7 +64,7 @@ if there are no errors.
 
 ## From the boot path
 
-These come from following everything the launch page loads (see **Boot path** in the [user guide](user-guide.md)).
+These come from following everything the launch page loads (see **Boot path** in the [help](help.md)).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -172,7 +172,7 @@ such marker gets no pack unless you choose one (the **Authoring tool** option, o
 ## From a run: milestones
 
 Every package run has this finding first, whatever else is found. The same steps show as ticks and crosses at the top
-of the Findings view, in the report, and in `run --json`. See [Milestones](guide/reading-a-run.md#milestones) for the ten steps (and the shorter lists for cmi5 and Tin Can runs).
+of the Findings view, in the report, and in `run --json`. See [Milestones](help/reading-a-run.md#milestones) for the ten steps (and the shorter lists for cmi5 and Tin Can runs).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -182,7 +182,7 @@ of the Findings view, in the report, and in `run --json`. See [Milestones](guide
 
 Added to a package run that stopped short of **Wrote data**, when the probe saw something the content was still waiting
 for. It sits under the blank-page and loading-screen findings when there is one, and with the warnings otherwise.
-See [Why it stalled](guide/experiments-and-servers.md#why-it-stalled).
+See [Why it stalled](help/experiments-and-servers.md#why-it-stalled).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -220,9 +220,9 @@ SCORM API) are not made for them. These come from the course file:
 
 ## From a cmi5 or Tin Can run: the LRS
 
-A run of a cmi5 or Tin Can package is given a local LRS (see [the xAPI view](guide/other-formats.md#the-xapi-view)), and the
+A run of a cmi5 or Tin Can package is given a local LRS (see [the xAPI view](help/other-formats.md#the-xapi-view)), and the
 content's statements are checked as they arrive. These findings come from what the LRS recorded. The
-[milestones](guide/reading-a-run.md#milestones) of these runs follow the statements instead of the SCORM API: for cmi5 *Fetched the
+[milestones](help/reading-a-run.md#milestones) of these runs follow the statements instead of the SCORM API: for cmi5 *Fetched the
 auth token*, *Initialized*, *Completed, passed or failed*, *Terminated*; for Tin Can *Sent a statement* and *Sent a
 completion statement*. "The content never looked for the SCORM API" and the SCORM API findings are not made.
 
@@ -273,7 +273,7 @@ findings say what was wrong.
 ## From a run: changed files
 
 Added to a run that used changed files (overrides), after the milestones note. See
-[Changing files](guide/changing-and-exporting.md#changing-files-and-running-again).
+[Changing files](help/changing-and-exporting.md#changing-files-and-running-again).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -283,7 +283,7 @@ Added to a run that used changed files (overrides), after the milestones note. S
 ## From a run: pins and answers
 
 Added to a package run that used pins or responses. See
-[Pins and answers](guide/changing-and-exporting.md#pins-and-answers).
+[Pins and answers](help/changing-and-exporting.md#pins-and-answers).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -308,7 +308,7 @@ WebKit; to see which ones differ from Chromium, run the **browsers** experiment 
 
 ## From a run: tracing
 
-Added to a package run with **Trace the code** on (`--trace`). See [Tracing](guide/experiments-and-servers.md#tracing-the-code).
+Added to a package run with **Trace the code** on (`--trace`). See [Tracing](help/experiments-and-servers.md#tracing-the-code).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -339,7 +339,7 @@ Only when a macro was played (`--macro`, or the macro in the options). See [Macr
 
 Only after **Test saving** (the Test saving view) or `package-lab cycle`. The first run plays the macro and then leaves the
 way a learner closing the window does; the second run resumes from the data the first left. See
-[Testing saving](guide/macros.md#test-saving). When the first finding is an error, the
+[Testing saving](help/macros.md#test-saving). When the first finding is an error, the
 checks that need the second run are skipped.
 
 | Finding | Severity | Meaning | What to try |
@@ -357,7 +357,7 @@ checks that need the second run are skipped.
 ## From a discovery
 
 Only after **Discover** on the Server needs view, or `package-lab discover`. See
-[What the content wants from its server](guide/experiments-and-servers.md#server-needs).
+[What the content wants from its server](help/experiments-and-servers.md#server-needs).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|
@@ -368,7 +368,7 @@ Only after **Discover** on the Server needs view, or `package-lab discover`. See
 
 ## From a drill-down
 
-Only after **Drill down** on the Drill-down view, or `package-lab drill`. See [Why it stopped](guide/experiments-and-servers.md#drill-down).
+Only after **Drill down** on the Drill-down view, or `package-lab drill`. See [Why it stopped](help/experiments-and-servers.md#drill-down).
 
 | Finding | Severity | Meaning | What to try |
 |---|---|---|---|

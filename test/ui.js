@@ -16,10 +16,10 @@ let app = null, win = null, work = null
 export const errors = []   // uncaught errors from any window this file opened
 const dir = () => work ??= mkdtempSync(join(tmpdir(), 'package-lab-ui-'))
 
-// The `good` fixture, built the way test/test.js builds it: test/fixtures/base, zipped.
+// The `good` fixture, built the way test/test.js builds it: src/sample, zipped.
 export function goodZip() {
   const d = join(dir(), 'good')
-  cpSync(join(root, 'test', 'fixtures', 'base'), d, { recursive: true })
+  cpSync(join(root, 'src', 'sample'), d, { recursive: true })
   execFileSync('zip', ['-qr', join(dir(), 'good.zip'), '.'], { cwd: d })
   return join(dir(), 'good.zip')
 }
@@ -167,27 +167,39 @@ async function checks() {
   await win.locator('#docs:not([hidden])').waitFor()
   await win.waitForFunction(() => document.querySelector('#doc-body').innerText.length > 200)   // the user guide has loaded
   // The document list is under its four groups (E3.1), and Getting started opens from it.
-  assert.deepEqual(await win.locator('#doc-pick optgroup').evaluateAll(gs => gs.map(g => g.label)), ['Guide', 'Recipes and findings', 'Reference', 'Authoring tools'], 'help: the list shows the four groups')
+  assert.deepEqual(await win.locator('#doc-pick optgroup').evaluateAll(gs => gs.map(g => g.label)), ['Help', 'Recipes and findings', 'Reference', 'Authoring tools'], 'help: the list shows the four groups')
   await win.locator('#doc-pick').selectOption({ label: 'Getting started' })
-  await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'guide/getting-started.md' && document.querySelector('#doc-body h1')?.innerText === 'Getting started')
+  await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'help/getting-started.md' && document.querySelector('#doc-body h1')?.innerText === 'Getting started')
   console.log('ui: help groups and getting started ok')
   // E3.2: search finds Run settings; the Storage ⓘ opens Run settings at Storage; the contents list the page's headings.
   await win.locator('#doc-search').fill('partitioned')
   await win.locator('#doc-results button', { hasText: 'Run settings' }).first().waitFor()
   await win.locator('#doc-results button', { hasText: 'Run settings' }).first().click()
-  await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'guide/run-settings.md')
+  await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'help/run-settings.md')
   assert.ok(await win.locator('#doc-toc li').count() > 3, 'help: On this page lists the headings')
   await win.getByRole('button', { name: 'Close the inspector' }).click()
   await win.locator('#inspector[hidden]').waitFor({ state: 'attached' })
   await win.getByRole('button', { name: 'Inspector', exact: true }).click()
   await win.getByRole('tab', { name: 'Settings' }).click()
   await win.getByRole('button', { name: 'Help: Storage' }).click()
-  await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'guide/run-settings.md' && document.querySelector('#doc-body h3')?.innerText === 'Storage')
+  await win.waitForFunction(() => document.querySelector('#doc-pick').value === 'help/run-settings.md' && document.querySelector('#doc-body h3')?.innerText === 'Storage')
   assert.ok(await win.evaluate(() => { const r = document.querySelector('#doc-body h3').getBoundingClientRect(), b = document.querySelector('#doc-body').getBoundingClientRect(); return r.top >= b.top - 1 && r.top < b.bottom }), 'help: Storage is scrolled into view')
   console.log('ui: help search and context help ok')
   await win.getByRole('button', { name: 'Close the inspector' }).click()
   await win.locator('#inspector[hidden]').waitFor({ state: 'attached' })   // Close shuts the inspector, Help being one of its segments
   console.log('ui: help panel ok')
+
+  // The User Guide is a window of its own: the Help panel's User Guide button opens it, with its contents and a chapter.
+  await win.getByRole('button', { name: 'Help', exact: true }).click()
+  const [guideWin] = await Promise.all([app.waitForEvent('window'), win.locator('#doc-guide').click()])
+  await guideWin.waitForFunction(() => document.querySelectorAll('#toc button').length > 15 && document.querySelector('#page h1')?.innerText)
+  assert.equal(await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find(i => i.role === 'help').submenu.items[0].label), 'User Guide', 'the Help menu starts with User Guide')
+  await guideWin.locator('#toc button', { hasText: '9. Macros' }).click()
+  await guideWin.waitForFunction(() => document.querySelector('#page h1')?.innerText === '9. Macros: playing the learner' && document.querySelectorAll('#page button.practice').length > 3)
+  assert.equal(await guideWin.locator('#next').innerText(), '10. Saving and resuming →', 'guide: Next leads to the next chapter')
+  await guideWin.close()
+  await win.getByRole('button', { name: 'Close the inspector' }).click()
+  console.log('ui: user guide window ok')
 
   assert.equal(await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items[0].submenu.items.find(i => i.label === 'Settings…').accelerator), 'CmdOrCtrl+,', 'Settings… is ⌘,')
   await menu('Settings…')

@@ -157,8 +157,7 @@ open that run. Each run lasts as long as **Stop after** (10 s if it says *I stop
    with what you proved by hand?
 2. Run the **standard** experiment on `01-works.zip`. Which variants get less far than the default, and why would
    you expect the API ones to? Which frame variants make no difference, and what does that tell you about how far up
-   its `scorm.js` searches? (One variant, **depth 3**, gets nowhere at all in Package Lab 0.3.0. That's a known
-   issue in Package Lab, not in the course: see the [change log](changelog.md#known-issues).)
+   its `scorm.js` searches?
 
 ## Keeping track
 

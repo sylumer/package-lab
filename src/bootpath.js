@@ -112,7 +112,10 @@ export function globals(text, name = '') {
     const d = /^(?:var|let|const|function\*?|class|async\s+function)\s+([A-Za-z_$][\w$]*)/.exec(l)
     if (d) defs.add(d[1])
     if (!/^[A-Za-z_$(]/.test(l) || /^(function|class|async\s+function)\b/.test(l)) return
-    for (const u of l.replace(/^(?:var|let|const)\s+[\w$]+\s*=/, '').replace(/(["'`])(?:\\.|(?!\1).)*\1/g, '""').matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*(?=[.(\[])/g))
+    // A function written on the same line (a listener, a callback) runs later: only what comes before it runs now. An
+    // IIFE, a line starting with “(”, runs at once, so it is read whole.
+    const now = l.startsWith('(') ? l : l.replace(/\bfunction\b[\s\S]*|(?:\([^()]*\)|\b[\w$]+)\s*=>[\s\S]*/, '')
+    for (const u of now.replace(/^(?:var|let|const)\s+[\w$]+\s*=/, '').replace(/(["'`])(?:\\.|(?!\1).)*\1/g, '""').matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*(?=[.(\[])/g))
       if (!uses.has(u[1])) uses.set(u[1], i + 1)
   })
   return { defs, uses, minified }

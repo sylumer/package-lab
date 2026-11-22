@@ -118,8 +118,8 @@ which one mattered. That is the one-change rule again.
 
 1. Run it with the defaults. Does it work?
 2. Run the **lms** experiment. Which profiles get less far? Click one and read its findings.
-3. One of the failing rows, **scorm-cloud**, comes with a finding that blames blocked storage. Is that the cause here?
-   (Look at what that profile changes besides cookies, and at the other failing profiles.)
+3. One of the failing rows, **scorm-cloud**, also blocks storage. Read its finding: does Package Lab blame storage?
+   Why not?
 4. Find the one setting the failing profiles share. Test it on its own: profile **generic**, **Frame depth** 1, and
    run. Then run the **frames** experiment.
 5. Open **Lookups** for a failing run. How many windows did the course look at before it gave up? In `scorm.js`, find

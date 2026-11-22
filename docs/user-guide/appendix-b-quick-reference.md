@@ -1,6 +1,6 @@
 # Appendix B: Quick reference
 
-The handbook on one page: keep it beside you while you work.
+The guide on one page: keep it beside you while you work.
 
 ## The method
 
@@ -68,7 +68,8 @@ failed, terminated. Tin Can runs: the first three, sent a statement, sent a comp
 | ⌥⌘I | Show or hide the inspector |
 | ⌘1 to ⌘5 | Jump to a view group |
 | ↑ ↓ | Move through the views |
-| ⇧⌘H | Docs |
+| ⇧⌘H | Help |
+| ⇧⌘G | User Guide |
 | ⌘, | Package Lab's settings |
 
 On Windows, Ctrl replaces ⌘ and Alt replaces ⌥.

@@ -88,7 +88,7 @@ The three severities have other names outside the window, and you'll meet both:
 | **Warning**: it may stop it working, or has a side effect worth knowing | **warning** (`WARNING`) |
 | **Note**: context | **info** (`INFO`) |
 
-This handbook says *Problem* when you're in the window, and *error* when it quotes the command line.
+This guide says *Problem* when you're in the window, and *error* when it quotes the command line.
 
 ## Step 5: see what a timed run says
 

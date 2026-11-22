@@ -69,7 +69,7 @@ All of them drive the same main process (`src/main.js`) and the same findings:
   Tools). An inspector on the right has three segments: Settings (the run's launch options), Macro (the macro editor)
   and Help (the docs). The views are Findings, Timeline, Boot path, Files, Package, API, xAPI, Network, Errors, Console,
   Frames, Lookups, Scripts, Execution, Drill-down, Experiments, Compare, Package diff, Folder check, Test saving, Server
-  needs and Live. [The user guide](docs/user-guide.md) covers each one.
+  needs and Live. [The user guide](docs/help.md) covers each one.
 - **Web interface** (`package-lab serve`): the same interface over HTTP with a token. Its Live view streams the running
   course and sends clicks and keys back, with the coordinates bar. For use from other devices. Its Settings has only
   the appearance, kept in that browser.

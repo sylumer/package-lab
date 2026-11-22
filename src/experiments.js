@@ -32,7 +32,8 @@ export function planVariants({ base, variants = [], dedupe = true }) {
 
 // What an experiment keeps of one finished run (a saved-run object).
 export const runResult = (name, options, run, extra = {}) =>
-  ({ name, options, milestones: run.milestones, counts: runCounts(run.trace), errors: run.findings.filter(f => f.sev === 'error').length, verdict: verdict(run.findings), ...extra })
+  ({ name, options, milestones: run.milestones, counts: runCounts(run.trace), errors: run.findings.filter(f => f.sev === 'error').length, verdict: verdict(run.findings),
+    storageRefused: (run.trace?.probe ?? []).some(p => p.type === 'storage-blocked'), ...extra })
 
 // One row per result; results[0] is the base. progress is against the base.
 export function summarise(results) {
@@ -59,6 +60,17 @@ export function experimentFindings(results) {
     if (storageMode(r.options) !== 'blocked' || storageMode(base.options) === 'blocked') continue
     const p = progress(base, r)
     if (p.better >= 0) continue
+    // A variant that blocks storage and changes other settings too (an LMS profile that blocks cookies) can fail for one of
+    // those. Blame storage only when the run had storage refused, or when storage is all that changed. storageRefused is
+    // undefined for results saved before it existed: those keep the old reading.
+    const diff = settingsDiff(base.options, r.options), onlyStorage = diff.every(d => /^storage:/.test(d))
+    if (r.storageRefused === false && !onlyStorage) {
+      out.push({ sev: 'warn', title: `${r.name} gets less far than the default: ${p.summary.replace(/^got less far: /, '')}`,
+        detail: `With the default settings the run got as far as “${furthest(base.milestones)?.label ?? 'nothing'}”. This variant blocks storage, but the content never used any, so one of the other settings below is the cause.`,
+        evidence: [...p.steps.filter(s => s.a && !s.b).map(s => `Not reached: ${s.label}`), ...diff],
+        fix: 'Change the settings below one at a time to find the one that matters.' })
+      continue
+    }
     out.push({ sev: 'warn', title: 'With storage blocked, the content gets less far',
       detail: `With storage normal the run got as far as “${furthest(base.milestones)?.label ?? 'nothing'}”. With it blocked, as Safari does for content inside another site’s page, it ${p.summary}.`,
       evidence: [...p.steps.filter(s => s.a && !s.b).map(s => `Not reached with storage blocked: ${s.label}`), ...settingsDiff(base.options, r.options)],

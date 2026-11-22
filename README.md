@@ -18,7 +18,7 @@ Everything runs on your Mac. No package content is sent anywhere.
 
 | Interface | Best for | Guide |
 |---|---|---|
-| **Desktop app** | Hands-on debugging: launch, use the course, dig through every view | [User guide](docs/user-guide.md) |
+| **Desktop app** | Hands-on debugging: launch, use the course, dig through every view | [User Guide](docs/user-guide/README.md) to learn it, [Help](docs/help.md) while you use it |
 | **Command line** (`package-lab`) | Quick checks, scripted runs, reports, automation | [CLI](docs/cli.md) |
 | **Web interface** | The full app from another computer, iPad or phone, with a live view of the course | [Web interface](docs/web.md) |
 | **Alfred** | Opening, checking or running a package straight from Alfred or Finder | [Alfred](docs/alfred.md) |
@@ -152,7 +152,8 @@ This starts the web interface. See [Web interface](docs/web.md) for reaching it 
 
 ## Documentation
 
-- [User guide](docs/user-guide.md): the desktop app, one task to a page, from getting started to the views and the settings.
+- [User Guide](docs/user-guide/README.md): learn Package Lab in chapters, with practice packages, from SCORM basics to expert diagnosis.
+- [Help](docs/help.md): the desktop app, one task to a page, from getting started to the views and the settings.
 - [Recipes](docs/recipes.md): step-by-step diagnoses, from a package that works in the authoring tool but not in an LMS to
   one that works in Chrome but not in Safari.
 - [Findings](docs/findings.md): every finding, what it means and what to try.

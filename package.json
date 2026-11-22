@@ -12,6 +12,7 @@
     "test:ui": "node test/ui.js",
     "screenshots": "node scripts/screenshots.js",
     "practice": "node scripts/practice-kit.js",
+    "guide": "node scripts/guide-html.js",
     "package": "node scripts/package.js",
     "install-app": "node scripts/package.js --install",
     "alfred": "node scripts/alfred.js"

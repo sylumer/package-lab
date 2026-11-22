@@ -1,17 +1,45 @@
-# The Package Lab Handbook
+# The Package Lab User Guide
 
 From “what is a SCORM package?” to diagnosing a course nobody else can fix.
 
-*Edition 1.1, 22 November 2026, for Package Lab 0.3.0. See the [change log](changelog.md) for what changed, and for
-known issues in the app.*
+*Edition 1.2, 22 November 2026, for Package Lab 0.3.0. See the [change log](changelog.md) for what changed.*
 
-This handbook teaches Package Lab as a course, in order. Each chapter builds on the one before, and most have exercises
+This guide teaches Package Lab as a course, in order. Each chapter builds on the one before, and most have exercises
 on a set of practice packages that you build in [chapter 3](03-install-and-practice-kit.md). Each practice package
 has one fault in it. By the end you will have found every one of them, and you will have the method to find the faults
 in real courses.
 
-The [user guide](../user-guide.md) is the reference: every view, button and setting. This handbook is the path through
-it. When a chapter says “see the reference”, the link goes there.
+## The guide and Help
+
+Package Lab has two kinds of documentation, for two different moments:
+
+- **This User Guide teaches you Package Lab.** Read it in order, do the exercises, and come out able to diagnose a
+  course. It opens in a window of its own: **Help › User Guide** (⇧⌘G), or **User Guide** at the top of the Help
+  panel. In the web interface, it opens in its own tab.
+- **[Help](../help.md) helps while you work.** It's the reference: every view, button and setting, one task to a page,
+  in the inspector's Help panel beside your work. The ⓘ buttons and **What this means** on a finding open it.
+
+The guide links to Help where you need the detail; those pages open in the guide's window, under a bar that leads
+back to your chapter.
+
+## Reading it in the app
+
+The guide's window has the contents on the left, grouped in parts, and **On this page** on the right. Previous and next
+chapter are at the foot of each chapter. **Search the guide** searches every chapter.
+
+- **Exercises.** Each *Try it* and *Exercise* heading has a **Done** box. The contents show how many of each chapter's
+  exercises you've ticked, and the foot of the contents how many in all.
+- **Your place.** The guide reopens at the chapter and the point you were reading.
+- **The practice kit.** **Build practice kit**, under the contents, makes the practice packages in Package Lab's data
+  folder. After that, the name of a practice package in the text (such as `01-works.zip`) is a button: choose it and the
+  package opens in Package Lab. A macro file's name loads that macro into the **Macro** segment.
+
+## Reading it outside the app
+
+- **One file:** every build writes `Package Lab User Guide.html` into `dist/` (and into the Windows zip), and `make
+  guide` writes it on its own. It's the whole guide on one page, with the screenshots, for any browser. To make a PDF,
+  open it and use the browser's **Print**: each chapter starts on a new page.
+- **On GitHub:** the chapters are plain Markdown, and read as they are.
 
 ## Who it is for
 
@@ -23,7 +51,7 @@ covers what you need, and later chapters add the rest as you go.
 
 **Part 1: Foundations.** What the tool is for, and what you need to know first.
 
-1. [Welcome](01-welcome.md): what Package Lab does, how it thinks, and how this handbook works.
+1. [Welcome](01-welcome.md): what Package Lab does, how it thinks, and how this guide works.
 2. [E-learning in ten minutes](02-elearning-basics.md): packages, LMSs, SCORM, the API, the data model, frames and
    origins, cmi5 and xAPI.
 3. [Install, and build your practice kit](03-install-and-practice-kit.md): get Package Lab running and make the
@@ -63,7 +91,7 @@ covers what you need, and later chapters add the rest as you go.
   commands on one page.
 - [Appendix C: Troubleshooting Package Lab](appendix-c-troubleshooting.md): when the tool, not the course, is the
   problem.
-- [Glossary](glossary.md): every term this handbook uses.
+- [Glossary](glossary.md): every term this guide uses.
 - [Change log](changelog.md): what changed in each edition, and known issues.
 
 ## How long it takes
@@ -73,8 +101,8 @@ Part 4 is for dipping into as real courses bring you problems.
 
 ## Making a website or a PDF
 
-The chapters are plain Markdown with relative links and no HTML. They read on GitHub as they are, appear in Package
-Lab's own docs panel (**Help**, under **Handbook**), and combine into one document.
+For a website of your own, or a PDF typeset with Pandoc rather than printed from a browser. The chapters are plain
+Markdown with relative links and no HTML, and combine into one document.
 
 **The order.** This page, the chapters `01` to `15`, the appendices `A` to `C`, the glossary, then the change log.
 File names sort into that order, so a shell glob gives it.
@@ -82,7 +110,7 @@ File names sort into that order, so a shell glob gives it.
 **One HTML file**, with [Pandoc](https://pandoc.org) 3 or later, from this folder:
 
 ```bash
-pandoc --file-scope --lua-filter book.lua README.md [01]*.md appendix-*.md glossary.md changelog.md --toc --embed-resources --standalone --metadata title="The Package Lab Handbook" -o package-lab-handbook.html
+pandoc --file-scope --lua-filter book.lua README.md [01]*.md appendix-*.md glossary.md changelog.md --toc --embed-resources --standalone --metadata title="The Package Lab User Guide" -o package-lab-guide.html
 ```
 
 - `--file-scope` keeps each chapter's headings apart (every chapter has a *Try it* and a *Check yourself*), and turns
@@ -93,8 +121,8 @@ pandoc --file-scope --lua-filter book.lua README.md [01]*.md appendix-*.md gloss
   resolve; on a website that also publishes `docs/`, they do.
 - Don't add `--number-sections`: the chapter titles carry their own numbers.
 
-**A PDF:** the same command with `-o package-lab-handbook.pdf --pdf-engine=xelatex -V mainfont="Helvetica Neue" -V
-monofont=Menlo`. XeLaTeX (from MacTeX or TeX Live) is needed for the ⌘, ⌥, ✓ and curly quotes the handbook uses;
+**A PDF:** the same command with `-o package-lab-guide.pdf --pdf-engine=xelatex -V mainfont="Helvetica Neue" -V
+monofont=Menlo`. XeLaTeX (from MacTeX or TeX Live) is needed for the ⌘, ⌥, ✓ and curly quotes the guide uses;
 the default `pdflatex` fails on them. Some wide tables will run close to the margin.
 
 **A website:** MkDocs, Docusaurus and GitHub Pages take the folder as it is. List the pages in the order above, and

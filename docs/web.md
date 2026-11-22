@@ -83,15 +83,15 @@ By default it listens on `127.0.0.1`, so only this Mac can reach it. Choose one 
 
 ## Using it
 
-Everything works as in the [user guide](user-guide.md), except:
+Everything works as in the [help](help.md), except:
 
 - **Open package…** uploads a `.zip` from the device you are on, with progress shown in the status line. It replaces
   the package open on the Mac for everyone.
-- **Save report…** on the Findings view of a run downloads that run's HTML report, with **Take the course content out** ticked for a redacted one (see the [user guide](guide/changing-and-exporting.md#sending-a-report-without-the-course-content)). The report comes from `POST /api/invoke/report-html`; the web interface has no file names option (that is in the CLI).
-- **Export corrected package…** builds the corrected `.zip` on the Mac and your browser downloads it (it can't use a save dialog). It includes your changed files and the fixes; see the [user guide](guide/changing-and-exporting.md#exporting-a-corrected-package). The package is built in memory, so it needs room for a second copy of the package on the Mac. The address is `GET /api/export` (`?only=case,http-to-https` limits the fixes; `?only=` with nothing after it means none, so only your changed files). Before downloading, the page shows the checklist of fixes that apply, as the desktop app does; with nothing to change it answers with an error that says so.
+- **Save report…** on the Findings view of a run downloads that run's HTML report, with **Take the course content out** ticked for a redacted one (see the [help](help/changing-and-exporting.md#sending-a-report-without-the-course-content)). The report comes from `POST /api/invoke/report-html`; the web interface has no file names option (that is in the CLI).
+- **Export corrected package…** builds the corrected `.zip` on the Mac and your browser downloads it (it can't use a save dialog). It includes your changed files and the fixes; see the [help](help/changing-and-exporting.md#exporting-a-corrected-package). The package is built in memory, so it needs room for a second copy of the package on the Mac. The address is `GET /api/export` (`?only=case,http-to-https` limits the fixes; `?only=` with nothing after it means none, so only your changed files). Before downloading, the page shows the checklist of fixes that apply, as the desktop app does; with nothing to change it answers with an error that says so.
 - **Check a folder…** isn't in the web interface: it needs a folder on the Mac, and the Folder check view is desktop only.
   To check a folder from another device, run `package-lab batch` on the Mac (in Terminal, or over SSH); see [cli.md](cli.md#batch).
-- **Compare packages…** uploads a second `.zip` from the device you are on and shows the **Package diff** view: files and text diffs, manifest, loading path and findings, from the files alone. The second package is compared and not kept: the one open on the Mac stays as it is. See the [user guide](guide/changing-and-exporting.md#comparing-two-packages); to compare how they run, use [`package-lab diff --run`](cli.md#diff).
+- **Compare packages…** uploads a second `.zip` from the device you are on and shows the **Package diff** view: files and text diffs, manifest, loading path and findings, from the files alone. The second package is compared and not kept: the one open on the Mac stays as it is. See the [help](help/changing-and-exporting.md#comparing-two-packages); to compare how they run, use [`package-lab diff --run`](cli.md#diff).
 - **Open saved…** lists the runs saved on the Mac, newest first; click one to open it.
 - **Stop after** is the way to run a course unattended: launch, come back, and read the findings.
 - The **Inspector** (Settings, Macro, Help) and **Copy as CLI command** (Settings, under Advanced) work as in the desktop app. Copying needs the page to be open on
@@ -115,7 +115,7 @@ Everything works as in the [user guide](user-guide.md), except:
 - A **Live** view shows the running course.
 - Joining while a course is running shows it in progress, with the **Live** view selected.
 - **Help** opens the docs in the same panel as the desktop app. The app menu is desktop only.
-- Launch options are remembered in each browser, not on the Mac (see [Testing a theory](guide/run-settings.md#testing-a-theory)).
+- Launch options are remembered in each browser, not on the Mac (see [Testing a theory](help/run-settings.md#testing-a-theory)).
 
 ## Live view
 

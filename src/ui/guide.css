@@ -1,0 +1,69 @@
+/* The User Guide window (guide.html): a book layout. The colour tokens are style.css's, so it matches the app in both themes. */
+:root { color-scheme: light dark; --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d9d9de; --panel: #f5f5f7; --accent: #0a66d8; --good: #1e7d32; --code: #f0f0f3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #3a3a3c; --panel: #2c2c2e; --accent: #4c9bff; --good: #4cd964; --code: #2a2a2d; } }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; --bg: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #3a3a3c; --panel: #2c2c2e; --accent: #4c9bff; --good: #4cd964; --code: #2a2a2d; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button, input { font: inherit; color: inherit; }
+button { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.muted { color: var(--muted); } .small { font-size: 13px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; z-index: 2; background: var(--bg); padding: 4px 8px; }
+
+.book { display: grid; grid-template-columns: 290px minmax(0, 1fr) 220px; height: 100%; }
+#contents { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 16px 14px 24px; font-size: 14px; }
+.brand { font-size: 16px; margin-bottom: 10px; }
+.search input { width: 100%; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+#results { list-style: none; padding: 0; margin: 4px 0 12px; }
+#results button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 4px 2px; }
+#results .snip { display: block; color: var(--muted); font-size: 12px; } #results mark { background: var(--code); color: inherit; font-weight: 600; }
+#toc-wrap > summary { display: none; }
+#toc h2, #kit h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 4px; }
+#toc ol { list-style: none; margin: 0; padding: 0; }
+#toc button { display: flex; gap: 6px; width: 100%; text-align: left; border: 0; background: transparent; padding: 3px 6px; border-radius: 5px; }
+#toc button[aria-current=page] { background: var(--code); font-weight: 600; }
+#toc .t { flex: 1; } #toc .p { color: var(--muted); font-size: 12px; } #toc .p.done { color: var(--good); }
+#kit { border-top: 1px solid var(--line); margin-top: 18px; }
+.kit-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+
+#reader { overflow: auto; display: flex; flex-direction: column; }
+#ref-bar { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 8px 32px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 14px; }
+.doc { width: 100%; max-width: 760px; margin: 0 auto; padding: 24px 32px 16px; flex: 1; }
+.doc:focus { outline: none; }
+.doc h1 { font-size: 30px; line-height: 1.2; margin: 8px 0 16px; }
+.doc h2 { font-size: 21px; margin: 32px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.doc h3 { font-size: 17px; margin: 24px 0 6px; } .doc h4 { font-size: 15px; margin: 18px 0 4px; }
+.doc a { color: var(--accent); }
+.doc code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.doc :not(pre) > code { background: var(--code); padding: 1px 4px; border-radius: 4px; }
+.doc pre { background: var(--code); padding: 10px 12px; border-radius: 8px; overflow-x: auto; }
+.doc table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin: 12px 0; font-size: 14px; }
+.doc th, .doc td { text-align: left; vertical-align: top; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.doc img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+.doc li { margin: 3px 0; }
+.doc .done-box { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-size: 13px; font-weight: 400; color: var(--muted); vertical-align: middle; }
+.doc .done-box input { width: 16px; height: 16px; }
+button.practice { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; padding: 0 6px; border-radius: 4px; background: var(--code); border: 1px solid var(--line); color: var(--accent); }
+button.practice::after { content: " ▸"; }
+#pager { display: flex; justify-content: space-between; gap: 12px; width: 100%; max-width: 760px; margin: 0 auto; padding: 16px 32px 40px; }
+#pager button { max-width: 48%; }
+#pager button:empty { visibility: hidden; }
+
+#onpage { border-left: 1px solid var(--line); overflow: auto; padding: 24px 14px; font-size: 13px; }
+#onpage h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 6px; }
+#onpage ul { list-style: none; padding: 0; margin: 0; } #onpage li { margin: 3px 0; } #onpage .l3 { padding-left: 12px; }
+#onpage a { color: var(--fg); text-decoration: none; } #onpage a:hover { color: var(--accent); }
+
+@media (max-width: 1100px) { .book { grid-template-columns: 260px minmax(0, 1fr); } #onpage { display: none; } }
+@media (max-width: 720px) {
+  .book { display: block; height: auto; } #contents { border-right: 0; border-bottom: 1px solid var(--line); }
+  #toc-wrap > summary { display: list-item; cursor: pointer; font-weight: 600; padding: 6px 0; }
+  .doc { padding: 16px; } #pager { padding: 16px; } #ref-bar { padding: 8px 16px; }
+}
+@media print { #contents, #onpage, #pager, #ref-bar { display: none; } .book { display: block; } .doc { max-width: none; } }

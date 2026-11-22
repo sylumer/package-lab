@@ -1,21 +1,41 @@
 # Change log
 
-What changed in each edition of this handbook, newest first. The handbook describes **Package Lab 0.3.0**. Where the
-app and the handbook disagree, the app is right: please report it.
+What changed in each edition of this guide, newest first. The guide describes **Package Lab 0.3.0**, with the fixes
+listed under edition 1.2. Where the app and the guide disagree, the app is right: please report it.
 
-## Known issues
+## Edition 1.2 (22 November 2026)
 
-Problems in Package Lab 0.3.0 that the exercises run into. The handbook points them out where they appear.
+The guide becomes a book of its own, and the app problems the last edition listed as known issues are fixed.
 
-- **Frame depth 3 doesn't load the course.** A run with **Frame depth** 3 (or the **depth 3** variant of the
-  **frames** and **standard** experiments) ends on a blank page and reaches no milestone, even for a course that works
-  at every other depth. Depths 0 to 2 work. ([Chapter 8](08-testing-a-theory.md#tool-5-experiments))
-- **An experiment can blame the wrong setting.** When an LMS profile changes several settings, the experiment's summary
-  may name blocked storage for a failure that another of the profile's settings caused. For `18-lost-in-some-lmss.zip`,
-  the **scorm-cloud** row is blamed on storage; the cause is the frame depth. ([Chapter 11](11-browsers-devices-and-lmss.md))
-- **“Scripts run before what they need” can be wrong.** The static check reports a name used early in a script even
-  when the use is inside a function that runs later, such as an event listener. `12-waits-forever.zip` shows it.
-  ([Chapter 12](12-going-deeper.md#why-it-stalled))
+**New**
+
+- The User Guide has its own window: **Help › User Guide** (⇧⌘G), or **User Guide** in the Help panel. Contents by
+  part, Previous and Next, On this page, search, a **Done** box on every exercise with progress in the contents, and it
+  reopens where you left off. The web interface has the same at `guide.html`, in a tab of its own.
+- The practice kit builds from the guide's window (**Build practice kit**), on the Mac or Windows, with no Terminal.
+  Practice package names in the text open the package in Package Lab; macro file names load the macro.
+- `Package Lab User Guide.html`: the whole guide in one file, written into `dist/` and the Windows zip by every build,
+  and by `make guide`. Print it from a browser for a PDF.
+
+**Changed**
+
+- Names: this book was the *Handbook* and is now the *User Guide*. What used to be called the user guide (the
+  reference, one task to a page) is now **Help**, and stays in the inspector's Help panel. The Help menu's **Show Docs**
+  is now **Show Help**, and **Help Topics** opens Help's index.
+- About this guide explains the guide and Help, and the guide's window. Chapters 3, 4 and 9 use the window: building
+  the kit, opening packages and loading macros. Windows users can now do every exercise.
+- Appendix C has a section on the guide's window.
+
+**Fixed in Package Lab, and so no longer known issues**
+
+- **Frame depth 3 now loads the course.** The browser refused a third LMS frame with the same address as the frames
+  around it; each LMS frame now has its own. Chapter 8's experiment and its answer are updated.
+- **Experiments no longer blame blocked storage for another setting.** A variant that blocks storage, among other
+  changes, is put down to storage only if the course used storage. Chapter 11's exercise on `18-lost-in-some-lmss.zip`
+  and its answer are updated.
+- **“Scripts run before what they need” no longer fires for code inside a function.** A use inside a listener or a
+  callback written on the same line runs later, so it isn't flagged. `12-waits-forever.zip` has no static findings now;
+  chapter 12's exercise, chapter 15's traps and Appendix A are updated.
 
 ## Edition 1.1 (22 November 2026)
 
@@ -31,9 +51,10 @@ A revision after a full review of the first edition, against the app, its refere
 - Exercises on an API that comes late, failing commits, and comparing two local runs (**R** and **F**).
 - Appendix A now answers every exercise, under *Other exercises*. Appendix B, *Quick reference*, and Appendix C,
   *Troubleshooting Package Lab*.
-- A *Beyond this handbook* section in chapter 15: interactions, SCORM 2004's two statuses, sequencing, the Windows
+- A *Beyond this guide* section in chapter 15: interactions, SCORM 2004's two statuses, sequencing, the Windows
   build.
-- This change log, and `book.lua`, a Pandoc filter for building the handbook as one document.
+- This change log, and `book.lua`, a Pandoc filter for building the guide as one document.
+- A *Known issues* section, for three problems in Package Lab the exercises ran into. All three are fixed in edition 1.2.
 
 **Changed**
 

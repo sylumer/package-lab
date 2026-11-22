@@ -12,7 +12,7 @@ import { launchPlan, runAnalysis, savedRun, serveRequest } from '../src/launch.j
 import { redactRun } from '../src/redact.js'
 import { renderReport, counts } from '../src/report.js'
 
-import { CMI5_XML, TINCAN_XML, V, cmi5Steps, cmi5Package, tincanPackage } from './fixtures/xapi-packages.js'
+import { CMI5_XML, TINCAN_XML, V, cmi5Steps, cmi5Package, tincanPackage } from '../src/practice-xapi.js'
 export { CMI5_XML, TINCAN_XML, cmi5Steps, cmi5Package, tincanPackage }
 
 // ---- Detection and parsing ----

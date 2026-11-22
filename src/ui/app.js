@@ -33,7 +33,7 @@ const GROUPS = [['Summary', ['Findings', 'Timeline']], ['Package', ['Boot path',
   ['Deep dive', ['Execution', 'Drill-down', 'Experiments']], ['Tools', ['Compare', 'Package diff', 'Folder check', 'Test saving', 'Server needs', 'Live']]]
 // The ⓘ beside a heading: data-help names a guide page and heading (E3.2); one listener, near the docs panel, opens it.
 const infoBtn = (name, target) => h('button', { type: 'button', class: 'info', 'data-help': target, 'aria-label': 'Help: ' + name, title: 'Help: ' + name }, h('span', { 'aria-hidden': 'true' }, 'ⓘ'))
-const GROUP_HELP = { Summary: 'guide/views.md#summary', Package: 'guide/views.md#package', 'What happened': 'guide/views.md#what-happened', 'Deep dive': 'guide/views.md#deep-dive', Tools: 'guide/views.md#tools' }
+const GROUP_HELP = { Summary: 'help/views.md#summary', Package: 'help/views.md#package', 'What happened': 'help/views.md#what-happened', 'Deep dive': 'help/views.md#deep-dive', Tools: 'help/views.md#tools' }
 console.assert(TABS.every(t => GROUPS.flat(2).filter(n => n === t).length === 1) && new Set(GROUPS.flatMap(g => g[1])).size === GROUPS.flatMap(g => g[1]).length, 'every view is in exactly one group')
 
 // ---- The code view: every file:line in evidence opens it (src/ui/codeview.js draws it, the code-view handler fills it) ----
@@ -76,7 +76,7 @@ const VIEWS = {
     if (!r) return [h('h3', { class: 'section' }, 'Package'), findingsList(st.pkg?.findings ?? [])]
     const redact = h('input', { type: 'checkbox', id: 'report-redact' })
     const v = r.verdict
-    return [v && h('div', { class: 'verdict ' + v.sev }, icon(SEV[v.sev][0]), h('b', {}, SEV[v.sev][1]), h('span', {}, v.text), infoBtn('the verdict', 'guide/reading-a-run.md#findings')),
+    return [v && h('div', { class: 'verdict ' + v.sev }, icon(SEV[v.sev][0]), h('b', {}, SEV[v.sev][1]), h('span', {}, v.text), infoBtn('the verdict', 'help/reading-a-run.md#findings')),
       h('p', { class: 'muted small' }, `${r.label}. Saved to ${r.file || '(not saved)'}.`),
       r.milestones && h('p', { class: 'milestones' }, r.milestones.map(s => h('span', { class: s.reached ? 'ok' : 'bad', title: s.evidence }, `${s.reached ? '✓' : '✗'} ${s.label}`))),
       findingsList(r.findings),
@@ -651,8 +651,11 @@ function docLink(href) {
   const dir = docs.cur.split('/').slice(0, -1)
   for (const seg of path.split('/')) if (seg === '..') dir.pop(); else if (seg !== '.') dir.push(seg)
   const name = dir.join('/')
+  if (name.startsWith('user-guide/')) return [name, anchor, 'guide']
   return docs.list.some(d => d.name === name) ? [name, anchor] : null
 }
+// The User Guide is a book of its own (guide.html): a window in the desktop app, a tab in the web interface.
+const openGuide = (name, anchor) => lab.web ? window.open('guide.html' + (name ? '#' + encodeURIComponent(name) + (anchor ? '#' + encodeURIComponent(anchor) : '') : ''), 'package-lab-guide') : act(() => lab.invoke('open-guide', { name, anchor }))
 docBody.addEventListener('click', e => {
   const a = e.target.closest('a[href]')
   if (!a) return
@@ -660,7 +663,7 @@ docBody.addEventListener('click', e => {
   const href = a.getAttribute('href')
   if (/^https?:/i.test(href)) return void (lab.web ? window.open(href, '_blank', 'noopener') : window.open(href))
   const to = !/^[a-z][a-z0-9+.-]*:/i.test(href) && docLink(href)
-  if (to) openDoc(...to)
+  if (to?.[2] === 'guide') openGuide(to[0], to[1]); else if (to) openDoc(...to)
 })
 // Search (E3.2): every doc's text is loaded once into docs.text, then searchDocs runs over it.
 let searchTimer
@@ -682,6 +685,9 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-help
 $('doc-pick').onchange = () => openDoc($('doc-pick').value)
 $('doc-back').onclick = () => { const [n, a] = docs.hist.pop(); openDoc(n, a, true) }
 $('doc-close').onclick = () => showInspector(false)
+$('doc-guide').onclick = () => openGuide()
+// A practice macro chosen in the User Guide (guide.js) comes here, to the Macro segment.
+lab.on?.('guide-macro', m => { setMacro({ events: m.events, viewport: m.viewport }); say(`Loaded ${m.file} from the User Guide: ${m.events.length} steps.`) })
 $('inspector-toggle').onclick = toggleInspector
 $('help').onclick = () => !inspEl.hidden && insp.seg === 'help' ? showInspector(false) : openInspector('help')
 $('summary').onclick = () => openInspector('settings')

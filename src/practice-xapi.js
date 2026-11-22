@@ -1,8 +1,8 @@
 // The xAPI practice and test packages: a cmi5 package (the cmi5 sample structure, one AU) and a Tin Can package, built in
-// memory. Shared by test/xapi.js (which asserts on them) and scripts/practice-kit.js (the handbook's practice packages),
+// memory. Shared by test/xapi.js (which asserts on them) and src/practice.js (the User Guide's practice packages),
 // so both describe the same packages. No assertions here.
-import { zip } from '../../src/zip.js'
-import { CATEGORY } from '../../src/cmi5.js'
+import { zip } from './zip.js'
+import { CATEGORY } from './cmi5.js'
 
 // The cmi5 course structure of the spec's sample (one block, one AU), with the AU's launch page.
 export const CMI5_XML = `<?xml version="1.0" encoding="utf-8"?>

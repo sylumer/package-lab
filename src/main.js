@@ -25,7 +25,8 @@ import { bootGraph, bootRun } from './bootpath.js'
 import { runCounts, milestones as stepsReached } from './milestones.js'
 import { startWeb } from './web.js'
 import { DEFAULT_PORT, readSettings, writeSettings } from './settings.js'
-import { DOCS, inlineImages } from './docs.js'
+import { DOCS, GUIDE, inlineImages } from './docs.js'
+import { buildKit, KIT } from './practice.js'
 import { normaliseOptions, cliCommand, packagePath, optionsSummary } from './options.js'
 import { overlayFiles, overrideList, entryBuffer, isText } from './overlay.js'
 import { unified } from './textdiff.js'
@@ -68,7 +69,7 @@ else { const exeDir = dirname(process.execPath), isDir = p => { try { return sta
 // The window's own icon off the Mac (the .exe carries one too); the Windows build keeps build/icon.ico for it.
 const WIN_ICON = process.platform === 'darwin' || !existsSync(join(import.meta.dirname, '..', 'build', 'icon.ico')) ? {} : { icon: join(import.meta.dirname, '..', 'build', 'icon.ico') }
 
-let ui = null, web = null, pkg = null, config = {}, active = null, nextId = 1
+let ui = null, guideWin = null, web = null, pkg = null, config = {}, active = null, nextId = 1
 let served = null   // the files the running content is served from: the package's, with any overrides on top
 let pkgHeaders = {} // the run's LMS profile's headers on package files: its own, and its CSP
 let lrs = null      // a cmi5 or Tin Can run's LRS (src/lrs.js): served at lab://run/__lrs/, and recorded in the trace
@@ -697,8 +698,9 @@ const handlers = {
     applyTheme(); return { settings, free: await portFree(settings.port) }
   },
   docs: () => DOCS,
+  guide: () => GUIDE,
   doc: ({ name }) => {   // name comes from a browser in the web interface: only the bundled docs. Their PNG images come inline (docs.js inlineImages).
-    if (!DOCS.some(d => d.name === name)) throw new Error('No such document.')
+    if (!DOCS.some(d => d.name === name) && !GUIDE.some(d => d.name === name)) throw new Error('No such document.')
     const docs = join(import.meta.dirname, '..', 'docs')
     return inlineImages(readFileSync(join(docs, name), 'utf8'), name, p => { try { return readFileSync(join(docs, p)) } catch { return null } })
   },
@@ -892,9 +894,47 @@ const handlers = {
     if (statSync(r.filePaths[0]).size > 5 * 1024 ** 2) throw new Error('That file is too big to be a macro (over 5 MB).')
     return { ...handlers['macro-parse']({ text: readFileSync(r.filePaths[0], 'utf8') }), file: basename(r.filePaths[0]) }
   },
+  // The User Guide (src/ui/guide.html): its window, and the practice kit it builds into the data folder's practice/.
+  'open-guide': ({ name, anchor } = {}) => { openGuide(name, anchor); return true },
+  'practice-kit': ({ build } = {}) => {
+    const dir = practiceDir(), have = existsSync(dir) ? readdirSync(dir) : []
+    const files = build || !KIT.every(f => have.includes(f)) ? buildKit(dir) : KIT
+    return { dir, files, built: !!build || files !== KIT }
+  },
+  'practice-open': ({ file }) => {   // one of the kit's packages, by name: the guide's “Open” on 08-forgets-its-place.zip
+    if (!KIT.includes(file) || !file.endsWith('.zip')) throw new Error('That isn’t one of the practice packages.')
+    handlers['practice-kit']()
+    const info = loadPackage(join(practiceDir(), file))
+    if (ui && !ui.isDestroyed()) { ui.show(); ui.focus() }
+    return info
+  },
+  'practice-macro': ({ file }) => {   // one of the kit's macro files, loaded into the window's Macro segment
+    if (!KIT.includes(file) || !file.endsWith('.macro.json')) throw new Error('That isn’t one of the practice macros.')
+    handlers['practice-kit']()
+    const m = handlers['macro-parse']({ text: readFileSync(join(practiceDir(), file), 'utf8') })
+    emit('guide-macro', { ...m, file })
+    return { steps: m.events.length }
+  },
+  'practice-folder': () => { handlers['practice-kit'](); return shell.openPath(practiceDir()) },
   'macro-from-run': ({ run }) => { const r = runs.get(+run); if (!r) throw new Error('Choose a run.'); return { events: macroFromTrace(r.trace), viewport: r.trace.window ?? null } },
 }
 for (const [name, fn] of Object.entries(handlers)) ipcMain.handle(name, (_e, arg) => fn(arg ?? {}))
+
+const practiceDir = () => join(app.getPath('userData'), 'practice')
+
+// The User Guide's window: one, reused; name and anchor go to the chapter and heading asked for.
+function openGuide(name, anchor) {
+  if (guideWin && !guideWin.isDestroyed()) {
+    if (name) guideWin.webContents.send('guide-go', { name, anchor })
+    guideWin.show(); guideWin.focus(); return
+  }
+  guideWin = new BrowserWindow({ width: 1180, height: 880, minWidth: 520, minHeight: 400, title: 'Package Lab User Guide', ...WIN_ICON,
+    webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, sandbox: true } })
+  guideWin.loadFile(join(import.meta.dirname, 'ui', 'guide.html'), name ? { hash: encodeURIComponent(name) + (anchor ? '#' + encodeURIComponent(anchor) : '') } : {})
+  guideWin.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' } })
+  guideWin.webContents.on('will-navigate', (e, url) => { if (url.split('#')[0] === guideWin.webContents.getURL().split('#')[0]) return; e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url) })
+  guideWin.on('closed', () => { guideWin = null })
+}
 
 // ---- Start-up ----
 let pendingOpen = argv.find(a => /\.zip$/i.test(a) && !a.startsWith('--')) ?? null
@@ -968,7 +1008,8 @@ function buildMenu() {
       item('Test Saving', 'Shift+CmdOrCtrl+R', 'cycle') ] },
     { role: 'windowMenu' },
     { role: 'help', submenu: [
-      docs('Show Docs', 'README.md', 'Shift+CmdOrCtrl+H'), docs('User Guide', 'user-guide.md'), docs('Recipes', 'recipes.md'), docs('Findings', 'findings.md'),
+      { label: 'User Guide', accelerator: 'Shift+CmdOrCtrl+G', click: () => openGuide() }, { type: 'separator' },
+      docs('Show Help', 'README.md', 'Shift+CmdOrCtrl+H'), docs('Help Topics', 'help.md'), docs('Recipes', 'recipes.md'), docs('Findings', 'findings.md'),
       { type: 'separator' }, { label: 'Show Data Folder', click: () => shell.openPath(app.getPath('userData')) } ] },
   ]))
 }

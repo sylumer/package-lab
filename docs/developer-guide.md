@@ -49,7 +49,9 @@ bin/package-lab.js        CLI
 src/
   main.js               Electron main process: windows, the app menu (buildMenu), lab:// server, runs, IPC and web handlers, headless runs
   preload.cjs           window.lab for the desktop window (IPC)
-  docs.js               The bundled docs: DOCS (name, title, group, file). scripts/package.js copies exactly these into the app; the docs and doc handlers serve only these names
+  docs.js               The bundled docs: DOCS (the Help panel's: name, title, group) and GUIDE (the User Guide's chapters: name, title, part, in reading order). scripts/package.js copies exactly these into the app; the docs, guide and doc handlers serve only these names
+  practice.js           The User Guide's practice kit: buildKit(folder) writes the sample course (src/sample/) with one fault each, plus practice-xapi.js's cmi5 and Tin Can packages and two macro files; KIT lists the names
+  sample/               The sample SCORM 1.2 course (Fire Safety Basics): the base of the test fixtures and of the practice kit
   web.js                HTTP server for the web interface (API, events, live frames, auth)
   settings.js           Settings: DEFAULT_PORT (4880), validPort, readSettings, writeSettings (settings.json in the data folder; readSettings never throws)
   recorder.js           CDP recorder: one per run window or popup; probeSource (the script put into every frame)
@@ -105,14 +107,17 @@ src/
     index.html, style.css, app.js (an ES module)
     codeview.js         The shared code view (classic script, window.CodeView; P4.1)
     bridge.js           window.lab over HTTP when there is no preload (web)
+    guide.html, guide.js, guide.css  The User Guide window (and the web interface's guide.html): contents by part, chapters with Previous and Next, search, Done boxes and the place kept in localStorage (pl.guide.done, pl.guide.place), practice package and macro names as buttons
     markdown.js         The docs panel's Markdown renderer: escapes everything, drops non-http and relative link schemes, GitHub-style heading ids (`slugOf`, exported, is the same slug the link check uses); no dependencies
 scripts/
-  package.js            Builds Package Lab.app (and --install); includes the DOCS from src/docs.js
+  package.js            Builds Package Lab.app (and --install); includes the DOCS and GUIDE from src/docs.js, and writes dist/Package Lab User Guide.html (also into the Windows zip)
+  guide-html.js         make guide: the User Guide as one self-contained HTML file, from the app's renderer
+  practice-kit.js       npm run practice: src/practice.js's kit into ./practice
   icon.cjs              Renders build/icon.svg to build/icon.png
   alfred.js             Builds the Alfred workflow
   alfred-scripts.js     The shell the workflow's script actions run; exported so the tests run it (P5.2)
 build/icon.svg          The app icon
-test/test.js            Tests (including the Markdown renderer); test/fixtures/base is the sample package
+test/test.js            Tests (including the Markdown renderer); src/sample is the sample package
 test/packs.js           Rule pack tests (imported by test.js): synthetic packages and hand-made traces
 test/batch.js            Batch check tests (imported by test.js): CSV cells and the formula guard, summary, runs merged into rows, HTML escaping, folders
 test/xapi.js            cmi5 and xAPI tests (imported by test.js): the cmi5 and Tin Can fixtures, validation, the LRS, cmi5 rules, findings, milestones, redaction; pure
@@ -183,7 +188,7 @@ The rest of the file, in order:
   `live.web > 0` and to the UI window as `ui.webContents.send('live', frame)` while `live.uiOn`; `lab.on('live', fn)`
   receives it (the preload's `on` passes any channel). The `state` handler returns `liveWatchers` so a test can see the count.
 - **`handlers`:** the interfaces' API. They are registered with `ipcMain.handle` and passed to the web server.
-- **App menu:** `buildMenu()` builds the menu bar (desktop only). It has an explicit Package Lab menu, whose **Settings…** (⌘,) sends `{ action: 'settings' }` to the window. Each item sends a `menu` event to the window: `{ action }` for a toolbar button id, or `{ action: 'docs', name }` to open a doc in the docs panel. The Run menu's **Run** and **Stop** both send the toolbar's one Run/Stop button (`#run`): `launch` clicks it only when no run is going and `stop` only when one is. On macOS `createWindow()` adds `MAC_WINDOW` (`hiddenInset` title bar, traffic lights at 14,14, `sidebar` vibrancy, transparent window background); the toolbar is the title bar and `body.mac` leaves 78 px for the lights.
+- **App menu:** `buildMenu()` builds the menu bar (desktop only). It has an explicit Package Lab menu, whose **Settings…** (⌘,) sends `{ action: 'settings' }` to the window. Each item sends a `menu` event to the window: `{ action }` for a toolbar button id, or `{ action: 'docs', name }` to open a doc in the docs panel. **Help › User Guide** (⇧⌘G) calls `openGuide()`, which opens or focuses the one guide window (`guideWin`, `src/ui/guide.html`, the same preload) and sends it `guide-go` to change chapter. The Run menu's **Run** and **Stop** both send the toolbar's one Run/Stop button (`#run`): `launch` clicks it only when no run is going and `stop` only when one is. On macOS `createWindow()` adds `MAC_WINDOW` (`hiddenInset` title bar, traffic lights at 14,14, `sidebar` vibrancy, transparent window background); the toolbar is the title bar and `body.mac` leaves 78 px for the lights.
 - **Accent colour:** `ipcMain.handle('accent')` returns `systemPreferences.getAccentColor()` as `#rrggbb` (`''` where there is none). `preload.cjs` exposes it as `lab.accent()` and `lab.onAccent(fn)`, which hears the `accent` message main sends on `accent-color-changed`. `app.js` sets `--accent` on the root from both; the web interface has neither, so it keeps the CSS default. Developer Tools is ⇧⌥⌘I (⌥⌘I is Show Inspector). Never detect Electron by user agent: use `lab.web` or check for `lab.accent`.
 - **Appearance (E3.4):** `settings.json` has `theme` (`system`, `light` or `dark`; `THEMES`, `validTheme`; `readSettings` gives `system` for anything else and `writeSettings` refuses it, naming the three). `applyTheme()` in `main.js` sets `nativeTheme.themeSource` at startup and from `settings-set` (`{ theme }`; `port` is optional now); `PACKAGE_LAB_THEME` (the screenshots) wins. That would also change `prefers-color-scheme` in run windows, so while `themeSource` isn't `system`, `courseDark()` gives the real system appearance (`AppleInterfaceStyle` on macOS, read at startup elsewhere) and the `Recorder` (option `dark`; `setDark` for a change during a run, also on `AppleInterfaceThemeChangedNotification`) sends `Emulation.setEmulatedMedia` to every session after the device size and user agent. `dark: undefined` leaves the window alone. In the UI, `app.js` sets `<html data-theme>` (removed for System); `style.css` has the dark tokens under `prefers-color-scheme: dark` with `:root:not([data-theme="light"])` and again under `:root[data-theme="dark"]`, and `color-scheme` narrowed by the attribute. The web interface keeps the choice in `localStorage` `pl.theme` and never calls `settings-set`. A new colour token needs a dark value in both places.
 - **Start-up:** handles `open-file` (Finder, `open -a`, Alfred), the single-instance lock, and window creation.
@@ -205,7 +210,7 @@ and a line in the guides. The shape:
   macro: [{ t (ms), type: 'click'|'move'|'wheel'|'key'|'text'|'wait', x, y, dy, key, text, ms, milestone, quiet, timeout }] (see Save and resume) }
 ```
 
-The UI keeps the remembered launch options (the ones listed in the [user guide](guide/run-settings.md#remembered-between-sessions)) in localStorage under `pl.launch`; in the web interface that is per browser. The docs panel's state is under `pl.docs`.
+The UI keeps the remembered launch options (the ones listed in the [help](help/run-settings.md#remembered-between-sessions)) in localStorage under `pl.launch`; in the web interface that is per browser. The docs panel's state is under `pl.docs`.
 
 `launchItem` takes `{ item, cmi?, ...options }`, normalises the options and saves them in `launch.options` (the older
 `launch` fields stay for version 1 readers). The CLI merges the `--options` file and then the flags, normalises, and
@@ -225,7 +230,13 @@ builds the line for **Copy as CLI command**; fields without a flag become `--opt
 | `launch` | `{ item, cmi?, …launch options }` (flat; unknown options throw) | `true` |
 | `options` | `{ item?, …launch options }` | `{ options, command }`: the normalised options and the equivalent `package-lab run` line |
 | `docs` | — | The bundled docs (the entries of `DOCS`) |
-| `doc` | `{ name }` | The Markdown of one bundled doc. Only names in `DOCS` are served; others are refused |
+| `doc` | `{ name }` | The Markdown of one bundled doc. Only names in `DOCS` and `GUIDE` are served; others are refused |
+| `guide` | — | The User Guide's chapters (the entries of `GUIDE`) |
+| `open-guide` | `{ name?, anchor? }` | Opens the User Guide window (desktop only), at a chapter and heading if given |
+| `practice-kit` | `{ build? }` | Builds the practice kit into `<data folder>/practice` if it isn't all there (or always, with `build`); `{ dir, files, built }` |
+| `practice-open` | `{ file }` | Opens one of the kit's packages (a name in `KIT`) in the window |
+| `practice-macro` | `{ file }` | Reads one of the kit's macro files and sends it to the window (`guide-macro` event), for the Macro segment |
+| `practice-folder` | — | Shows the kit's folder (desktop only) |
 | `reference` | `{ url, caught, auto }` | `true` |
 | `files` | — | Every file of the package (and added override paths): `[{ path, size, text, overridden }]` |
 | `file` | `{ path }` | `{ path, size, text, tooBig, overridden, content, original }`. `content` is the text (the override if there is one), `null` for binary or over 1 MB; `original` the unchanged text when overridden |
@@ -365,7 +376,7 @@ because the documents don't say; `sources` are the public URLs used. The `lms` e
 CLI pick it up by themselves. The unit tests check that every preset validates, fits together and has sources (while
 the presets' research is pending, `PRESET_SOURCES_PENDING` in `test/test.js` skips the sources check). A new field
 needs: its value in `GENERIC`, a check in `check`, its use in `launchItem` or `host.js`, a line in the UI's `PF`
-list (`app.js`), and the user guide's table.
+list (`app.js`), and the help pages's table.
 
 **Storage (P2.2).** `options.storage` is `normal`, `blocked` or `partitioned`. `storageMode(options)` (`profiles.js`) is
 the mode a run uses: `normal` means "as the profile says", so a profile whose `cookies` is `third-party-blocked` gives
@@ -396,7 +407,7 @@ A preset is one entry in `PROFILES` (`src/profiles.js`). To add one:
    `doctor --json` (its `profiles`), by the `lms` experiment preset, and by the **Profile** list in the apps (which adds
    "(approximation)" to a preset that has the flag).
 3. Update the text that lists the names by hand: the `--profile` line of the help in `bin/package-lab.js`, the profile
-   paragraph in `docs/guide/run-settings.md`, and the `--profile` line in `docs/cli.md`.
+   paragraph in `docs/help/run-settings.md`, and the `--profile` line in `docs/cli.md`.
 4. Add a unit check if the preset has a combination `launchProfile` must refuse (for example a frameset with a sandbox),
    and run `node test/test.js --unit`.
 
@@ -892,7 +903,7 @@ XHR) is wrapped in a recording Proxy:
   calling it reports `array` or `string` on its owner and returns what the method gives on `[]` or `''`. Any other
   missing key can't be called, as with a real answer.
 
-Limits (also in the user guide): the Proxy is always truthy and `typeof` says `object`, so the first round takes the
+Limits (also in the help pages): the Proxy is always truthy and `typeof` says `object`, so the first round takes the
 true branch of every test on a missing field. Later rounds answer with placeholders, which are real values.
 
 **Reads to a shape.** `shapeReads(trace, match)` takes the `shape` reports for one pattern and adds `at` (`file:line`)
@@ -963,7 +974,7 @@ Edits to text are quoted-string swaps (`swapQuoted`): unquoted attributes and st
 1. Add an entry to `FIXES` in `src/fixes.js`, in the position it should run. `apply` returns `{ files, changes }`, with one plain sentence per change, and no changes when there is nothing to do. Never write outside the Map.
 2. Put `autofix: { id, params }` on the finding or findings it addresses (`rules.js`, `bootpath.js`).
 3. Unit-test it in `test/test.js` (the "Corrected package export" block): does nothing to a good package, fixes a small package built in memory, and the finding is gone after.
-4. Add the id to the table above, to `docs/cli.md` (`fix`) and the user guide, and mark the finding in `docs/findings.md`.
+4. Add the id to the table above, to `docs/cli.md` (`fix`) and the help pages, and mark the finding in `docs/findings.md`.
 
 ## Batch checks (P4.3)
 
@@ -1285,7 +1296,7 @@ Kept: element names, SCORM vocabulary, numbers and times, package paths (or hash
 the package name (unless names are hashed), and messages minus their quotes.
 
 Known limit: unquoted text in a message from the browser, or in a boot-risk line that is not `file:line  code`, is kept.
-The user guide tells the user to check the report before sending it.
+The help tells the user to check the report before sending it.
 
 ## Interfaces
 
@@ -1304,7 +1315,7 @@ interface has no `pathFor`; it uploads the file with `lab.upload`, as Open does.
 “Only .zip packages can be opened” and nothing changes.
 
 **Tooltips (E2.5).** Each `title` is one line of about 80 characters or less. `test/ui.js` fails if any `title` in the
-rendered page is over 100 characters. Longer explanations go in the user guide, under the setting they describe.
+rendered page is over 100 characters. Longer explanations go in the help pages, under the setting they describe.
 
 The page's CSP allows only its own scripts and styles, and `data:` images (for live frames).
 
@@ -1499,10 +1510,10 @@ and no macro in its `launch.options` (`resumeOptions` makes it), and its `trace.
 npm test
 ```
 
-The docs' links are checked in `--unit`: every relative link in a doc listed in `src/docs.js` names an existing file, and every `#anchor` matches a heading there, slugged with `slugOf` from `src/ui/markdown.js`. Links from `docs/guide/` and the user guide index must also point to docs the panel can open. Links inside code blocks are skipped.
+The docs' links are checked in `--unit`: every relative link in a doc listed in `src/docs.js` names an existing file, and every `#anchor` matches a heading there, slugged with `slugOf` from `src/ui/markdown.js`. Docs in `GUIDE` are checked too. Links from `docs/help/`, `docs/help.md` and `docs/user-guide/` must point to docs the app can open (in `DOCS` or `GUIDE`), and no guide chapter is in `DOCS`. Links inside code blocks are skipped.
 
 `npm test` runs `node test/test.js`; add `--unit` for only the unit checks, or `--slow` for the extra end-to-end runs kept out of the default suite to hold it under three minutes (P1.2: `--options-from` repeating an answered run, the options file with `bodyFile`, the full `pinned` run, the `lexical` run; P1.3: `discover` text output with `--request`, `--rounds` and `--out`, `discover` on `hosted` and `good`, discovery through the web handlers; P1.4: the tracing overhead on `good`, and the whole suite again, `--slow` included, with `PACKAGE_LAB_FORCE_TRACE=1` so every run is traced; P1.5: `drill` on `levels` with `--out`, and a drill-down through the web handlers; P2.1: profiles with a delayed popup, a frameset, a late API and a CSP, and the `lms` experiment; P3.1: the corrected `blank` and `mismatch` run (no longer blank, API calls appear), and the corrected package as a web download). Run `node test/test.js --slow` at phase ends. The test builds fixtures from
-`test/fixtures/base` (the toolbox SCORM 1.2 sample) in a temp folder:
+`src/sample` (the toolbox SCORM 1.2 sample) in a temp folder:
 
 The code views (P4.1) have no end-to-end run: `test/codeview.js` is pure and runs in `--unit`. It tests the handler's own function (`codeView`), so the main process is only a thin wrapper, and measures a 2 MB file (opening, then formatting). The DOM part of `src/ui/codeview.js` (drawing, virtual scrolling, search) isn't in the suite; it was checked by hand in a browser against `codeView` output. The 300 ms goal is for opening (the original text with coverage, markers and any map); formatting 2 MB takes about 0.5 s and is a second step.
 
@@ -1593,7 +1604,7 @@ npm run package
 `scripts/package.js` does the following:
 1. If `build/icon.icns` is missing, renders `build/icon.svg` with Electron (`scripts/icon.cjs`), resizes it with
    `sips` and builds the `.icns` with `iconutil`.
-2. Packages with `@electron/packager` for this Mac's architecture into `dist/Package Lab-darwin-<arch>/`. Tests, scripts and build files are left out. Docs are left out too, except those listed in `src/docs.js` and the folders they sit in (`docs/guide/`, `docs/packs/`), which the panel needs. devDependencies are pruned.
+2. Packages with `@electron/packager` for this Mac's architecture into `dist/Package Lab-darwin-<arch>/`. Tests, scripts and build files are left out. Docs are left out too, except those listed in `src/docs.js` and the folders they sit in (`docs/help/`, `docs/packs/`, `docs/user-guide/`), which the Help panel and the User Guide window need. devDependencies are pruned.
 3. Signs ad hoc (`codesign --sign -`), so it runs on this Mac.
 
 **A Windows build (E6.2).** `npm run package -- --platform win32 [--arch x64|arm64]` (`--platform darwin` is the default; `--arch` defaults to the host's) packages with `@electron/packager` without an `icon` (packager would run `rcedit`, which needs Wine off Windows), then:

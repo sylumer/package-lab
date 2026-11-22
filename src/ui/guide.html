@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Package Lab User Guide</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="guide.css">
+</head>
+<body>
+<a class="skip" href="#page">Skip to the chapter</a>
+<div class="book">
+  <nav id="contents" aria-label="Contents">
+    <div class="brand"><b>Package Lab</b> User Guide</div>
+    <div class="search" role="search"><input id="search" type="search" placeholder="Search the guide" aria-label="Search the guide" autocomplete="off"></div>
+    <p id="search-status" class="muted small" aria-live="polite"></p>
+    <ol id="results" hidden></ol>
+    <details id="toc-wrap" open><summary>Contents</summary><div id="toc"></div></details>
+    <section id="kit" aria-labelledby="kit-h">
+      <h2 id="kit-h">Practice kit</h2>
+      <p id="kit-status" class="muted small">The practice packages the exercises use.</p>
+      <div class="kit-buttons"><button id="kit-build" type="button">Build practice kit</button><button id="kit-folder" type="button" class="secondary">Show folder</button></div>
+    </section>
+    <p id="progress" class="muted small"></p>
+  </nav>
+  <main id="reader">
+    <div id="ref-bar" hidden><span id="ref-title"></span><button id="ref-back" type="button" class="secondary">Back to the guide</button></div>
+    <article id="page" class="doc" tabindex="-1"></article>
+    <nav id="pager" aria-label="Chapters"><button id="prev" type="button" class="secondary"></button><button id="next" type="button" class="primary"></button></nav>
+  </main>
+  <aside id="onpage" aria-label="On this page"><h2>On this page</h2><ul id="onpage-list"></ul></aside>
+</div>
+<p id="say" class="sr-only" aria-live="polite"></p>
+<script src="bridge.js"></script>
+<script type="module" src="guide.js"></script>
+</body>
+</html>

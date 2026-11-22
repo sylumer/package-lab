@@ -43,7 +43,7 @@ question with an answer, and a change that makes it get further is a change that
 explains how a course finds its LMS), you test it by changing one setting or one file in Package Lab, never in the real course, and running again.
 If it gets further, the theory was right.
 
-That last idea is what separates an analyst from someone clicking buttons. Most of this handbook is about it.
+That last idea is what separates an analyst from someone clicking buttons. Most of this guide is about it.
 
 ## What Package Lab is not
 
@@ -55,14 +55,14 @@ That last idea is what separates an analyst from someone clicking buttons. Most 
 
 ## The ways to use it
 
-| Way | What it is | Where this handbook covers it |
+| Way | What it is | Where this guide covers it |
 |---|---|---|
-| Desktop app | A Mac (or Windows) window. Most of this handbook uses it | Chapters 4 to 13 |
+| Desktop app | A Mac (or Windows) window. Most of this guide uses it | Chapters 4 to 13 |
 | Command line | `package-lab` commands for quick checks, scripts and reports | [Chapter 14](14-working-at-scale.md) |
 | Web interface | The desktop app in any browser, from another computer, iPad or phone | [Chapter 14](14-working-at-scale.md) |
 | Alfred and Finder | Check or run a package straight from Alfred or a right-click | [Chapter 14](14-working-at-scale.md) |
 
-## How this handbook works
+## How this guide works
 
 Each chapter has:
 
@@ -75,7 +75,7 @@ The practice packages are all made from one small sample course, *Fire Safety Ba
 each. Their names describe the symptom a learner would report, never the cause. Finding the cause is the exercise.
 When you have a diagnosis, check it in [the answers](appendix-a-answers.md).
 
-A note on words: this handbook uses *course*, *package* and *content* almost interchangeably. Strictly, the
+A note on words: this guide uses *course*, *package* and *content* almost interchangeably. Strictly, the
 **package** is the ZIP file, the **course** is what the learner sees, and the **content** is the course's own pages
 and scripts as they run. The [glossary](glossary.md) has every other term.
 

@@ -1,14 +1,13 @@
 # 3. Install, and build your practice kit
 
 **What you'll learn:** how to get Package Lab running, check that your computer has everything it needs, and make the
-practice packages the rest of this handbook uses.
+practice packages the rest of this guide uses.
 
 ## What you need
 
-- A Mac. A portable Windows build exists too (see `docs/windows.md` in the Package Lab folder), and everything from
-  [chapter 4](04-tour-of-the-window.md) on works in it. But it has no Terminal commands or practice kit of its own:
-  build the kit on a Mac, or on any computer with Node.js and the Package Lab folder, and copy the `practice` folder
-  across. This handbook uses Mac keys: on Windows, Ctrl replaces ⌘ and Alt replaces ⌥.
+- A Mac. A portable Windows build exists too (see `docs/windows.md` in the Package Lab folder). It has no Terminal
+  commands, but everything else in this guide works in it, the practice kit included: skip to
+  [Open Package Lab](#open-package-lab). This guide uses Mac keys: on Windows, Ctrl replaces ⌘ and Alt replaces ⌥.
 - [Node.js](https://nodejs.org) 20 or later. To see if you have it, open **Terminal** (in Applications › Utilities)
   and type `node --version`. If it says “command not found”, install Node from its website first.
 - The Package Lab folder. These steps assume it is at `~/github/package-lab`.
@@ -71,17 +70,23 @@ You should see a window that says what Package Lab does and lists common symptom
 ## Build the practice kit
 
 The practice packages are all made from one small SCORM 1.2 sample course, *Fire Safety Basics*: four pages and a
-three-question quiz, which bookmarks the learner's page, saves their answers, and records a score. In the Package Lab
-folder:
+three-question quiz, which bookmarks the learner's page, saves their answers, and records a score.
+
+**In the app (Mac or Windows):** open this guide in its own window (**Help › User Guide**, ⇧⌘G) and choose **Build
+practice kit**, under the contents. The packages go in the `practice` folder of Package Lab's data folder, and
+**Show folder** opens it. From then on, every practice package name in the guide's text is a button that opens that
+package in Package Lab. Build the kit again at any time to get fresh copies.
+
+**From Terminal**, if you'd rather have the packages somewhere of your own, in the Package Lab folder:
 
 ```bash
 npm run practice
 ```
 
 It prints `19 practice packages and 2 macros in …/package-lab/practice`. To put them somewhere else, give a folder:
-`node scripts/practice-kit.js ~/Desktop/practice`. Run it again at any time to get fresh copies.
+`node scripts/practice-kit.js ~/Desktop/practice`.
 
-Open the `practice` folder in Finder (`open practice`). These are the packages:
+These are the packages:
 
 | Package | What a learner would report | First used in |
 |---|---|---|
@@ -121,6 +126,7 @@ Package Lab keeps its data in `~/Library/Application Support/Package Lab` (**Hel
 - `runs/`: every run, saved as JSON;
 - `macros/`: macros you save by name;
 - `discoveries/`: the results of **Server needs**;
+- `practice/`: the practice kit, when you build it from the guide;
 - `settings.json`: the app's own settings.
 
 Saved runs hold the course's scripts and the values it stored. Treat them as you would the course itself.

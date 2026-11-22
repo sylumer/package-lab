@@ -1,6 +1,6 @@
 // Tests: unit checks of the pure parts, then (skipped with --unit) end-to-end checks in Electron: the CLI's analyze,
 // run and report on six fixture packages, live input, the web interface, and the Concierge module if it's next to
-// this repo (../concierge/modules/package-lab). Fixtures are built from test/fixtures/base, the sample SCORM 1.2
+// this repo (../concierge/modules/package-lab). Fixtures are built from src/sample, the sample SCORM 1.2
 // package from toolbox. See docs/developer-guide.md.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
@@ -28,7 +28,7 @@ import { diffLines, unified } from '../src/textdiff.js'
 import { markdown, slugOf, headings, searchDocs, keysFor } from '../src/ui/markdown.js'
 import { dataDir, appBinaries, executable, openCommand, installHint, dataOverride, PORTABLE_DIR } from '../src/platform.js'
 import icoWriter from '../scripts/ico.cjs'
-import { DOCS, MAX_IMAGE, inlineImages } from '../src/docs.js'
+import { DOCS, GUIDE, MAX_IMAGE, inlineImages } from '../src/docs.js'
 import { comparePackages, compareFiles, compareManifests, compareBoots, compareFindings, compareBehaviour } from '../src/pkgdiff.js'
 import { isText, entryFor, entryBuffer, overlayFiles, overrideList, overrideFinding, overrideProgressFinding } from '../src/overlay.js'
 import { pinPathProblem, matcher, answerFor, buildAnswer, pinPrefix, userAgentPin, lexicalDeclaration, pinFindings, parsePinFlag, parseAnswerFlag } from '../src/pins.js'
@@ -51,7 +51,7 @@ import './codeview.js'
 import './batch.js'
 import vm from 'node:vm'
 
-const base = fileURLToPath(new URL('./fixtures/base/', import.meta.url)), work = mkdtempSync(join(tmpdir(), 'package-lab-'))
+const base = fileURLToPath(new URL('../src/sample/', import.meta.url)), work = mkdtempSync(join(tmpdir(), 'package-lab-'))
 function fixture(name, edit = () => {}) {
   const dir = join(work, name)
   cpSync(base, dir, { recursive: true })
@@ -267,6 +267,12 @@ assert.ok(bb.some(t => /capitals/.test(t) && /js\/App\.js/.test(t)), 'blank: cas
 assert.ok(bb.some(t => /isn’t in the package/.test(t) && /vendor\/missing\.js/.test(t)), 'blank: missing: ' + bb)
 assert.ok(bb.some(t => /no content of its own/.test(t)), 'blank: empty launch page')
 assert.ok(bootOf(order).risks.some(r => /run before what they need/.test(r.title) && /uses scorm/.test(r.evidence[0])), 'order: load order')
+// A use inside a function on the same line (a listener) runs later, so it isn't “before what it needs”; an IIFE runs at once.
+const orderOf = boot => { const f = unzip(readFileSync(good)); f.set('boot.js', Buffer.from(boot)); f.set('lesson.html', Buffer.from(f.get('lesson.html').toString().replace('<script', '<script src="boot.js"></script><script'))); return bootGraph(f, 'lesson.html').risks.some(r => /run before what they need/.test(r.title)) }
+assert.equal(orderOf("addEventListener('message', function (e) { scorm.start() })\n"), false, 'order: a use inside a listener runs later')
+assert.equal(orderOf("addEventListener('load', () => scorm.start())\n"), false, 'order: a use inside an arrow function runs later')
+assert.equal(orderOf("(function () { scorm.start() })()\n"), true, 'order: a use inside an IIFE runs at once')
+assert.equal(orderOf("scorm.start()\n"), true, 'order: a use at the top level runs at once')
 const lb = bootOf(loader)
 assert.ok(lb.risks.some(r => /config\.json isn’t valid JSON/.test(r.title)), 'loader: bad JSON')
 assert.ok(lb.nodes.some(n => n.path === 'js/next.js' && n.how === 'src'), 'loader: script-loaded script found')
@@ -437,6 +443,10 @@ assert.ok(exSt[0].evidence.includes('Not reached with storage blocked: Looked fo
 assert.match(exSt[0].detail, /got less far/)
 assert.equal(experimentFindings([exRes('default', dflt, 4), exRes('storage blocked', normaliseOptions({ storage: 'blocked' }), 4)])[0].sev, 'info', 'experiments: blocked that makes no difference is no finding')
 assert.equal(experimentFindings([exRes('default', normaliseOptions({ storage: 'blocked' }), 8), exBlocked]).some(f => /storage blocked/.test(f.title)), false, 'experiments: not when the default is blocked too')
+// A profile that blocks cookies and changes the frames too: storage is blamed only if the run had storage refused.
+const exCloud = refused => ({ ...exRes('lms scorm-cloud', normaliseOptions({ profile: 'scorm-cloud' }), 2), storageRefused: refused })
+assert.ok(/^lms scorm-cloud gets less far than the default/.test(experimentFindings([exRes('default', dflt, 8), exCloud(false)])[0].title), 'experiments: a profile that blocks storage, with none used, is not blamed on storage')
+assert.equal(experimentFindings([exRes('default', dflt, 8), exCloud(true)])[0].title, 'With storage blocked, the content gets less far', 'experiments: storage refused in that run: blamed on storage')
 // The browsers preset (P2.3): Chromium against WebKit; the one the default already is is left out.
 assert.deepEqual(planVariants({ base: {}, variants: PRESETS.browsers }).map(p => p.name), ['default', 'browser webkit'], 'experiments: browsers preset')
 assert.deepEqual(planVariants({ base: { browser: 'webkit' }, variants: PRESETS.browsers }).map(p => p.name), ['default', 'browser chromium'], 'experiments: browsers preset from a webkit base')
@@ -1633,8 +1643,8 @@ console.log('settings: unit ok')
   assert.equal(l, '<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>\n<ol><li>one</li><li>two</li></ol>\n', 'markdown: nested and numbered lists')
   const c = markdown('- step\n  ```js\n  <script>x()</script>\n  ```')
   assert.ok(c.includes('<pre><code class="language-js">&lt;script&gt;x()&lt;/script&gt;</code></pre>') && !c.includes('<script>'), 'markdown: fenced code escaped, even inside a list item')
-  const k = markdown('[bad](javascript:alert(1)) [ok](user-guide.md#x) [web](https://a.test/?a=1&b=2)')
-  assert.ok(!k.includes('javascript:') && k.includes('<a href="user-guide.md#x">ok</a>') && k.includes('href="https://a.test/?a=1&amp;b=2"'), 'markdown: unsafe link dropped, safe kept')
+  const k = markdown('[bad](javascript:alert(1)) [ok](help.md#x) [web](https://a.test/?a=1&b=2)')
+  assert.ok(!k.includes('javascript:') && k.includes('<a href="help.md#x">ok</a>') && k.includes('href="https://a.test/?a=1&amp;b=2"'), 'markdown: unsafe link dropped, safe kept')
   assert.equal(markdown('a **b** *c* `<d>`\nnext'), '<p>a <strong>b</strong> <em>c</em> <code>&lt;d&gt;</code> next</p>\n', 'markdown: inline formatting, wrapped lines join')
 }
   assert.ok(markdown('## settings', 'doc-').includes('id="doc-settings"'), 'markdown: heading ids take the prefix')
@@ -1648,7 +1658,7 @@ console.log('settings: unit ok')
 console.log('markdown: unit ok')
 {   // The docs' links (E3.1): every relative link in a doc in DOCS names a file that exists, and every #anchor is a heading there, slugged as the panel slugs them. The guide pages and the index link only to docs the panel can open. Code blocks are not read for links.
   const docsDir = fileURLToPath(new URL('../docs/', import.meta.url))
-  const names = new Set(DOCS.map(d => d.name))
+  const names = new Set([...DOCS, ...GUIDE].map(d => d.name))
   const anchorsOf = file => {
     const seen = {}, out = new Set()
     let fence = false
@@ -1659,8 +1669,10 @@ console.log('markdown: unit ok')
     return out
   }
   const broken = []
-  for (const d of DOCS) {
-    const file = join(docsDir, d.name), inPanel = d.name.startsWith('guide/') || d.name.startsWith('handbook/') || d.name === 'user-guide.md'
+  // Help pages and the User Guide link only to docs the app can open (the Help panel's, or the guide's: guide.js opens both).
+  assert.ok(GUIDE.every(d => d.name.startsWith('user-guide/')) && !DOCS.some(d => d.name.startsWith('user-guide/')), 'docs: the User Guide is apart from the Help panel')
+  for (const d of [...DOCS, ...GUIDE]) {
+    const file = join(docsDir, d.name), inPanel = d.name.startsWith('help/') || d.name.startsWith('user-guide/') || d.name === 'help.md'
     const text = readFileSync(file, 'utf8').replace(/^\s*```[\s\S]*?^\s*```/gm, '')
     for (const [, , href] of text.matchAll(/\[([^\]]+)\]\(([^)\s]+)\)/g)) {
       if (/^[a-z][a-z0-9+.-]*:/i.test(href)) continue   // web addresses and mailto: are not checked here
@@ -1672,7 +1684,7 @@ console.log('markdown: unit ok')
       if (inPanel && target.endsWith('.md') && !names.has(name)) broken.push(`${d.name}: ${href} (not a doc in the panel)`)
     }
   }
-  assert.deepEqual(broken, [], 'docs: every link in DOCS points to a file and a heading that exist, and the guide links only to panel docs')
+  assert.deepEqual(broken, [], 'docs: every link in DOCS and GUIDE points to a file and a heading that exist, and help and the guide link only to docs the app opens')
   // E3.3: the images the guide shows are PNGs in docs/images, each at most 400 KB and 2 MB in all. The link check above covers their paths.
   const imgs = readdirSync(join(docsDir, 'images')), sizes = imgs.map(f => statSync(join(docsDir, 'images', f)).size)
   assert.ok(imgs.every(f => f.endsWith('.png')) && sizes.every(n => n <= MAX_IMAGE) && sizes.reduce((a, b) => a + b, 0) < 2 * 1024 * 1024, 'docs images: PNGs, each at most 400 KB, under 2 MB in all')
@@ -1706,10 +1718,10 @@ console.log('markdown: unit ok')
   const files = { 'images/a.png': png(10), 'images/edge.png': png(MAX_IMAGE), 'images/big.png': png(MAX_IMAGE + 1), 'images/b.jpg': Buffer.from([0xff, 0xd8, 0xff]), 'images/fake.png': Buffer.from('not a png') }
   const read = p => files[p] ?? null, data = b => `data:image/png;base64,${b.toString('base64')}`
   const md = '![A](../images/a.png) ![Edge](../images/edge.png) ![Big](../images/big.png) ![Jpg](../images/b.jpg) ![Fake](../images/fake.png) ![Missing](../images/none.png) ![Web](https://x.test/a.png) ![Up](../../a.png) ![Abs](/etc/a.png)'
-  assert.equal(inlineImages(md, 'guide/page.md', read), `![A](${data(files['images/a.png'])}) ![Edge](${data(files['images/edge.png'])}) Big Jpg Fake Missing Web Up Abs`, 'inlineImages: PNGs up to 400 KB inline, everything else is its alt text')
+  assert.equal(inlineImages(md, 'help/page.md', read), `![A](${data(files['images/a.png'])}) ![Edge](${data(files['images/edge.png'])}) Big Jpg Fake Missing Web Up Abs`, 'inlineImages: PNGs up to 400 KB inline, everything else is its alt text')
   assert.equal(inlineImages('![A](images/a.png)', 'README.md', read), `![A](${data(files['images/a.png'])})`, 'inlineImages: a doc at the top of docs/')
   assert.equal(inlineImages('no images, [a link](x.md)', 'README.md', read), 'no images, [a link](x.md)', 'inlineImages: text without images is unchanged')
-  assert.equal(inlineImages('![W](..\\images\\a.png) ![P](//evil.test/a.png)', 'guide/page.md', read), 'W P', 'inlineImages: a backslash path or a protocol-relative address is alt text')
+  assert.equal(inlineImages('![W](..\\images\\a.png) ![P](//evil.test/a.png)', 'help/page.md', read), 'W P', 'inlineImages: a backslash path or a protocol-relative address is alt text')
   assert.deepEqual(searchDocs([{ name: 'a.md', title: 'A', text: '![Pic](' + data(files['images/a.png']) + ')' }], 'QUJD'), [], 'searchDocs: an inlined image is not searched')
   assert.equal(searchDocs([{ name: 'a.md', title: 'A', text: '![Pic](' + data(files['images/a.png']) + ')' }], 'pic')[0].html, '![<mark>Pic</mark>]()', 'searchDocs: the alt text is searched')
 }
@@ -2155,7 +2167,9 @@ if (!process.argv.includes('--unit')) {
   // The API on the content's parent, two LMS frames down, with the profile's parameters and failing commits; --profile is the base.
   const pOut2 = join(work, 'parent-run.json'), pr = run(good, '--profile', 'moodle', '--profile-file', profFile('parent', { frames: { depth: 2 }, apiWhere: 'parent', commit: 'fail', launchParams: 'id={scoid}&attempt={attempt}' }), '--out', pOut2)
   const prSaved = JSON.parse(readFileSync(pOut2, 'utf8'))
-  assert.ok(calls(pr).includes('LMSInitialize ') && prSaved.trace.probe.some(p => p.type === 'lookup' && p.found && p.frame === 'lab://run/__lab/wrap.html#1'), 'profile: the API is on the content’s parent: ' + calls(pr))
+  assert.ok(calls(pr).includes('LMSInitialize ') && prSaved.trace.probe.some(p => p.type === 'lookup' && p.found && p.frame === 'lab://run/__lab/wrap.html?1#1'), 'profile: the API is on the content’s parent: ' + calls(pr))
+  // Three LMS frames and more: each frame has its own address, or the browser refuses to load the third one inside the others.
+  const d3 = run(good, '--depth', '3'); assert.equal(d3.furthest, 'committed', 'depth 3: the content loads and finds the API: ' + titles(d3))
   assert.ok(pr.api.some(a => a.call === 'LMSCommit' && a.result === 'false' && a.err === 101) && /[?&]id=lesson&attempt=1$/.test(prSaved.launch.url), 'profile: commits fail, parameters filled in: ' + prSaved.launch.url)
   assert.deepEqual(prSaved.launch.options.profile, { base: 'moodle', frames: { depth: 2 }, apiWhere: 'parent', commit: 'fail', launchParams: 'id={scoid}&attempt={attempt}' }, 'profile: saved as given')
   assert.equal(node(['run', good, '--profile', 'nope']).status, 2, 'profile: an unknown preset fails')
@@ -2552,9 +2566,9 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     const invoke = async (name, arg) => { const r = await (await fetch(`${base}/api/invoke/${name}`, { method: 'POST', headers: H, body: JSON.stringify(arg ?? {}) })).json(); if (r.error) throw new Error(r.error); return r.value }
     assert.match(await (await fetch(base + '/', { headers: H })).text(), /bridge\.js/, 'web: UI served')
     // E3.3: the doc handler inlines the guide's PNGs, so a doc comes with no image paths left to fetch.
-    const guide = await invoke('doc', { name: 'guide/getting-started.md' })
+    const guide = await invoke('doc', { name: 'help/getting-started.md' })
     assert.ok(guide.includes('](data:image/png;base64,') && !/\]\(\.\.\/images\//.test(guide), 'web: the doc handler inlines the guide images')
-    const macrosDoc = await invoke('doc', { name: 'guide/macros.md' })
+    const macrosDoc = await invoke('doc', { name: 'help/macros.md' })
     assert.ok(macrosDoc.includes('](data:image/png;base64,'), 'web: a page with images inlines them')
     const up = await (await fetch(base + '/api/upload?name=good.zip', { method: 'POST', headers: H, body: readFileSync(good) })).json()
     assert.equal(up.value.name, 'good.zip', 'web: upload')

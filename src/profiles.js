@@ -128,8 +128,8 @@ export function launchProfile(options = {}) {
 // normal means "as the profile says": a profile whose cookies are third-party-blocked blocks it. Takes normalised options.
 export const storageMode = o => o.storage !== 'normal' ? o.storage : resolveProfile(o.profile).cookies === 'third-party-blocked' ? 'blocked' : 'normal'
 
-// Where the test LMS puts the API: 0 is its own page (host.html); n is the LMS frame wrap.html#n (n frames above the
-// content, counting down: wrap.html#1 is the content's parent).
+// Where the test LMS puts the API: 0 is its own page (host.html); n is the LMS frame wrap.html?n#n (n frames above the
+// content, counting down: wrap.html?1#1 is the content's parent).
 export const apiAt = p => p.apiWhere === 'opener' ? 0 : p.apiWhere === 'parent' ? (p.frames.depth ? 1 : 0) : p.launch === 'popup' ? p.frames.depth : 0
 
 // launchParams with its placeholders filled in (each value URL-encoded).

@@ -54,9 +54,10 @@ The [recipes](../recipes.md) are the long form of each row.
 
 ## Traps
 
-**Static findings are predictions.** `05-error-in-the-console.zip` and `12-waits-forever.zip` both carry a static
-error, “Scripts run before what they need”. In one the error happens and doesn't matter; in the other it doesn't
-happen at all. Severity says how bad it would be, not that it is.
+**Static findings are predictions.** `05-error-in-the-console.zip` carries a static Problem, “Scripts run before what
+they need”. The error does happen, and it doesn't matter: the course starts properly a moment later. Severity says how
+bad a problem would be, not that it is. And the reverse: most of the practice packages have no static findings at all,
+and every one of them is broken.
 
 **A finding's Try: is the commonest fix, not this course's fix.** In `13-keeps-looking.zip` the finding suggests trying
 both APIs. That's right for most courses that show it, and wrong for that one.
@@ -136,7 +137,7 @@ come with a chapter. Three ways to finish:
 
 1. **Cold diagnosis.** Ask someone to rename the practice packages to `a.zip` to `m.zip` without telling you which is
    which. Diagnose them all with the method above, then check against [the answers](appendix-a-answers.md).
-2. **Make a fault.** Open `01-works.zip`, change one file in **Files** to break it in a way this handbook hasn't shown
+2. **Make a fault.** Open `01-works.zip`, change one file in **Files** to break it in a way this guide hasn't shown
    (a typo in an element name in `lesson.js`, `cmi.core.lesson_staus`, say; or `LMSCommit` removed), export the package,
    and give it to a colleague to diagnose. Then do the same with theirs. Before you hand it over, check that your fault
    is findable: run it yourself, and note which milestone, finding or Test saving result shows it. Mark your
@@ -145,9 +146,9 @@ come with a chapter. Three ways to finish:
 3. **A real course.** Take a course that has given your organisation trouble. Follow the method from step 1. Write the
    four-part report. If you can't reproduce it, write that down too, with what you tried: that's evidence as well.
 
-## Beyond this handbook
+## Beyond this guide
 
-Some things an expert meets that this handbook only touches:
+Some things an expert meets that this guide only touches:
 
 - **Interactions and scores.** The sample course records each quiz answer as `cmi.interactions.n.*`, and compares its
   score with the manifest's mastery score (`cmi.student_data.mastery_score`). It also reads `cmi.launch_data`, from the
@@ -164,7 +165,7 @@ Some things an expert meets that this handbook only touches:
 
 - The [recipes](../recipes.md): step by step for the commonest problems.
 - [Findings](../findings.md): every finding, what it means, what to do.
-- The [user guide](../user-guide.md): every view, button and setting.
+- The [Help](../help.md): every view, button and setting.
 - The [command line reference](../cli.md): every command and flag.
 
 ## Check yourself

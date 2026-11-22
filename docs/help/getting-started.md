@@ -1,6 +1,6 @@
 # Getting started
 
-Open a package, run it, and read what went wrong. This takes about five minutes. The rest of the guide is in the [user guide](../user-guide.md) index.
+Open a package, run it, and read what went wrong. This takes about five minutes. The rest of the guide is in the [help](../help.md) index.
 
 ## Install and open
 
@@ -34,7 +34,7 @@ On the desktop, the menu bar has the toolbar's actions and a few more. On Window
 | **File** | **Open Package…** ⌘O, **Open Recent**, **Compare Packages…**, **Check a Folder…**, **Open Saved Run…**, **Record a Working Copy…**, **Export Corrected Package…** ⌘E |
 | **Run** | **Run** ⌘R, **Stop** ⌘., **Record Macro** ⌥⌘R, **Test Saving** ⇧⌘R |
 | **View** | **Show Inspector** ⌥⌘I, **Reload** ⇧⌥⌘R |
-| **Help** | **Show Docs** ⇧⌘H, **User Guide**, **Recipes**, **Findings**, **Show Data Folder** (opens `~/Library/Application Support/Package Lab`) |
+| **Help** | **User Guide** ⇧⌘G (its own window), **Show Help** ⇧⌘H, **Help Topics**, **Recipes**, **Findings**, **Show Data Folder** (opens `~/Library/Application Support/Package Lab`) |
 
 ## The window at a glance
 
@@ -86,9 +86,11 @@ The settings are kept in `settings.json` in the data folder (`~/Library/Applicat
 
 ## The docs panel
 
-**Help** (at the right end of the toolbar, or **Show Docs** in the Help menu) opens the docs in the **Help** segment of the inspector. Choose a doc from the list, which is grouped as Guide, Recipes and findings, Reference and Authoring tools. **Back** returns to the doc you were reading, and **Close** shuts the inspector. Links to other docs open there; web links open in your browser. Package Lab remembers which doc it showed.
+**Help** (at the right end of the toolbar, or **Show Help** in the Help menu) opens the docs in the **Help** segment of the inspector. Choose a doc from the list, which is grouped as Help, Recipes and findings, Reference and Authoring tools. **Back** returns to the doc you were reading, and **Close** shuts the inspector. Links to other docs open there; web links open in your browser. Package Lab remembers which doc it showed.
 
 ![The docs panel in the inspector's Help segment, showing this page](../images/help-light.png)
+
+**User Guide**, at the top of the panel (or **Help › User Guide**, ⇧⌘G), opens the User Guide in a window of its own. Help is for while you work; the [User Guide](../user-guide/README.md) is for learning Package Lab, chapter by chapter, with practice packages and exercises. Links to it from Help open its window.
 
 The **Search the docs** field at the top searches every doc as you type, up to 20 results. Each shows the doc, the heading above the match and the words around it. Click one to open that heading. **On this page** lists the open doc's headings. The small **ⓘ** beside a Settings group, a view group in the sidebar, the Storage setting and the verdict on Findings opens the part of the guide that explains it.
 

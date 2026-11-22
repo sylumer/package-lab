@@ -63,10 +63,10 @@ that runs the suite on a Windows runner once it is pushed.
    them, right-click, Send to, Compressed (zipped) folder, and name it `good.zip`. These are the same files the test
    suite zips as its good package. Note: whether it opens, what the findings say, and any error about file names or paths.
 3. **Record a macro.** On `good.zip`, open **Live**, choose **Record clicks**, click two or three things in the course,
-   then **Save macro** (see [Macros](guide/macros.md)). Run it again. Note: whether the clicks land where you made them.
+   then **Save macro** (see [Macros](help/macros.md)). Run it again. Note: whether the clicks land where you made them.
 4. **Test saving.** Use **Test saving** with that macro set up. It runs the course, plays the macro, then checks that the
-   course saves and resumes (see [Macros](guide/macros.md)). Note: whether it reports success, and where the saved runs go (expected: `%APPDATA%\Package Lab`).
-5. **Settings → Appearance.** Try Light, Dark and System (see [Appearance](guide/run-settings.md#appearance)). Note:
+   course saves and resumes (see [Macros](help/macros.md)). Note: whether it reports success, and where the saved runs go (expected: `%APPDATA%\Package Lab`).
+5. **Settings → Appearance.** Try Light, Dark and System (see [Appearance](help/run-settings.md#appearance)). Note:
    whether the colours and the window frame follow, and whether anything is hard to read.
 6. **The web interface from a phone.** From the repository on the PC, run
    `node bin/package-lab.js serve --host 0.0.0.0`. It prints the PC's network address when it can find one; if the

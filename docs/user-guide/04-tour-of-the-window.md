@@ -82,7 +82,7 @@ corrected package…** ([chapter 13](13-delivering-the-answer.md)).
 - **Settings**: everything the next run will use, in four groups: **LMS**, **Browser and device**, **Recording** and
   **Advanced**. Chapters [8](08-testing-a-theory.md) and [10](11-browsers-devices-and-lmss.md) cover them.
 - **Macro**: the clicks and keys Package Lab plays into the course ([chapter 9](09-macros.md)).
-- **Help**: the docs, including this handbook.
+- **Help**: the docs, including this guide.
 
 ![The inspector's Settings segment, with the LMS group open](../images/settings-light.png)
 
@@ -90,13 +90,20 @@ Drag the inspector's left edge to make it wider. It remembers its width and whic
 
 ## Getting help inside the app
 
-**Help** in the toolbar (or ⇧⌘H) opens the docs in the inspector. You can search every doc as you type, and **On this
-page** lists the headings of the one you're reading. The small **ⓘ** beside a settings group, a view group and the
-verdict opens the part of the guide that explains it, and **What this means** on a finding opens its explanation.
+There are two kinds of help, for two different moments.
+
+**Help**, in the toolbar (or ⇧⌘H), is for while you work. It opens the reference in the inspector, beside the window:
+what each view, button and setting does. You can search it as you type, and **On this page** lists the headings of the
+page you're reading. The small **ⓘ** beside a settings group, a view group and the verdict opens the part of Help that
+explains it, and **What this means** on a finding opens its explanation.
 
 ![The docs panel in the inspector's Help segment](../images/help-light.png)
 
-The docs are inside the app, so they work offline.
+**The User Guide**, which you're reading, is for learning. It has a window of its own (**Help › User Guide**, ⇧⌘G,
+or **User Guide** at the top of the Help panel), so you can keep a chapter open beside Package Lab while you do its
+exercises. See [About this guide](README.md#reading-it-in-the-app) for what its window does.
+
+Both are inside the app, so they work offline.
 
 ## The menus
 
@@ -106,7 +113,7 @@ The docs are inside the app, so they work offline.
 | **File** | Open, Open Recent, Compare Packages, Check a Folder, Open Saved Run, Record a Working Copy, Export Corrected Package (⌘E) |
 | **Run** | Run (⌘R), Stop (⌘.), Record Macro (⌥⌘R), Test Saving (⇧⌘R) |
 | **View** | Show Inspector (⌥⌘I), Reload (⇧⌥⌘R) |
-| **Help** | Show Docs (⇧⌘H), User Guide, Recipes, Findings, Show Data Folder |
+| **Help** | User Guide (⇧⌘G), Show Help (⇧⌘H), Help Topics, Recipes, Findings, Show Data Folder |
 
 ## The shortcuts worth learning now
 
@@ -117,7 +124,8 @@ The docs are inside the app, so they work offline.
 | ⌘. | Stop |
 | ⌥⌘I | Show or hide the inspector |
 | ⌘1 to ⌘5 | Jump to a view group |
-| ⇧⌘H | Docs |
+| ⇧⌘H | Help |
+| ⇧⌘G | User Guide |
 
 ## Check yourself
 

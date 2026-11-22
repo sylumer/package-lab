@@ -137,7 +137,7 @@ call an API object in the page. It sends **statements** (“Learner, Test *compl
 - A **cmi5 package** has a `cmi5.xml`. cmi5 adds rules on top of xAPI for how an LMS launches the course and what
   statements it must send, in what order.
 
-Package Lab handles both, with its own LRS that checks every statement. Most of this handbook uses SCORM, because that
+Package Lab handles both, with its own LRS that checks every statement. Most of this guide uses SCORM, because that
 is what most courses are. [Chapter 15](15-thinking-like-an-analyst.md#cmi5-and-xapi-courses) covers what changes.
 
 ## Check yourself

@@ -171,16 +171,16 @@ the course carries on without it.
 **The fault:** `boot.js` tells its parent window it's ready (`{ type: 'player-ready' }`) and waits for a reply
 (`{ type: 'launch' }`) before it starts the LMS session. That's a handshake with a particular player; no LMS sends it.
 
-**How it shows:** a static Problem, “Scripts on lesson.html run before what they need: boot.js:2 uses scorm as soon as it
-runs”, which is **wrong**: `scorm.start()` on that line is inside the message listener, which would run later, after
-`scorm.js`. The run has no uncaught error. It stops after **Content shown**, with “The content was waiting for: a reply
+**How it shows:** no static findings, no uncaught error and no failed request. `scorm.start()` is on `boot.js:2`,
+inside the message listener, so it would run only when the message came. It stops after **Content shown**, with “The content was waiting for: a reply
 to “player-ready”; a message to arrive (1 listener never ran)”, whose evidence is “boot.js:1 sent “player-ready” to the
 LMS window (origin *): nothing there was listening” and “boot.js:2 listens for a message that never came”.
 
 **The proof:** a pin can't send a message. Change `boot.js` in **Files** so it starts the session once the page has
 loaded, `addEventListener('load', function () { scorm.start() })`, without waiting for the message. Save it as an
 override and run: it finds the API and initialises. (Calling `scorm.start()` at once won't do: `boot.js` runs before
-`scorm.js`, so `scorm` doesn't exist yet. That is the problem the static finding imagined.)
+`scorm.js`, so `scorm` doesn't exist yet: Package Lab's static check would then report “Scripts run before what they
+need”.)
 
 **The fix:** an export that doesn't expect the player's handshake, or an LMS-side wrapper that answers it.
 
@@ -269,10 +269,10 @@ frame between the LMS and the course. Their runs say “The content looked for A
 frames where the LMS hadn't put the API”. The **frames** experiment agrees: depth 1 and 2 fail, a new window works
 (the course also checks its opener).
 
-**The trap:** the experiment's summary for **scorm-cloud** says “With storage blocked, the content gets less far”,
-because that profile also blocks third-party cookies. Here it's wrong: this course uses no storage, and moodle and
-canvas, which block nothing, fail the same way. The one setting they share is the frame depth. When a finding names a
-cause, check it against the other evidence.
+**Storage isn't it:** the **scorm-cloud** profile also blocks third-party cookies, so its row could be blamed on
+storage. Package Lab checks: its finding, “lms scorm-cloud gets less far than the default”, says the variant blocks
+storage but the content never used any, so another of its settings is the cause. Moodle and canvas, which block
+nothing, fail the same way. The one setting they share is the frame depth.
 
 **The fix:** search every parent up to the top window, then the opener, as the SCORM standard's sample code does.
 
@@ -311,8 +311,7 @@ runs only after the JSON is parsed, and the parse threw. (5) The error comes jus
 
 **Chapter 8, experiments.** (1) **api both** and **api 1.2** reach **Committed**; **api 2004** and **api none** make no
 difference. (2) On `01-works.zip`, **api 2004** and **api none** get less far, as they should (the course uses 1.2).
-Depth 1, depth 2 and a new window make no difference: `scorm.js` searches up to 20 parents and the opener. Depth 3 gets
-nowhere, which is a known issue in Package Lab 0.3.0 (see the [change log](changelog.md#known-issues)).
+Depth 1, 2 and 3 and a new window make no difference: `scorm.js` searches up to 20 parents and the opener.
 
 **Chapter 11, two LMS behaviours.** (1) With the API 1 second late, the course stops at **Looked for the API** and says
 “No LMS found”: it looked once, at once. A sturdier course retries for a few seconds. (2) With commits failing, it

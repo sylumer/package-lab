@@ -74,7 +74,7 @@ need Electron. That is either this repo's own (installed by `npm install`) or `/
 
 ## The app's settings as flags
 
-Each setting of the desktop app and the web interface has a flag, so a launch the app shows can be repeated here. **Copy as CLI command** (under Advanced) writes the line for the current settings. The app's own pages are in the [user guide](guide/run-settings.md).
+Each setting of the desktop app and the web interface has a flag, so a launch the app shows can be repeated here. **Copy as CLI command** (under Advanced) writes the line for the current settings. The app's own pages are in the [help](help/run-settings.md).
 
 | App setting | Command line | Notes |
 |---|---|---|
@@ -130,7 +130,7 @@ to it. What differs in the output:
 - the summary line says `cmi5` or `Tin Can (xAPI)`; `analyze --json` has `format` (`scorm`, `cmi5` or `tincan`);
 - the `run` text has an **xAPI** block after the milestones: each statement with its time, who sent it, whether the LRS
   stored or rejected it, a summary, and the problems found in it, then the documents written. The milestones are the
-  [cmi5 or Tin Can ones](guide/other-formats.md#cmi5-and-tin-can-packages);
+  [cmi5 or Tin Can ones](help/other-formats.md#cmi5-and-tin-can-packages);
 - `run --json` has `xapi`: `{ format, endpoint, registration, tokenFetches, calls, statements, documents }`, the LRS record
   of the [developer guide](developer-guide.md#the-lrs-record-tracelrs), and `counts.statements` and `counts.lrsCalls`; the
   saved run (`--out`) holds the same under `trace.lrs`;
@@ -207,7 +207,7 @@ app.
 | `--profile` | `generic` | Hosts the content the way an LMS does: `generic` (Package Lab's own), `moodle`, `scorm-cloud`, `cornerstone`, `successfactors`, `docebo`, `totara`, `blackboard` or `canvas` (see [Profiles](#profiles)) |
 | `--profile-file` | none | A custom profile from a JSON file (see [Profiles](#profiles)). With `--profile` too, that preset is its base unless the file names one |
 | `--tool` | auto | An authoring tool's rule pack to apply whether or not the package shows it (see [analyze](#analyze)) |
-| `--storage` | `normal` | Storage in the content's frames: `blocked` makes `localStorage` and `sessionStorage` throw a `SecurityError`, `document.cookie` read empty and `indexedDB.open` fail, as Safari does for content in another site's page; `partitioned` empties the run window's storage first. With `normal`, a profile whose `cookies` is `third-party-blocked` (`scorm-cloud`) blocks it too. See the [user guide](guide/run-settings.md#browser-and-device). In an options file: `"storage": "blocked"` |
+| `--storage` | `normal` | Storage in the content's frames: `blocked` makes `localStorage` and `sessionStorage` throw a `SecurityError`, `document.cookie` read empty and `indexedDB.open` fail, as Safari does for content in another site's page; `partitioned` empties the run window's storage first. With `normal`, a profile whose `cookies` is `third-party-blocked` (`scorm-cloud`) blocks it too. See the [help](help/run-settings.md#browser-and-device). In an options file: `"storage": "blocked"` |
 | `--browser` | `chromium` | `webkit` runs the content in Safari's engine through Playwright (see [WebKit](#webkit)) |
 | `--viewport` | none | A device size: `iphone`, `ipad`, `android-phone`, or a width and height like `390x844`. The preset's touch, pixel ratio and user agent come with it. With no `--viewport` the window is as it is |
 | `--macro` | none | A JSON file of clicks, keys, typing and waits to play at their times during the run (see [Macros](#macros)). A version 2 file also sets the window size the macro was recorded at, unless `--viewport` is given (the size is printed to standard error). Chromium only. In an options file: `"macro": [ … ]` |
@@ -234,7 +234,7 @@ The options the run used are saved in the run's `launch.options`.
 A profile reproduces how an LMS hosts content: the origin it serves the package from, its frames, how it launches,
 where and when it puts the API, headers on the package's files, how commits behave and its limits. The presets other
 than `generic` are approximations from each LMS's public documentation; see the
-[user guide](guide/run-settings.md#lms) for every field.
+[help](help/run-settings.md#lms) for every field.
 
 `--profile-file` takes a custom profile: any fields, over a preset named in `base` (default `generic`). `frames` and
 `limits` may be partial.
@@ -318,7 +318,7 @@ responses of an options file or `--options-from` run.
 every decision (`if`, `? :`, `&&`, `||`, `??`, `switch`, loop tests) with its result and the values it tested. The
 content behaves as it does without it. The saved run (`--out`) holds the events in `trace.exec`, the table of places
 they refer to in `trace.sites`, and the original files in `trace.sources`; the desktop and web interfaces show them in
-the **Execution** tab. To have the decisions explained, use [`drill`](#drill). See [Tracing the code](guide/experiments-and-servers.md#tracing-the-code) for what it covers, and the
+the **Execution** tab. To have the decisions explained, use [`drill`](#drill). See [Tracing the code](help/experiments-and-servers.md#tracing-the-code) for what it covers, and the
 [developer guide](developer-guide.md#the-execution-trace) for the format. To read the last events from a script:
 
 ```bash
@@ -342,9 +342,9 @@ The saved run has `trace.browser` set to `webkit`. It has no coverage, no caught
 list, so findings that need them say nothing. `--trace` and `--live` aren't available, and so `drill` (which traces) isn't
 either. `--viewport` works in both browsers: a preset (`iphone`, `ipad`, `android-phone`) or `WIDTHxHEIGHT`.
 
-`waitingFor` is what the content was still waiting for at the end (see [Why it stalled](guide/experiments-and-servers.md#why-it-stalled)): `pollers`, `unanswered` messages, `listeners` that never ran, `pending` requests and the `last` code that ran. The same appears as a **The content was waiting for** finding in the text output.
+`waitingFor` is what the content was still waiting for at the end (see [Why it stalled](help/experiments-and-servers.md#why-it-stalled)): `pollers`, `unanswered` messages, `listeners` that never ran, `pending` requests and the `last` code that ran. The same appears as a **The content was waiting for** finding in the text output.
 
-`milestones` lists the ten steps of the SCORM path, each reached or not (see [Milestones](guide/reading-a-run.md#milestones));
+`milestones` lists the ten steps of the SCORM path, each reached or not (see [Milestones](help/reading-a-run.md#milestones));
 `furthest` is the id of the last one reached, or `null`. The text output adds a **Milestones** line with a tick or a
 cross for each step, and what the content was showing at the end (visible elements, any loading indicator, and the
 start of its text), the counts (API calls, requests, failures, uncaught errors), and the run's findings.
@@ -393,7 +393,7 @@ progress goes to standard error.
 [{ "name": "deep frames", "patch": { "depth": 3 } }, { "name": "2004 in a window", "patch": { "expose": "2004", "opener": true } }]
 ```
 
-The table has one row per variant: furthest [milestone](guide/reading-a-run.md#milestones), API calls, errors, the verdict, and
+The table has one row per variant: furthest [milestone](help/reading-a-run.md#milestones), API calls, errors, the verdict, and
 how it compares with the default ("got further: reached *X* (was *Y*)", "no change", …). Below it are the experiment's
 findings (see [From an experiment](findings.md#from-an-experiment)).
 
@@ -419,7 +419,7 @@ path, or `null` without `--out`. Exit status is 0 unless the command fails.
 ## discover
 
 Works out what the content wants from its server, by answering its requests and watching what it reads from the
-answers. See [Server needs](guide/experiments-and-servers.md#server-needs) for how it works and what it can't see. With
+answers. See [Server needs](help/experiments-and-servers.md#server-needs) for how it works and what it can't see. With
 `--out <folder>`, it keeps each round's run and the result as `discovery.json`. The app keeps its results in a `discoveries` folder next to the saved runs.
 
 ```bash
@@ -482,7 +482,7 @@ Exit status is 0 unless the command fails.
 ## drill
 
 Why it stopped: the decisions that led to where the run stopped, each with its values, and where each `undefined`
-came from. See [Why it stopped](guide/experiments-and-servers.md#drill-down) for how it works.
+came from. See [Why it stopped](help/experiments-and-servers.md#drill-down) for how it works.
 
 ```bash
 package-lab drill course.zip [--item n] [--json] [--out folder] [run options]
@@ -533,7 +533,7 @@ Exit status is 0 unless the command fails.
 ## cycle
 
 Tests that progress is saved and resumed, without a person clicking through. See
-[Testing that progress is saved and resumed](guide/macros.md#test-saving).
+[Testing that progress is saved and resumed](help/macros.md#test-saving).
 
 ```bash
 package-lab cycle course.zip [--item n] [--macro macro.json] [--json] [--strict] [--out folder] [run options]
@@ -920,7 +920,7 @@ package-lab settings port <n>
 appearance, which is changed in the app's Settings and not from the command line. `settings port` prints just the
 port, for scripts. `settings port <n>` saves it. The port must be 1024 to 65535; any other value exits with status 1
 and a message. The desktop app's **Package Lab › Settings…**
-does the same ([Settings](guide/getting-started.md#settings)). The web interface uses this port unless `--port` is given.
+does the same ([Settings](help/getting-started.md#settings)). The web interface uses this port unless `--port` is given.
 
 ## completion
 

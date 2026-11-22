@@ -23,10 +23,10 @@ package has a `cmi5.xml`.
 
 **Content origin.** Whether the LMS serves course files from its own domain or another one. See **Origin**.
 
-**Coverage.** Which lines of a script ran in a run. Green ran, red didn't, amber partly.
-
 **Coordinates bar.** The line under the Live view's picture: the pointer's position in pixels and as fractions of the
 window, and the element under it.
+
+**Coverage.** Which lines of a script ran in a run. Green ran, red didn't, amber partly.
 
 **Data model.** The named values a SCORM course reads and writes, such as `cmi.core.lesson_location`.
 
@@ -48,6 +48,9 @@ to try.
 **Frame.** A page shown inside another page. LMSs usually show courses in frames, sometimes several deep.
 
 **Frame depth.** How many frames sit between the LMS's window and the course.
+
+**Help.** Package Lab's reference: what each view, button and setting does, in the inspector's Help panel. For while you
+work, where this User Guide is for learning.
 
 **Item.** An entry in a package's structure that an LMS can launch.
 
@@ -104,11 +107,11 @@ headers, commits and limits.
 
 **Server needs.** A Package Lab tool that works out what the content wants from its server, and a stand-in response.
 
-**Static finding.** A finding from the package's files alone, before anything runs. A prediction, to be confirmed by a
-run.
-
 **Statement.** An xAPI record of something a learner did: an actor, a verb and an object, such as “Learner, Test
 completed Fire Safety”.
+
+**Static finding.** A finding from the package's files alone, before anything runs. A prediction, to be confirmed by a
+run.
 
 **Summary chip.** The label beside **Run** listing every setting that isn't at its default.
 
@@ -120,6 +123,8 @@ in 2004.
 **Tin Can.** The original name of xAPI. A Tin Can package has a `tincan.xml`.
 
 **Tracing.** Recording every function the content's scripts ran and every decision they made, with their values.
+
+**User Guide.** This book: Package Lab taught in chapters with exercises, in a window of its own (**Help › User Guide**).
 
 **Wait.** A macro step that holds the macro until some text appears, a milestone is reached, the network is quiet, or
 a time has passed.

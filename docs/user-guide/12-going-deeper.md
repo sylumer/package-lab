@@ -27,16 +27,15 @@ changed file.
 
 *“No errors anywhere, but nothing is recorded.”*
 
-1. Open it. There's a static Problem: **Scripts on lesson.html run before what they need**. Write down what it predicts.
-2. Run it for 10 seconds. Where did it stop? Is there an uncaught error, as the static finding predicted?
+1. Open it. Are there any static findings?
+2. Run it for 10 seconds. Where did it stop? Is there an uncaught error in **Errors**, or a failed request in
+   **Network**?
 3. Read **The content was waiting for: …**. What did the course send, to whom, and what is it waiting to receive?
-4. Open the line its evidence names. Which call is the one the static check worried about? Does it run “as soon as
-   it runs”, or later?
+4. Open the lines its evidence names. Which line starts the LMS session, and when would it run?
 5. How would you test your theory? (A pin can't send a message. What can change the course's behaviour?)
 
-Check your answer in [the answers](appendix-a-answers.md#12-waits-forever). Step 4 matters: this is a static finding that is
-*wrong*. The check saw the name used in a script that runs early, but not that it's inside a function that runs
-later. Experts don't take any single finding on trust. They check it against the run.
+Check your answer in [the answers](appendix-a-answers.md#12-waits-forever). This is the hardest kind of fault: the files
+look fine, nothing fails, and nothing throws. Only the record of what the course was still waiting for gives it away.
 
 ## Tracing the code
 

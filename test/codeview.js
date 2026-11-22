@@ -12,7 +12,7 @@ import { renderReport } from '../src/report.js'
 
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 const encodeVLQ = n => { let v = n < 0 ? -n * 2 + 1 : n * 2, out = ''; do { let d = v % 32; v = Math.floor(v / 32); if (v) d += 32; out += B64[d] } while (v); return out }
-const base = fileURLToPath(new URL('./fixtures/base/', import.meta.url))
+const base = fileURLToPath(new URL('../src/sample/', import.meta.url))
 
 // ---- VLQ and mappings ----
 assert.deepEqual(decodeVLQ('A'), [0]); assert.deepEqual(decodeVLQ('C'), [1]); assert.deepEqual(decodeVLQ('D'), [-1])
