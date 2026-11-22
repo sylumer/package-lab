@@ -1660,7 +1660,7 @@ console.log('markdown: unit ok')
   }
   const broken = []
   for (const d of DOCS) {
-    const file = join(docsDir, d.name), inPanel = d.name.startsWith('guide/') || d.name === 'user-guide.md'
+    const file = join(docsDir, d.name), inPanel = d.name.startsWith('guide/') || d.name.startsWith('handbook/') || d.name === 'user-guide.md'
     const text = readFileSync(file, 'utf8').replace(/^\s*```[\s\S]*?^\s*```/gm, '')
     for (const [, , href] of text.matchAll(/\[([^\]]+)\]\(([^)\s]+)\)/g)) {
       if (/^[a-z][a-z0-9+.-]*:/i.test(href)) continue   // web addresses and mailto: are not checked here

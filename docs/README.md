@@ -3,6 +3,7 @@
 For people using it:
 
 - [User guide](user-guide.md): the desktop app, one task to a page: [getting started](guide/getting-started.md), [reading a run](guide/reading-a-run.md), [run settings](guide/run-settings.md), [views](guide/views.md), [macros and test saving](guide/macros.md), [changing and exporting](guide/changing-and-exporting.md), [experiments and servers](guide/experiments-and-servers.md) and [cmi5, Tin Can and authoring tools](guide/other-formats.md).
+- [Handbook](handbook/README.md): a course in Package Lab, from knowing nothing about SCORM to diagnosing what nobody else can, with practice packages to find the faults in (`npm run practice`).
 - [Recipes](recipes.md): step-by-step diagnoses for the usual problems: works in the authoring tool but not in an LMS, a blank page, no API calls, doesn't resume, works in Chrome but not in Safari or on an iPad, and works in one LMS but not another.
 - [Findings](findings.md): every finding, what it means and what to try.
 - [Authoring tool notes](packs/README.md): what the rule packs know about Xyleme, Storyline, Adapt and the rest, and where it comes from.
