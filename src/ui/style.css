@@ -2,7 +2,7 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #3a3a3c; --panel: #2c2c2e; --accent: #4c9bff; --err: #ff6b5e; --warn: #ffb340; --info: #b0b0b8; --good: #4cd964; --code: #2a2a2d; } }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; --bg: #1c1c1e; --fg: #f2f2f7; --muted: #98989f; --line: #3a3a3c; --panel: #2c2c2e; --accent: #4c9bff; --err: #ff6b5e; --warn: #ffb340; --info: #b0b0b8; --good: #4cd964; --code: #2a2a2d; }
-body.mac { --sidebar: color-mix(in srgb, var(--panel) 55%, transparent); }
+body.mac { --sidebar: color-mix(in srgb, var(--panel) 85%, transparent); }
 /* Vibrancy (macOS only): the page is see-through and only the content areas are opaque, so just the sidebar shows the desktop. */
 html:has(body.mac), body.mac { background: transparent; }
 body.mac section { background: var(--bg); }
@@ -36,6 +36,10 @@ button:disabled { opacity: .45; cursor: default; }
 .main { flex: 1; display: flex; min-height: 0; }
 aside { background: var(--sidebar); width: 300px; border-right: 1px solid var(--line); padding: 8px 10px; overflow: auto; }
 aside h2 { font-size: 13px; margin: 4px 0; }
+/* Sidebar buttons sit on a translucent panel, so give them a solid face and full-strength text; disabled ones read as muted text rather than faded blue. */
+aside button, aside button.secondary { background: var(--bg); color: var(--fg); border-color: var(--line); }
+aside button.secondary:not(:disabled) { color: var(--accent); }
+aside button:disabled { opacity: 1; color: var(--muted); background: transparent; border-style: dashed; }
 #runs { list-style: none; padding: 0; margin: 6px 0; }
 #runs li { display: flex; gap: 4px; align-items: flex-start; padding: 4px; border-radius: 5px; cursor: pointer; }
 #runs li.sel { background: var(--code); }
