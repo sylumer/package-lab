@@ -78,8 +78,7 @@ covers what you need, and later chapters add the rest as you go.
 12. [Going deeper](12-going-deeper.md): why it stalled, tracing, drill-down, server needs and a working copy.
 13. [Delivering the answer](13-delivering-the-answer.md): corrected packages, reports without the course content,
     saved runs, comparing packages and checking a folder.
-14. [Working at scale](14-working-at-scale.md): the command line, options files, the web interface, Alfred and
-    Concierge.
+14. [Working at scale](14-working-at-scale.md): the command line, options files, and the web interface.
 15. [Thinking like an analyst](15-thinking-like-an-analyst.md): the method, the habits, the traps, cmi5 and xAPI, and a
     final challenge.
 

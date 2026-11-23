@@ -4,7 +4,7 @@ Open a package, run it, and read what went wrong. This takes about five minutes.
 
 ## Install and open
 
-- **Installed app** (`npm run install-app`): open **Package Lab** from Applications, Launchpad or Alfred. To open a package with it, right-click the `.zip` in Finder and choose **Open With › Package Lab**, or drag the `.zip` onto its Dock icon.
+- **Installed app** (`npm run install-app`): open **Package Lab** from Applications or Launchpad. To open a package with it, right-click the `.zip` in Finder and choose **Open With › Package Lab**, or drag the `.zip` onto its Dock icon.
 - **From the repository:** `npm start` opens the app. To open a package straight away, use `npx electron . course.zip`.
 
 Only one Package Lab window runs at a time. Opening another package sends it to the window that is already open.

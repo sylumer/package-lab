@@ -3,8 +3,7 @@
 The web interface is the desktop app in a browser. Use it from another computer, an iPad or a phone. Courses still run
 on the Mac, in Package Lab's own browser; the **Live** view shows them and sends your clicks and keys back.
 
-If you use [Concierge](concierge.md), its Package Lab module is the simpler way to work from other devices: it uses
-Concierge's login and HTTPS. The web interface gives you the whole app: every view, comparisons and saved runs.
+The web interface gives you the whole app: every view, comparisons and saved runs.
 
 - [Starting it](#starting-it)
 - [Signing in](#signing-in)
@@ -34,8 +33,6 @@ package-lab serve --window
 ```
 This also opens the desktop window. The window and every browser share one session: the same package, runs and
 running course.
-
-In Alfred, the `packageweb` keyword starts it if it isn't running and opens it (see [Alfred](alfred.md)).
 
 The port is the one in **Package Lab › Settings…** (⌘,), 4880 unless you change it. To change it, enter a port from
 1024 to 65535 there and save; it takes effect the next time the web interface starts. On the command line,
@@ -145,8 +142,7 @@ popup are shown in the popup, since input goes to the newest window of the run.
   (which contain package scripts and stored data). Treat the address like a password.
 - **Courses run sandboxed:** in Package Lab's browser, with their own storage partition, never in the browser you view
   them from.
-- **HTTP only:** for remote use, prefer the SSH tunnel, or use the [Concierge module](concierge.md), which is served
-  over HTTPS with a login.
+- **HTTP only:** for remote use, prefer the SSH tunnel.
 
 ## Troubleshooting
 

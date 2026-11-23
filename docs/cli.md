@@ -1,7 +1,6 @@
 # Package Lab command line
 
-`package-lab` checks, runs and reports on SCORM packages from the terminal, scripts and other tools. Alfred and the
-Concierge module use it too.
+`package-lab` checks, runs and reports on SCORM packages from the terminal, scripts and other tools.
 
 - [Installing](#installing)
 - [Commands](#commands)
@@ -851,7 +850,7 @@ as a new file after the report is written, so a failed report leaves none. `--ke
 package-lab doctor [--port n] [--json]
 ```
 
-Checks what this Mac can do, so a program (the Concierge module builds its run form from it) or you can tell why
+Checks what this Mac can do, so a program or you can tell why
 something won't run. A missing optional part is a result, not a failure: the exit status is 0 unless the command
 itself fails. The checks:
 
@@ -862,7 +861,7 @@ itself fails. The checks:
 | `webkit` | Playwright is installed with its WebKit: `--browser webkit` works |
 | `data` | Package Lab's data folder (`PACKAGE_LAB_DATA`, or the default) exists |
 | `port` | The port (the one in Settings, 4880 unless changed, or `--port`, a whole number from 1 to 65535: anything else is an error, status 2) is free for `serve`, both on this Mac only (127.0.0.1) and on every address (0.0.0.0) |
-| *(not a check)* | The installed app is reported as the top-level `app`, not in `checks`, so the list stays as the Concierge module reads it. The text output shows it on its own line |
+| *(not a check)* | The installed app is reported as the top-level `app`, not in `checks`, so `checks` lists only what runs need. The text output shows it on its own line |
 
 `doctor --json`:
 
@@ -1023,7 +1022,7 @@ credential in it). `diff --json` is described under [diff](#diff). `items --json
 
 ## Live runs
 
-`--live <folder>` lets another program watch and drive a run. The Concierge module uses it.
+`--live <folder>` lets another program watch and drive a run.
 
 | File | Written by | Contents |
 |---|---|---|

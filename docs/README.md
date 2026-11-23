@@ -9,8 +9,6 @@ For people using it:
 - [Authoring tool notes](packs/README.md): what the rule packs know about Xyleme, Storyline, Adapt and the rest, and where it comes from.
 - [Command line](cli.md): `package-lab analyze`, `run`, `cycle`, `report`, `open`, `serve`; JSON output; live runs.
 - [Web interface](web.md): using Package Lab from another device, with the live view; security.
-- [Alfred](alfred.md): the workflow's keywords and File Actions.
-- [Concierge](concierge.md): the Concierge dashboard module.
 - [Windows](windows.md): building the portable Windows app on a Mac, running it, and where its data goes.
 
 For people changing it:

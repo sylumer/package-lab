@@ -21,8 +21,6 @@ Everything runs on your Mac. No package content is sent anywhere.
 | **Desktop app** | Hands-on debugging: launch, use the course, dig through every view | [User Guide](docs/user-guide/README.md) to learn it, [Help](docs/help.md) while you use it |
 | **Command line** (`package-lab`) | Quick checks, scripted runs, reports, automation | [CLI](docs/cli.md) |
 | **Web interface** | The full app from another computer, iPad or phone, with a live view of the course | [Web interface](docs/web.md) |
-| **Alfred** | Opening, checking or running a package straight from Alfred or Finder | [Alfred](docs/alfred.md) |
-| **Concierge module** | Upload, check and run packages from the Concierge dashboard on any device | [Concierge](docs/concierge.md) |
 
 Every finding Package Lab can report, with what it means and what to do, is listed in [Findings](docs/findings.md).
 For step-by-step diagnoses of common problems, see [Recipes](docs/recipes.md).
@@ -46,12 +44,7 @@ This makes the `package-lab` command available everywhere.
 ```bash
 npm run install-app
 ```
-This builds `Package Lab.app` and puts it in Applications, so it appears in Finder's **Open With**, Launchpad and Alfred.
-
-```bash
-npm run alfred
-```
-This builds the Alfred workflow and opens it, so Alfred offers to import it.
+This builds `Package Lab.app` and puts it in Applications, so it appears in Finder's **Open With** and Launchpad.
 
 WebKit runs (Safari's engine) need Playwright, which is optional:
 
@@ -147,8 +140,8 @@ This starts the web interface. See [Web interface](docs/web.md) for reaching it 
   names, so you can send it to an author.
 - **cmi5 and xAPI:** a local learning record store (LRS) checks every statement against xAPI 1.0.3, and the cmi5 rules,
   as the LRS receives them.
-- **Interfaces:** the desktop app, the web interface (with a live view you can click and type into), the command line,
-  Alfred and the Concierge module. Shell completion for zsh is built in (`package-lab completion zsh`).
+- **Interfaces:** the desktop app, the web interface (with a live view you can click and type into), and the command line.
+  Shell completion for zsh is built in (`package-lab completion zsh`).
 
 ## Documentation
 
@@ -159,8 +152,6 @@ This starts the web interface. See [Web interface](docs/web.md) for reaching it 
 - [Findings](docs/findings.md): every finding, what it means and what to try.
 - [CLI](docs/cli.md): commands, options, output and exit statuses.
 - [Web interface](docs/web.md): remote use, live view and security.
-- [Alfred](docs/alfred.md): the workflow.
-- [Concierge](docs/concierge.md): the Concierge module.
 - [Developer guide](docs/developer-guide.md): architecture, data formats, adding findings, profiles, packs and fixes,
   testing and packaging.
 - [Design](DESIGN.md): the thinking behind it, and the roadmap.
@@ -172,8 +163,7 @@ npm test
 ```
 This runs:
 - unit checks;
-- end-to-end checks in Electron with hidden windows: the CLI on the fixture packages, live input, the web interface,
-  and the Concierge module if `../concierge` exists.
+- end-to-end checks in Electron with hidden windows: the CLI on the fixture packages, live input, and the web interface.
 
 It takes about two and a half minutes. `npm test -- --slow` adds the longer end-to-end checks (about 14 minutes), and
 `node test/test.js --unit` runs only the unit checks. See the [developer guide](docs/developer-guide.md#tests).

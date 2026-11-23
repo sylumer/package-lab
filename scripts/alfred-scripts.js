@@ -1,7 +1,7 @@
 // The shell that the Alfred workflow's script actions run (scripts/alfred.js puts them in the workflow). Each gets the file or
 // folder as $1; node, cli and wait are the workflow's variables, exported to the script. Every variable is quoted. Each action
 // keeps its CLI's standard error in a log file made with mktemp in $TMPDIR (the system clears it); the notification shows its
-// last line. Exported so the tests can run them (test/test.js). See docs/alfred.md.
+// last line. Exported so the tests can run them (test/test.js). See docs/developer-guide.md (The Alfred workflow).
 
 export const OPEN = `if [ -d "/Applications/Package Lab.app" ]; then open -a "Package Lab" "$1"; else "$node" "$cli" open "$1"; fi`   // darwin-only
 

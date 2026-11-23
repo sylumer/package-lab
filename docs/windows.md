@@ -44,7 +44,6 @@ To move from one to the other, close Package Lab and copy the folder: from `%APP
 
 ## What differs from the Mac
 
-- No Alfred workflow.
 - No translucent sidebar (vibrancy), and no system accent colour. The window has its own frame and menu bar.
 - Ctrl replaces ⌘ and Alt replaces ⌥ in shortcuts; the docs in the app show the Windows keys.
 - WebKit runs work through Playwright, but WebKit on Windows is a weaker stand-in for Safari than on a Mac.

@@ -70,7 +70,7 @@ Check the report before you send it: a message from the browser can still hold w
 
 ## Saved runs
 
-Every run is saved as JSON in `~/Library/Application Support/Package Lab/runs/`. **Open saved…** (in the **Runs** list) brings runs back, for reading or comparing. Runs saved by the command line and by the Concierge module open the same way. Saved runs hold the content's script sources and the data it stored, so treat them like the package.
+Every run is saved as JSON in `~/Library/Application Support/Package Lab/runs/`. **Open saved…** (in the **Runs** list) brings runs back, for reading or comparing. Runs saved by the command line open the same way. Saved runs hold the content's script sources and the data it stored, so treat them like the package.
 
 ## Comparing two packages
 
@@ -90,7 +90,7 @@ A course often comes as a folder of exports. **Check a folder…** (in **Actions
 - **Verdict:** OK, Warning or Error, the worst finding as it shows in Findings. **Failed** means the file couldn't be opened (it isn't a ZIP, say). It stays in the table, with the reason, and the other packages are still checked.
 - **SCORM**, **Tool**, the number of **Errors** and **Warnings**, and the title of the worst finding.
 
-Click a row to open that package in the window, as if you had opened it. Only the packages of the last check can be opened this way. In Alfred, the File Action **Check SCORM packages in folder** does the same for a folder and opens the report ([Alfred](../alfred.md)).
+Click a row to open that package in the window, as if you had opened it. Only the packages of the last check can be opened this way.
 
 ## On the command line
 

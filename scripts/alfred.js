@@ -1,6 +1,6 @@
 // Builds dist/Package Lab.alfredworkflow and opens it, so Alfred offers to import it. The workflow calls this repo's
 // CLI with the Node that ran this script, so rebuild it (npm run alfred) if either moves. The shell it runs is in
-// alfred-scripts.js. See docs/alfred.md.
+// alfred-scripts.js. See docs/developer-guide.md (The Alfred workflow).
 //   packagelab            open Package Lab
 //   scorm <name>        find SCORM packages (.zip) by name: ↩ open in Package Lab, ⌘↩ check it (report from the files),
 //                       ⇧↩ the standard experiment and its report, ⌥↩ run it and report

@@ -17,8 +17,6 @@ export const DOCS = [
   { name: 'findings.md', title: 'Findings', group: 'Recipes and findings' },
   { name: 'web.md', title: 'Web interface', group: 'Reference' },
   { name: 'cli.md', title: 'Command line', group: 'Reference' },
-  { name: 'alfred.md', title: 'Alfred', group: 'Reference' },
-  { name: 'concierge.md', title: 'Concierge', group: 'Reference' },
   { name: 'packs/README.md', title: 'Authoring tools', group: 'Authoring tools' },
   { name: 'packs/adapt.md', title: 'Adapt', group: 'Authoring tools' },
   { name: 'packs/captivate.md', title: 'Captivate', group: 'Authoring tools' },

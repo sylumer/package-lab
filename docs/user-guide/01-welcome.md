@@ -60,7 +60,6 @@ That last idea is what separates an analyst from someone clicking buttons. Most 
 | Desktop app | A Mac (or Windows) window. Most of this guide uses it | Chapters 4 to 13 |
 | Command line | `package-lab` commands for quick checks, scripts and reports | [Chapter 14](14-working-at-scale.md) |
 | Web interface | The desktop app in any browser, from another computer, iPad or phone | [Chapter 14](14-working-at-scale.md) |
-| Alfred and Finder | Check or run a package straight from Alfred or a right-click | [Chapter 14](14-working-at-scale.md) |
 
 ## How this guide works
 

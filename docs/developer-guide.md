@@ -26,7 +26,6 @@ How Package Lab is built, the formats it reads and writes, and how to change it.
 - [Tests](#tests)
 - [Packaging](#packaging)
 - [The Alfred workflow](#the-alfred-workflow)
-- [The Concierge module](#the-concierge-module)
 - [Debugging](#debugging)
 
 ## Principles
@@ -125,15 +124,13 @@ test/codeview.js        Code view tests (imported by test.js): VLQ, source maps,
 docs/                   User and developer documentation
 ```
 
-The Concierge module is in the Concierge repo at `modules/package-lab/run`.
-
 ## Architecture
 
 ```
             ┌────────────── interfaces ──────────────┐
  desktop window (IPC)   web browser (HTTP+SSE)   CLI (spawns Electron --run=job.json)
             │                    │                    │
-            └──────► handlers in main.js ◄────────────┘      Concierge module ─► CLI
+            └──────► handlers in main.js ◄────────────┘
                          │
         loadPackage ─► analyze + bootGraph            (static: pure)
         launchItem ─► begin() ─► run window ─► lab://run/__lab/host.html (test LMS)
@@ -1618,8 +1615,7 @@ The bundle id is `com.sylumer.package-lab`. `Info.plist` declares `.zip` files w
 Open With without becoming the default.
 
 `npm run install-app` also quits a running copy, replaces `/Applications/Package Lab.app` and registers it with
-LaunchServices. It isn't notarised: for other Macs, sign it with a Developer ID and notarise it (as Concierge's
-`make release` does).
+LaunchServices. It isn't notarised: for other Macs, sign it with a Developer ID and notarise it.
 
 ## The Alfred workflow
 
@@ -1635,29 +1631,6 @@ Fix naming on a real file). Every variable in it is quoted. The workflow variabl
 build time. To change what it does, edit the scripts in `alfred-scripts.js` (or the objects in `alfred.js`) and run
 `npm run alfred` again; Alfred replaces the old copy on import.
 
-## The Concierge module
-
-`modules/package-lab/run` in the Concierge repo is a Python 3.9 CGI script; see [Concierge](concierge.md#how-it-works)
-for what it calls. Points to keep when changing it:
-- It never imports Package Lab code. It calls the CLI, so the CLI's JSON and the `--live` folder are its contract. Keep
-  them backward compatible, or change both together.
-- Ids in URLs are digits only (`num()`), and file names are made by the module.
-- Uploaded names are reduced to a safe base name.
-- Input events are re-built from known fields before they are written.
-- The worker is fully detached (`start_new_session`, no inherited pipes), as Concierge requires. There are three:
-  a run (`--worker`), an experiment (`--exp-worker`), and Drill-down or Discover for a run (`--task-worker`).
-- The lists in the run form (profiles, tools, device sizes, presets, fixes, whether WebKit works) come from
-  `package-lab doctor --json`, kept in `doctor.json` for five minutes. A new profile or tool shows up with no change to the
-  module. If `doctor` fails, the form falls back to the plain settings.
-- Replacement files are stored under a number (`overrides/<k>`) and the package path is only ever an argument
-  (`--override path=file`), never a path the module opens. Paths with `..`, a leading `/`, a backslash or `=` are refused;
-  so are pin names and response patterns with `=` (the CLI splits there).
-- A run copies the package's overrides, pins and responses into its `job.json` when it starts, so it can be reproduced.
-- Experiments run `experiment --out <folder>` and the page reads the saved runs as they appear (names from the CLI's
-  progress lines in the log), then `experiment.json` when it is done. Test saving is `cycle --out`; its second run
-  is copied to `run.json`, so the report, downloads and Run again work as for a run.
-- Drill-down and Discover run `drill`/`discover --options-from run.json --json`, so they repeat the run's own options.
-- It is tested from `test/test.js` here.
 
 ## Debugging
 

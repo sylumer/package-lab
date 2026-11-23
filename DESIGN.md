@@ -76,15 +76,13 @@ All of them drive the same main process (`src/main.js`) and the same findings:
 - **CLI** (`bin/package-lab.js`): analyze, items, run (headless, with a live folder for frames and input), experiment,
   discover, drill, cycle, diff, batch, fix, report (HTML, optionally redacted), macro show, doctor, open, serve,
   settings, completion.
-- **Alfred workflow** and **Concierge module**: thin layers over the CLI.
 
 See docs/developer-guide.md.
 
 ## Roadmap
 
 The first version (done) had the harness, recorder, API lookup probe, static scan, first rules, optional comparison,
-the packaged app with Open With, the CLI, the web interface with live view, the Alfred workflow, the Concierge module
-and HTML reports.
+the packaged app with Open With, the CLI, the web interface with live view and HTML reports.
 
 [The build plan](docs/plan.md) then added six phases. Phases 0 to 4 are done; phase 5 is in progress. The status of each
 work package is in [plan-status.md](docs/plan-status.md).
@@ -99,7 +97,7 @@ work package is in [plan-status.md](docs/plan-status.md).
   authoring tools (with `--tool`), and comparing two packages.
 - **Phase 4, everyday use (done):** code views (formatting, source maps, coverage and trace markers), a timeline,
   folder checks (`batch`), a redacted report, and cmi5 and xAPI support with a local LRS.
-- **Phase 5, interfaces, documentation and release (in progress):** the concierge module, Alfred and CLI polish, and
+- **Phase 5, interfaces, documentation and release (in progress):** CLI polish and
   the documentation pass. The final check and release build come last.
 
 ## Limits

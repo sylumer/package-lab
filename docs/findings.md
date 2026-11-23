@@ -11,7 +11,7 @@ Some findings name an **Autofix**: a mechanical correction Package Lab can make 
 [corrected package](help/changing-and-exporting.md#exporting-a-corrected-package). They are `manifest-case`, `manifest-not-root`,
 `file-missing`, `manifest-version`, `case`, `http-to-https` and `xyleme-player-type`. Everything else needs a person to decide.
 
-The verdict at the top of a report, in the CLI and in the Concierge widget is the first error, or the first warning
+The verdict at the top of a report, and in the CLI is the first error, or the first warning
 if there are no errors.
 
 - [From the manifest](#from-the-manifest)

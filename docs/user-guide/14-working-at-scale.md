@@ -1,8 +1,7 @@
 # 14. Working at scale
 
 **What you'll learn:** how to do everything you've done in the window from the command line, so you can check many
-packages, repeat a diagnosis exactly, script it and keep the results. And how to use Package Lab from another device,
-or from Alfred.
+packages, repeat a diagnosis exactly, script it and keep the results. And how to use Package Lab from another device.
 
 The desktop app is the best place to explore one course. When you have twenty courses, or the same check to run every
 time a vendor sends an update, or a colleague who needs to repeat exactly what you did, the command line is better.
@@ -78,7 +77,7 @@ Every setting in the inspector has a flag, so any run you did in the app can be 
 | Watch the course window | `--show` |
 
 There's no flag for **Stop after: I stop it**: a command-line run always lasts `--wait` seconds. (`--live` lets another
-program watch and drive a run; the Concierge module uses it.)
+program watch and drive a run.)
 
 You don't need to remember them. **Copy as CLI command**, at the bottom of **Settings › Advanced**, copies the
 `package-lab run` line for the current settings. The [command line reference](../cli.md#the-apps-settings-as-flags)
@@ -183,19 +182,6 @@ The [web interface guide](../web.md#using-it) lists every difference.
 
 To reach it from an iPad or another computer, see [Reaching it from another device](../web.md#reaching-it-from-another-device).
 Read the [security notes](../web.md#security) first: anyone with the address and token can use it.
-
-## Alfred and Finder
-
-Alfred's workflows need its paid Powerpack. `npm run alfred` builds the workflow and opens it for Alfred to import.
-Then `packagelab` opens Package Lab, `packageweb` starts and opens the web interface, and `scorm <name>` finds packages: **↩** opens one, **⌘↩** checks it and
-opens the report, **⇧↩** runs the standard experiment, **⌥↩** runs it (for 20 seconds, unless you change the
-workflow's `wait`) and opens the report. File Actions in Finder open, check, fix and run a package, or
-check a folder. See [Alfred](../alfred.md).
-
-## Concierge
-
-If you use the Concierge dashboard, its Package Lab module does much of this from any browser, with Concierge's own
-sign-in and HTTPS: upload, check, run live, experiment, test saving, and download reports. See [Concierge](../concierge.md).
 
 ## Check yourself
 
