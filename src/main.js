@@ -16,7 +16,7 @@ import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { unzip } from './zip.js'
-import { dataOverride, PORTABLE_DIR } from './platform.js'
+import { dataOverride, PORTABLE_DIR, runnerEnv } from './platform.js'
 import { analyze } from './analyze.js'
 import { Recorder, shiftTimes, markAnswers } from './recorder.js'
 import { compare } from './diff.js'
@@ -456,7 +456,7 @@ async function beginWebkit({ plan, itemIndex, cmi }) {
   writeFileSync(zip, pkg.zip)
   writeFileSync(job, JSON.stringify({ zip, name: pkg.name, item: itemIndex, options: o, cmi, out: join(dir, 'run.json'), stop: join(dir, 'stop'), ready: join(dir, 'ready'), wait: o.auto || 3600 }))
   // This binary as plain Node: the Electron it is, with ELECTRON_RUN_AS_NODE.
-  const child = spawn(process.execPath, [join(import.meta.dirname, 'webkit-runner.js'), job], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|Path|HOME|TMPDIR|USERPROFILE|APPDATA|LOCALAPPDATA|SystemRoot|TEMP|TMP|PACKAGE_LAB_.*|PLAYWRIGHT_.*)$/.test(k))), ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'pipe'] })
+  const child = spawn(process.execPath, [join(import.meta.dirname, 'webkit-runner.js'), job], { env: runnerEnv(process.env), stdio: ['ignore', 'ignore', 'pipe'] })
   let err = ''
   child.stderr.on('data', d => { err = (err + d).slice(-4000) })
   const exited = new Promise(r => child.on('exit', code => { r(code); a.webkit && (a.webkit.done = true) })), ready = join(dir, 'ready')

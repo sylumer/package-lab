@@ -7,7 +7,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { tmpdir, homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { dataDir as platformDataDir, appBinaries, executable, openCommand, installHint } from '../src/platform.js'
+import { dataDir as platformDataDir, appBinaries, executable, openCommand, installHint, runnerEnv } from '../src/platform.js'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { unzip } from '../src/zip.js'
 import { exportFixed, fixedName, FIX_IDS, FIXES } from '../src/fixes.js'
@@ -296,12 +296,13 @@ function detach(bin, args) {
   child.unref()
 }
 function electron() {
+  delete process.env.ELECTRON_RUN_AS_NODE   // inherited, it would start the Electron below as plain Node (this CLI may itself run that way)
   const env = process.env.PACKAGE_LAB_ELECTRON
   if (env) return /(^|[\\/])electron(\.exe)?$/i.test(env) ? [env, [APP_DIR]] : [env, []]
   try { const bin = createRequire(import.meta.url)('electron'); if (typeof bin === 'string' && existsSync(bin)) return [bin, [APP_DIR]] } catch { /* not installed here */ }
   const app = launchApps()[0]
   if (app) return [executable(process.platform, app), []]
-  fail('Electron isn’t installed: run npm install in the package-lab folder, or install Package Lab.app.')
+  fail(`Electron isn’t installed: run npm install in the package-lab folder, or install the app: ${installHint(process.platform)}`)
 }
 
 // Launch options from --options <file.json>, and from the flags that were given (flags win).
@@ -440,7 +441,7 @@ function runWebkit(pkg, item, o, options, dir, out) {
   const traceFile = join(dir, 'webkit-trace.json'), jobFile = join(dir, 'webkit-job.json')
   writeFileSync(jobFile, JSON.stringify({ zip: pkg.path, item: item.index, options, cmi, out: traceFile, wait: options.wait }))
   const r = spawnSync(process.execPath, [join(APP_DIR, 'src', 'webkit-runner.js'), jobFile], { encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'], timeout: (options.wait + 20) * 1000, killSignal: 'SIGKILL',   // it ends itself soon after its wait
-    env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(PATH|HOME|TMPDIR|PACKAGE_LAB_.*|PLAYWRIGHT_.*)$/.test(k))) })
+    env: runnerEnv(process.env) })
   if (!existsSync(traceFile)) {
     rmSync(dir, { recursive: true, force: true })
     fail((r.stderr ?? '').split('\n').filter(l => l.trim()).slice(-3).join('\n') || `The WebKit run didn’t finish${r.error ? `: ${r.error.message}` : r.status ? ` (exit ${r.status})` : ''}.`)
@@ -553,7 +554,7 @@ const commands = {
     const major = +process.versions.node.split('.')[0]
     add('node', 'Node.js 20 or later', major >= 20, `Node ${process.versions.node}`)
     let app = null; try { app = electron()[0] } catch { /* shown below */ }
-    add('electron', 'Electron, to run packages', !!app, app ? `${app}` : 'Not installed: run npm install in the package-lab folder, or install Package Lab.app. Checking packages still works.')
+    add('electron', 'Electron, to run packages', !!app, app ? `${app}` : `Not installed: run npm install in the package-lab folder, or install the app: ${installHint(process.platform)} Checking packages still works.`)
     let webkit = false, wkDetail
     try { const pw = await loadPlaywright(); webkit = existsSync(pw.webkit.executablePath()); wkDetail = webkit ? 'Playwright and its WebKit are installed.' : 'Playwright is installed but not WebKit: npx playwright install webkit' } catch (e) { wkDetail = e.message }
     add('webkit', 'Playwright and WebKit, for --browser webkit', webkit, wkDetail)
@@ -572,7 +573,7 @@ const commands = {
     else {
       console.log(paint('1', `Package Lab ${VERSION} · doctor`))
       for (const c of checks) console.log(`${c.ok ? SEV.ok('ok   ') : SEV.warn('check')} ${c.label}${paint('2', ` · ${clean(c.detail)}`)}`)
-      console.log(`${installed ? SEV.ok('ok   ') : paint('2', 'no   ')} Package Lab.app, the installed desktop app${paint('2', ` · ${clean(appDetail)}`)}`)
+      console.log(`${installed ? SEV.ok('ok   ') : paint('2', 'no   ')} Package Lab${process.platform === 'darwin' ? '.app' : ''}, the installed desktop app${paint('2', ` · ${clean(appDetail)}`)}`)
       // What to do next, from the checks that failed.
       const tips = []
       if (!app) tips.push('Packages can’t be run yet: npm install in the package-lab folder (or npm run install-app for the desktop app).')

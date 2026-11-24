@@ -27,6 +27,10 @@ export function appBinaries(platform, env, home, appDir = '', arch = 'x64') {
 // The program to start inside one of those: a Mac bundle's executable, or the file itself.
 export const executable = (platform, app) => platform === 'darwin' && app.endsWith('.app') ? posix.join(app, 'Contents', 'MacOS', NAME) : app   // darwin-only
 
+// The environment for the WebKit runner (src/webkit-runner.js): only what it needs, on every platform (Windows: Path,
+// SystemRoot, TEMP and LOCALAPPDATA, where Playwright keeps its browsers), as plain Node even when started by Electron.
+export const runnerEnv = env => ({ ...Object.fromEntries(Object.entries(env).filter(([k]) => /^(PATH|Path|HOME|TMPDIR|USERPROFILE|APPDATA|LOCALAPPDATA|SystemRoot|TEMP|TMP|PACKAGE_LAB_.*|PLAYWRIGHT_.*)$/.test(k))), ELECTRON_RUN_AS_NODE: '1' })
+
 // What `doctor` says when no app is installed: where the app is installed from.
 export const installHint = platform => platform === 'darwin' ? 'npm run install-app puts it in /Applications.' : 'put a copy of the app somewhere and set PACKAGE_LAB_APP to it.'   // darwin-only
 

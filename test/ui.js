@@ -20,7 +20,8 @@ const dir = () => work ??= mkdtempSync(join(tmpdir(), 'package-lab-ui-'))
 export function goodZip() {
   const d = join(dir(), 'good')
   cpSync(join(root, 'src', 'sample'), d, { recursive: true })
-  execFileSync('zip', ['-qr', join(dir(), 'good.zip'), '.'], { cwd: d })
+  if (process.platform === 'win32') execFileSync('tar', ['-a', '-cf', join(dir(), 'good.zip'), ...readdirSync(d)], { cwd: d })   // Windows has no zip
+  else execFileSync('zip', ['-qr', join(dir(), 'good.zip'), '.'], { cwd: d })
   return join(dir(), 'good.zip')
 }
 

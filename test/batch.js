@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { batchFiles, batchCsv, batchHtml, batchSummary, batchTable, csvCell, checkPackage, runRow, failedRun, summaryText } from '../src/batch.js'
 
 // CSV: quoting, the formula guard (= + - @ and a tab get an apostrophe), control characters dropped.
@@ -52,8 +52,8 @@ assert.ok(html.includes('F &amp; G') && html.includes('<div class="sl">section</
   const dir = mkdtempSync(join(tmpdir(), 'package-lab-batch-unit-'))
   mkdirSync(join(dir, 'sub')); mkdirSync(join(dir, '.hidden'))
   for (const f of ['b.zip', 'a.ZIP', 'notes.txt', 'sub/c.zip', '.hidden/d.zip']) writeFileSync(join(dir, f), 'x')
-  assert.deepEqual(batchFiles([dir]).map(p => p.slice(dir.length + 1)), ['a.ZIP', 'b.zip'], 'a folder: its zips, sorted, no hidden folders')
-  assert.deepEqual(batchFiles([dir], { recursive: true }).map(p => p.slice(dir.length + 1)), ['a.ZIP', 'b.zip', 'sub/c.zip'])
+  assert.deepEqual(batchFiles([dir]).map(p => p.slice(dir.length + 1).replaceAll(sep, "/")), ['a.ZIP', 'b.zip'], 'a folder: its zips, sorted, no hidden folders')
+  assert.deepEqual(batchFiles([dir], { recursive: true }).map(p => p.slice(dir.length + 1).replaceAll(sep, "/")), ['a.ZIP', 'b.zip', 'sub/c.zip'])
   assert.deepEqual(batchFiles([join(dir, 'missing.zip')]), [join(dir, 'missing.zip')], 'a missing package is kept (a failed row)')
 }
 
@@ -63,7 +63,7 @@ assert.ok(html.includes('F &amp; G') && html.includes('<div class="sl">section</
   mkdirSync(join(dir, 'real')); writeFileSync(join(dir, 'real', 'inner.zip'), 'x'); writeFileSync(join(dir, 'one.zip'), 'x')
   symlinkSync(join(dir, 'real'), join(dir, 'linkdir')); symlinkSync(join(dir, 'one.zip'), join(dir, 'linkzip.zip'))
   const skipped = []
-  const got = batchFiles([dir], { recursive: true, onSkip: p => skipped.push(p) }).map(p => p.slice(dir.length + 1))
+  const got = batchFiles([dir], { recursive: true, onSkip: p => skipped.push(p) }).map(p => p.slice(dir.length + 1).replaceAll(sep, "/"))
   assert.deepEqual(got, ['linkzip.zip', 'one.zip', 'real/inner.zip'], 'a symlink to a folder is not followed; a symlink to a zip is listed')
   assert.deepEqual(skipped, [join(dir, 'linkdir')], 'the skipped link is reported')
 }

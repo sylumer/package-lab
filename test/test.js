@@ -7,6 +7,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:net'
 import { dirname, join, relative, sep } from 'node:path'
@@ -26,7 +27,7 @@ import { normaliseOptions, cliCommand, VIEWPORTS, viewportName, optionsSummary }
 import { PRESETS, planVariants, runResult, summarise, experimentFindings } from '../src/experiments.js'
 import { diffLines, unified } from '../src/textdiff.js'
 import { markdown, slugOf, headings, searchDocs, keysFor } from '../src/ui/markdown.js'
-import { dataDir, appBinaries, executable, openCommand, installHint, dataOverride, PORTABLE_DIR } from '../src/platform.js'
+import { dataDir, appBinaries, executable, openCommand, installHint, dataOverride, PORTABLE_DIR, runnerEnv } from '../src/platform.js'
 import icoWriter from '../scripts/ico.cjs'
 import { DOCS, GUIDE, MAX_IMAGE, inlineImages } from '../src/docs.js'
 import { comparePackages, compareFiles, compareManifests, compareBoots, compareFindings, compareBehaviour } from '../src/pkgdiff.js'
@@ -52,11 +53,16 @@ import './batch.js'
 import vm from 'node:vm'
 
 const base = fileURLToPath(new URL('../src/sample/', import.meta.url)), work = mkdtempSync(join(tmpdir(), 'package-lab-'))
+// Fixtures are zipped, and written zips checked, by an outside tool, not our own zip.js: Info-ZIP, or on Windows
+// (which has neither zip nor unzip) its built-in tar.exe, which writes zips and checks their CRCs as it extracts.
+const isWin = process.platform === 'win32'
+const zipDir = (dir, out) => isWin ? execFileSync('tar', ['-a', '-cf', out, ...readdirSync(dir)], { cwd: dir }) : execFileSync('zip', ['-qr', out, '.'], { cwd: dir })
+const unzipT = path => isWin ? spawnSync('tar', ['-xOf', path], { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' }) : spawnSync('unzip', ['-t', path], { encoding: 'utf8' })
 function fixture(name, edit = () => {}) {
   const dir = join(work, name)
   cpSync(base, dir, { recursive: true })
   edit(dir)
-  execFileSync('zip', ['-qr', join(work, name + '.zip'), '.'], { cwd: dir })
+  zipDir(dir, join(work, name + '.zip'))
   return join(work, name + '.zip')
 }
 const sub = (dir, file, a, b) => writeFileSync(join(dir, file), readFileSync(join(dir, file), 'utf8').replace(a, b))
@@ -1281,7 +1287,6 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
 
 // ---- Corrected package export (P3.1): the ZIP writer and the autofixes ----
 {
-  const unzipT = path => spawnSync('unzip', ['-t', path], { encoding: 'utf8' })
   const method = buf => buf.readUInt16LE(8)   // of the first local header
   // The writer: an empty file, binary data that doesn't compress (stored), large compressible data (deflated), non-ASCII names (UTF-8 flag).
   const noise = randomBytes(50000), big = Buffer.from('<p>Package Lab</p>\n'.repeat(120000))
@@ -1297,7 +1302,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.ok(entries.every(e => e.csize <= e.size || e.method === 8) && entries[1].csize === noise.length, 'zip: stored only when deflate isn’t smaller')
   assert.deepEqual(entries.map(e => !!(e.flags & 0x800)), [false, false, false, true, true], 'zip: the UTF-8 flag is set for non-ASCII names only')
   const zf = join(work, 'writer.zip'); writeFileSync(zf, z)
-  const t = unzipT(zf); assert.equal(t.status, 0, 'zip: unzip -t accepts it: ' + t.stdout + t.stderr); assert.match(t.stdout, /No errors detected/)
+  const t = unzipT(zf); assert.equal(t.status, 0, 'zip: unzip -t accepts it: ' + t.stdout + t.stderr); if (!isWin) assert.match(t.stdout, /No errors detected/)
   assert.equal(crc32(Buffer.from('123456789')), 0xcbf43926, 'zip: crc32 check value'); assert.equal(crc32Table(Buffer.from('123456789')), 0xcbf43926, 'zip: the table fallback agrees')
   assert.equal(crc32Table(noise), crc32(noise), 'zip: the table fallback agrees on binary data')
   assert.equal(unzip(zip(new Map())).size, 0, 'zip: an empty archive')
@@ -1787,6 +1792,7 @@ console.log('markdown: unit ok')
   }
   assert.ok(urlPath.test("const a = new URL(f('x', 1), import.meta.url).pathname") && macPath.test("join(h, 'Library', 'Application Support')") && macPath.test("join(h, 'Applications')") && macPath.test('see /Applications.'), 'portability lint: the patterns catch what they should')
   assert.deepEqual(lint, [], 'portability lint: ' + lint.join('; '))
+  assert.deepEqual(runnerEnv({ Path: 'C:\\W', SystemRoot: 'C:\\Windows', LOCALAPPDATA: 'C:\\L', SECRET: 'x', ELECTRON_RUN_AS_NODE: '0' }), { Path: 'C:\\W', SystemRoot: 'C:\\Windows', LOCALAPPDATA: 'C:\\L', ELECTRON_RUN_AS_NODE: '1' }, 'runnerEnv: what Windows needs, nothing else, as Node')
   console.log('platform: unit ok')
 }
 console.log('unit: ok')
@@ -1794,7 +1800,7 @@ console.log('unit: ok')
 // ---- End to end ----
 const slow = process.argv.includes('--slow')   // the slower end-to-end checks: run at phase ends (see docs/developer-guide.md)
 if (!process.argv.includes('--unit')) {
-  const root = fileURLToPath(new URL('..', import.meta.url)), cli = join(root, 'bin', 'package-lab.js'), electron = join(root, 'node_modules', '.bin', 'electron')
+  const root = fileURLToPath(new URL('..', import.meta.url)), cli = join(root, 'bin', 'package-lab.js'), electron = process.env.PACKAGE_LAB_ELECTRON ?? createRequire(import.meta.url)('electron')   // the npm package's main is its binary's path (.bin/electron is a .cmd on Windows)
   const node = (args, opts = {}) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', timeout: 120000, ...opts })
   const run = (zip, ...args) => { const r = node(['run', zip, '--wait', '3', '--json', ...args]); assert.ok(r.stdout, 'run printed nothing: ' + r.stderr); return JSON.parse(r.stdout) }
   const calls = r => r.api.map(a => a.call + ' ' + a.el)
@@ -1876,13 +1882,13 @@ if (!process.argv.includes('--unit')) {
   const fixOut = join(work, 'blank-fixed.zip'), fx = node(['fix', blank, '--out', fixOut, '--json'])
   assert.equal(fx.status, 0, 'cli fix: ' + fx.stderr); const fj = JSON.parse(fx.stdout)
   assert.ok(fj.applied.some(f => f.id === 'case') && fj.proof.gone.some(t => /capitals/.test(t)) && fj.out === fixOut, 'cli fix: --json lists the change and the proof')
-  const uz = spawnSync('unzip', ['-t', fixOut], { encoding: 'utf8' }); assert.equal(uz.status, 0, 'cli fix: unzip -t: ' + uz.stdout + uz.stderr)
+  const uz = unzipT(fixOut); assert.equal(uz.status, 0, 'cli fix: unzip -t: ' + uz.stdout + uz.stderr)
   const fixedFiles = unzip(readFileSync(fixOut)); assert.ok(fixedFiles.has('js/app.js') && /^Package Lab \S+: changes made to blank\.zip/.test(fixedFiles.get('PACKAGE-LAB-CHANGES.txt').toString()), 'cli fix: round-trip through the reader')
   const fan = JSON.parse(node(['analyze', fixOut, '--json']).stdout)
   assert.ok(!fan.findings.some(f => /capitals/.test(f.title)), 'cli fix: no capitals finding in the result: ' + fan.findings.map(f => f.title)); assert.ok(fan.findings.some(f => /vendor\/missing\.js/.test(f.evidence?.join(' '))), 'cli fix: what isn’t mechanically fixable (a missing file) is still reported')
   assert.match(node(['fix', mismatch, '--out', join(work, 'mismatch-fixed.zip')]).stdout, /manifest-version[\s\S]*Findings cleared: 1 of 1[\s\S]*Wrote /, 'cli fix: text output')
   assert.ok(!JSON.parse(node(['analyze', join(work, 'mismatch-fixed.zip'), '--json']).stdout).findings.some(f => /but the scripts use/.test(f.title)), 'cli fix: the version finding is gone')
-  assert.equal(spawnSync('unzip', ['-t', join(work, 'mismatch-fixed.zip')]).status, 0)
+  assert.equal(unzipT(join(work, 'mismatch-fixed.zip')).status, 0)
   const nothing = node(['fix', good, '--out', join(work, 'good-fixed.zip')]); assert.ok(nothing.status === 0 && /Nothing to change/.test(nothing.stdout) && !existsSync(join(work, 'good-fixed.zip')), 'cli fix: nothing to fix writes no file')
   const only = JSON.parse(node(['fix', mismatch, '--only', 'case', '--out', join(work, 'only.zip'), '--json']).stdout); assert.deepEqual(only.applied, [], 'cli fix: --only limits the fixes'); assert.equal(only.out, null)
   assert.equal(node(['fix', good, '--only', 'nope']).status, 2, 'cli fix: unknown id fails'); assert.match(node(['fix', good, '--only', 'nope']).stderr, /No autofix “nope”/); assert.equal(node(['fix', good, '--only']).status, 2, 'cli fix: --only needs a value')
@@ -1927,7 +1933,7 @@ if (!process.argv.includes('--unit')) {
     assert.equal(node(['report', good, '--json']).status, 2, 'json: report needs --out or --open'); assert.match(node(['report', good, '--json']).stderr, /needs --out or --open/)
     const sj = node(['serve', '--json']); assert.equal(sj.status, 2, 'json: serve --json without --url is refused'); assert.match(sj.stderr, /serve --json needs --url/)
     // serve --url: the address with its token, as text or JSON. The token file is in a fake home.
-    const fakeHome = mkdtempSync(join(work, 'home-')), env = { ...process.env, HOME: fakeHome }, tokenDir = dataDir(process.platform, {}, fakeHome)
+    const fakeHome = mkdtempSync(join(work, 'home-')), env = { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, APPDATA: undefined }, tokenDir = dataDir(process.platform, {}, fakeHome)
     mkdirSync(tokenDir, { recursive: true }); writeFileSync(join(tokenDir, 'web-token'), 'tok123\n')
     assert.equal(node(['serve', '--url', '--port', '4999'], { env }).stdout.trim(), 'http://127.0.0.1:4999/?token=tok123', 'serve --url')
     assert.deepEqual(JSON.parse(node(['serve', '--url', '--port', '4999', '--json'], { env }).stdout), { url: 'http://127.0.0.1:4999/?token=tok123' }, 'json: serve --url')
@@ -1945,9 +1951,10 @@ if (!process.argv.includes('--unit')) {
       if (!existsSync('/Applications/Package Lab.app')) assert.deepEqual(withApp.app, { path: join(fakeHome, 'Applications', 'Package Lab.app'), version: '9.8.7' }, 'doctor: ~/Applications is found, with its version')
       assert.match(node(['doctor'], { env }).stdout, /Package Lab\.app, the installed desktop app/)
     } else skipped.push('doctor: the installed app’s version (plutil)')
-    const noApp = JSON.parse(node(['doctor', '--json'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout)
+    const emptyEnv = { ...env, HOME: join(fakeHome, 'empty'), USERPROFILE: join(fakeHome, 'empty'), LOCALAPPDATA: undefined, PACKAGE_LAB_APP: undefined }   // Windows looks in these, not HOME
+    const noApp = JSON.parse(node(['doctor', '--json'], { env: emptyEnv }).stdout)
     if (!existsSync('/Applications/Package Lab.app')) assert.ok(noApp.app === null, 'doctor: no app is reported as null')
-    assert.match(node(['doctor'], { env: { ...env, HOME: join(fakeHome, 'empty') } }).stdout, /(no|ok) +Package Lab\.app/, 'doctor: text reports the app (installed or not: it looks in /Applications, not HOME)')
+    assert.match(node(['doctor'], { env: emptyEnv }).stdout, /(no|ok) +Package Lab(\.app)?,/, 'doctor: text reports the app (installed or not: it looks in /Applications, not HOME)')
     assert.match(node(['doctor']).stdout, /Ready:|To do:/, 'doctor: text summary with advice')
 
     // Alfred (P5.2): the build lints, the ⇧↩ action runs the standard experiment, the scripts are valid shell, and Fix never overwrites.
@@ -2535,7 +2542,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     assert.deepEqual([tcRun.furthest, tcSaved.trace.lrs.documents.map(d => d.id)], ['completion', ['bookmark']], 'tincan: reaches the completion statement, and its state document is kept')
     assert.ok(!node(['report', tcOut, '--redact']).stdout.includes('example.com'), 'tincan: the redacted report')
     // The same through the handlers (what the apps and the xAPI tab use): upload, launch, the run's trace.lrs, and the saved run opening again.
-    const wd = join(work, 'web-cmi5'), srv = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, PACKAGE_LAB_DATA: wd }, stdio: ['ignore', 'pipe', 'ignore'] })
+    const wd = join(work, 'web-cmi5'), srv = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, PACKAGE_LAB_DATA: wd }, stdio: ['ignore', 'pipe', 'ignore'] })
     let wlog = ''; srv.stdout.on('data', d => { wlog += d })
     try {
       await until(() => /http:\/\/\S+/.test(wlog), 30000, 'web start')
@@ -2554,7 +2561,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
 
   // The web interface: token, upload, launch, live frames, the run, saved runs.
   const data = join(work, 'web-data')
-  const server = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, PACKAGE_LAB_DATA: data }, stdio: ['ignore', 'pipe', 'ignore'] })
+  const server = spawn(electron, [root, '--serve=0', '--no-window'], { env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, PACKAGE_LAB_DATA: data }, stdio: ['ignore', 'pipe', 'ignore'] })   // ELECTRON_RUN_AS_NODE: these tests may themselves run as Electron-as-Node
   let log = ''; server.stdout.on('data', d => { log += d })
   try {
     await until(() => /http:\/\/\S+/.test(log), 30000, 'web start')
@@ -2782,7 +2789,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
       const dl = await fetch(base + '/api/export', { headers: H }), sum = JSON.parse(decodeURIComponent(dl.headers.get('x-package-lab-summary'))), dlBuf = Buffer.from(await dl.arrayBuffer())
       assert.ok(dl.status === 200 && dl.headers.get('content-type') === 'application/zip' && /attachment; filename="blank-fixed\.zip"/.test(dl.headers.get('content-disposition')), 'web export: a zip download: ' + dl.status + ' ' + dl.headers.get('content-disposition'))
       assert.ok(sum.file === 'blank-fixed.zip' && sum.applied.includes('case') && sum.gone >= 1, 'web export: summary: ' + JSON.stringify(sum))
-      const dlFile = join(work, 'web-fixed.zip'); writeFileSync(dlFile, dlBuf); assert.equal(spawnSync('unzip', ['-t', dlFile]).status, 0, 'web export: unzip -t')
+      const dlFile = join(work, 'web-fixed.zip'); writeFileSync(dlFile, dlBuf); assert.equal(unzipT(dlFile).status, 0, 'web export: unzip -t')
       const dlFiles = unzip(dlBuf); assert.ok(dlFiles.has('js/app.js') && dlFiles.get('notes.txt').toString() === 'from the web' && dlFiles.has('PACKAGE-LAB-CHANGES.txt'), 'web export: includes the fixes, the overrides and the change list')
       assert.equal((await fetch(base + '/api/export?only=nope', { headers: H })).status, 500, 'web export: an unknown fix is an error')
       const noFix = await fetch(base + '/api/export?only=', { headers: H }), noFixFiles = unzip(Buffer.from(await noFix.arrayBuffer()))
@@ -2857,7 +2864,7 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
       const fixPage = form('/fix', 'id=1&fix=case&fix=http-to-https')
       assert.match(fixPage, /Download the corrected package/); assert.match(fixPage, /Findings cleared/)
       const fixed = fileOf(cgi('GET', '/download', 'id=1&what=fixed'))
-      assert.equal(spawnSync('unzip', ['-t', fixed]).status, 0, 'module: the corrected package is a valid zip')
+      assert.equal(unzipT(fixed).status, 0, 'module: the corrected package is a valid zip')
       const fixedFiles = unzip(readFileSync(fixed)); assert.ok(fixedFiles.has('js/app.js') || [...fixedFiles.keys()].some(k => /app\.js$/i.test(k)), 'module: the fix is in it'); assert.equal(fixedFiles.get('notes.txt')?.toString(), 'from the module', 'module: so is the replacement file')
       assert.match(form('/fix', 'id=1&fix=nope'), /Tick at least one fix/, 'module: an unknown fix is not run')
       // Diff against another upload, and its report.
