@@ -109,8 +109,9 @@ src/
     guide.html, guide.js, guide.css  The User Guide window (and the web interface's guide.html): contents by part, chapters with Previous and Next, search, Done boxes and the place kept in localStorage (pl.guide.done, pl.guide.place), practice package and macro names as buttons
     markdown.js         The docs panel's Markdown renderer: escapes everything, drops non-http and relative link schemes, GitHub-style heading ids (`slugOf`, exported, is the same slug the link check uses); no dependencies
 scripts/
-  package.js            Builds Package Lab.app (and --install); includes the DOCS and GUIDE from src/docs.js, and writes dist/Package Lab User Guide.html (also into the Windows zip)
+  package.js            Builds Package Lab.app (and --install); includes the DOCS and GUIDE from src/docs.js, and writes dist/Package Lab User Guide.html and .pdf (also into the Windows zip)
   guide-html.js         make guide: the User Guide as one self-contained HTML file, from the app's renderer
+  guide-pdf.js          make guide-pdf: that HTML printed to a PDF by Electron (printToPDF): contents page, bookmarks, working links, page numbers
   practice-kit.js       npm run practice: src/practice.js's kit into ./practice
   icon.cjs              Renders build/icon.svg to build/icon.png
   alfred.js             Builds the Alfred workflow

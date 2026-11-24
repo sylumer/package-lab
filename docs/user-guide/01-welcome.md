@@ -58,8 +58,8 @@ That last idea is what separates an analyst from someone clicking buttons. Most 
 | Way | What it is | Where this guide covers it |
 |---|---|---|
 | Desktop app | A Mac (or Windows) window. Most of this guide uses it | Chapters 4 to 13 |
-| Command line | `package-lab` commands for quick checks, scripts and reports | [Chapter 14](14-working-at-scale.md) |
-| Web interface | The desktop app in any browser, from another computer, iPad or phone | [Chapter 14](14-working-at-scale.md) |
+| Command line | `package-lab` commands for quick checks, scripts and reports. Needs the Package Lab source | [Chapter 14](14-working-at-scale.md) |
+| Web interface | The desktop app in any browser, from another computer, iPad or phone. Needs the source too | [Chapter 14](14-working-at-scale.md) |
 
 ## How this guide works
 

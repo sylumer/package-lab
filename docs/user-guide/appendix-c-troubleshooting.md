@@ -1,17 +1,21 @@
 # Appendix C: Troubleshooting Package Lab
 
-When Package Lab itself, rather than the course, seems to be the problem. Start with `package-lab doctor`: it checks
-Node, Electron, WebKit, the data folder and the web interface's port, and ends with a **To do** list.
+When Package Lab itself, rather than the course, seems to be the problem. If you have the source, start with
+`package-lab doctor`: it checks Node, Electron, WebKit, the data folder and the web interface's port, and ends with a
+**To do** list. Rows that mention `npm` or the Package Lab folder are for the source only
+([chapter 3](03-install-and-practice-kit.md#if-you-have-the-source)).
 
 ## Installing and starting
 
 | Symptom | Cause and cure |
 |---|---|
-| `package-lab: command not found` | The command isn't linked. In the Package Lab folder, run `npm link`, or use `node bin/package-lab.js` instead |
+| The Mac says it can't open Package Lab, or can't check it for malicious software | The app isn't signed by Apple. Go to **System Settings › Privacy & Security** and choose **Open Anyway** beside the message about Package Lab, once |
+| Windows warns about an unknown publisher | The app isn't code-signed. Choose **More info**, then **Run anyway** |
+| `package-lab: command not found` | The command line comes with the source, not the downloaded app. With the source, the command isn't linked yet. In the Package Lab folder, run `npm link`, or use `node bin/package-lab.js` instead |
 | `node: command not found`, or `doctor` says Node is too old | Install Node.js 20 or later from nodejs.org |
 | “Electron couldn't be found” | Run `npm install` in the Package Lab folder, or install the app with `npm run install-app` |
 | Opening a second package doesn't open a second window | That's by design: one window at a time. The new package goes to the window that's open |
-| Package Lab isn't in Finder's **Open With** menu | Run `npm run install-app`, which builds the app and registers it |
+| Package Lab isn't in Finder's **Open With** menu | Move the app into **Applications** and open it once. From the source, run `npm run install-app`, which builds the app and registers it. On Windows Package Lab never registers for `.zip` files: use **Open** or drop the file on the window |
 
 ## Opening a package
 
@@ -28,6 +32,7 @@ Node, Electron, WebKit, the data folder and the web interface's port, and ends w
 | A run surprises you: other settings, clicks you didn't make, answers or pins | Look at the summary chip beside **Run**, the **Macro** segment, and **Pins** and **Answers** under **Settings › Advanced**. Something from an earlier test is still set |
 | The course is very slow, or there are thousands of caught errors | Turn off **Record caught errors** in **Settings › Recording**. Tracing slows a course down too |
 | “Playwright isn't installed” when you choose WebKit | In the Package Lab folder: `npm i -D playwright && npx playwright install webkit` |
+| “WebKit runs need the Package Lab source checkout” | The downloaded app can't run WebKit. Use Chromium with **Storage: Blocked (Safari-like)** and **Device size: iPad**, or run Package Lab from the source ([chapter 3](03-install-and-practice-kit.md#if-you-have-the-source)) |
 | The macro didn't play | Macros need Chromium. Check **Browser**, and that the macro segment isn't empty |
 | The course needs a sign-in or licence server | Its requests show in **Network**. If they fail, that's a finding in itself: the course depends on a server. Use **Server needs**, or record a working copy where it can sign in |
 | **Trace the code** has no effect, or the code view is empty | The run was in WebKit, which can't be traced, or the script is over 2 MB, built with `eval`, or from another site |

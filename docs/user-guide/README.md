@@ -37,8 +37,10 @@ chapter are at the foot of each chapter. **Search the guide** searches every cha
 ## Reading it outside the app
 
 - **One file:** every build writes `Package Lab User Guide.html` into `dist/` (and into the Windows zip), and `make
-  guide` writes it on its own. It's the whole guide on one page, with the screenshots, for any browser. To make a PDF,
-  open it and use the browser's **Print**: each chapter starts on a new page.
+  guide` writes it on its own. It's the whole guide on one page, with the screenshots, for any browser.
+- **A PDF:** every build also writes `Package Lab User Guide.pdf` beside it (and into the Windows zip), and `make
+  guide-pdf` writes it on its own. It has a contents page, bookmarks for every chapter and heading, links between
+  chapters that work, page numbers, and each chapter on a new page.
 - **On GitHub:** the chapters are plain Markdown, and read as they are.
 
 ## Who it is for
@@ -100,7 +102,7 @@ Part 4 is for dipping into as real courses bring you problems.
 
 ## Making a website or a PDF
 
-For a website of your own, or a PDF typeset with Pandoc rather than printed from a browser. The chapters are plain
+For a website of your own, or a PDF typeset with Pandoc and LaTeX instead of the one the build makes. The chapters are plain
 Markdown with relative links and no HTML, and combine into one document.
 
 **The order.** This page, the chapters `01` to `15`, the appendices `A` to `C`, the glossary, then the change log.

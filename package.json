@@ -13,6 +13,7 @@
     "screenshots": "node scripts/screenshots.js",
     "practice": "node scripts/practice-kit.js",
     "guide": "node scripts/guide-html.js",
+    "guide:pdf": "node scripts/guide-pdf.js",
     "package": "node scripts/package.js",
     "install-app": "node scripts/package.js --install",
     "alfred": "node scripts/alfred.js"

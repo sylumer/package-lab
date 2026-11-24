@@ -11,7 +11,7 @@ ELECTRON_CACHE           ?= $(HOME)/Library/Caches/electron
 PLAYWRIGHT_BROWSERS_PATH ?= $(HOME)/Library/Caches/ms-playwright
 
 .DEFAULT_GOAL := help
-.PHONY: help deps ci webkit start serve practice guide \
+.PHONY: help deps ci webkit start serve practice guide guide-pdf \
         mac mac-arm64 mac-x64 mac-install mac-uninstall alfred link unlink \
         win win-x64 win-arm64 all \
         test test-unit test-slow test-ui test-all screenshots \
@@ -47,6 +47,9 @@ practice: ## Build the User Guide's practice packages in ./practice
 
 guide: ## Write the User Guide as one HTML file, dist/Package Lab User Guide.html
 	$(NPM) run guide
+
+guide-pdf: ## Write the User Guide as a PDF, dist/Package Lab User Guide.pdf
+	$(NPM) run guide:pdf
 
 ##@ Mac
 

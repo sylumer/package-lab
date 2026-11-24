@@ -25,6 +25,9 @@ The guide becomes a book of its own, and the app problems the last edition liste
 - About this guide explains the guide and Help, and the guide's window. Chapters 3, 4 and 9 use the window: building
   the kit, opening packages and loading macros. Windows users can now do every exercise.
 - Appendix C has a section on the guide's window.
+- Chapter 3 starts from the downloaded app, on the Mac or Windows, and its first-open warnings. Installing from the
+  source, `doctor`, `make webkit` and `npm run practice` move to **If you have the source**. Chapters 1, 11 and 14,
+  Appendices B and C say what needs the source: the command line, the web interface and WebKit runs.
 
 **Fixed in Package Lab, and so no longer known issues**
 

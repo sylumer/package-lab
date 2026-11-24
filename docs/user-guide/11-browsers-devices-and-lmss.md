@@ -12,8 +12,9 @@ environment, and Package Lab can imitate each part of it.
 **Settings › Browser and device › Browser** chooses the engine:
 
 - **Chromium**: Package Lab's own browser, the engine inside Chrome and Edge. Everything works.
-- **WebKit (Safari's engine)**: the engine of Safari, and of every browser on an iPhone and iPad. It needs Playwright
-  ([chapter 3](03-install-and-practice-kit.md#check-your-computer)).
+- **WebKit (Safari's engine)**: the engine of Safari, and of every browser on an iPhone and iPad. It needs Package Lab
+  run from its source, with Playwright ([chapter 3](03-install-and-practice-kit.md#check-your-computer)): the downloaded
+  app can't run WebKit, and says so if you choose it.
 
 A WebKit run uses the same test LMS, files, changes, pins, answers, profile and storage setting. It records requests,
 console messages, uncaught errors and API calls, but not coverage, caught errors or script sources, so it can't be
@@ -86,12 +87,15 @@ Three experiment presets, from the **Experiments** view, try all of it at once:
 *“Fine on my PC, broken on my iPad.”*
 
 1. Run it for 10 seconds with the defaults. How far does it get?
-2. Set **Browser** to **WebKit** (it needs Playwright's WebKit: see [chapter 3](03-install-and-practice-kit.md#check-your-computer))
+2. Set **Browser** to **WebKit** (it needs the source and Playwright's WebKit: see [chapter 3](03-install-and-practice-kit.md#check-your-computer))
    and **Device size** to **iPad**, and run again. How far now? What does the course show? Would WebKit alone, at the
    normal size, have been enough?
 3. Read **Errors**. What is the error, and which line of which file? What does that code use?
 4. Now run the **browsers** experiment. Does the table agree?
 5. Put **Browser** and **Device size** back.
+
+With the downloaded app you can do step 1 only. Read the rest, then [the answer](appendix-a-answers.md#10-fails-in-safari),
+which says what each WebKit run shows.
 
 Check your answer in [the answers](appendix-a-answers.md#10-fails-in-safari).
 

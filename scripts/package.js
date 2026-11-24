@@ -9,6 +9,7 @@ import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DOCS, GUIDE } from '../src/docs.js'
 import { guideHtml } from './guide-html.js'
+import { guidePdf } from './guide-pdf.js'
 import { zip } from '../src/zip.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url)), build = join(root, 'build')
@@ -76,13 +77,16 @@ if (platform === 'win32') {
     walk(join(d, e.name)) : files.set(`${top}/${relative(out, join(d, e.name)).split(sep).join('/')}`, readFileSync(join(d, e.name))))
   walk(out)
   files.set(`${top}/Package Lab User Guide.html`, Buffer.from(guideHtml()))   // the User Guide to read without the app (scripts/guide-html.js)
+  await guidePdf(join(root, 'dist', 'Package Lab User Guide.pdf'))   // and as a PDF (scripts/guide-pdf.js)
+  files.set(`${top}/Package Lab User Guide.pdf`, readFileSync(join(root, 'dist', 'Package Lab User Guide.pdf')))
   const zipPath = join(root, 'dist', `Package Lab-${version}-win32-${arch}.zip`)
   writeFileSync(zipPath, zip(files))
   console.log(`Built ${out}\nand ${zipPath}`)
   process.exit(0)
 }
-// The User Guide as one file, beside the builds (scripts/guide-html.js).
+// The User Guide as one HTML file and as a PDF, beside the builds (scripts/guide-html.js, scripts/guide-pdf.js).
 writeFileSync(join(root, 'dist', 'Package Lab User Guide.html'), guideHtml())
+await guidePdf(join(root, 'dist', 'Package Lab User Guide.pdf'))
 const app = join(out, 'Package Lab.app')
 run('codesign', ['--force', '--deep', '--sign', '-', app])
 console.log(`Built ${app}`)

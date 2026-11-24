@@ -76,6 +76,8 @@ On Windows, Ctrl replaces ⌘ and Alt replaces ⌥.
 
 ## The commands
 
+These need the Package Lab source ([chapter 3](03-install-and-practice-kit.md#if-you-have-the-source)).
+
 | Command | Does |
 |---|---|
 | `package-lab doctor` | Checks this computer |

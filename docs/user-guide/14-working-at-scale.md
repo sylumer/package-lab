@@ -8,6 +8,10 @@ time a vendor sends an update, or a colleague who needs to repeat exactly what y
 
 ## The command line in five commands
 
+The command line and the web interface come with the Package Lab source, not the downloaded app: set them up with
+[If you have the source](03-install-and-practice-kit.md#if-you-have-the-source) in chapter 3 first. The app's
+**Check a folder…** does the same as `batch` without them.
+
 Every command starts with `package-lab`. Add `--help` to any of them for its options.
 
 ```bash
