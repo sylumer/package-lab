@@ -226,7 +226,7 @@ ${o.boot ?? run?.boot ? `<h2>Loading path</h2>${bootHtml(o.boot ?? run.boot, run
 ${pkgTable}
 ${o.diff ? diffHtml(o.diff) : ''}
 <p class="sl-muted">Made by Package Lab on ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))}. Everything here was worked out on this computer.</p></div>`
-  return o.fragment ? body : `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(o.title ?? 'Package Lab report')}</title><style>${PAGE_CSS}</style></head><body><main>${body}</main></body></html>`
+  return o.fragment ? body : `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(o.title ?? 'Package Lab report')}</title><style>${PAGE_CSS}</style></head><body><main>${body}</main></body></html>`
 }
 
 // An experiment's variants (experiment --out writes report.html with this): the same columns as the text table. rows are summarise()'s rows.

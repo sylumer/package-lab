@@ -3,12 +3,14 @@
 import * as zlib from 'node:zlib'
 import { inflateRawSync, deflateRawSync } from 'node:zlib'
 
-export function unzip(buf) {
+export const MAX_UNZIPPED = 2 * 1024 ** 3   // inflated bytes, all entries together
+
+export function unzip(buf, max = MAX_UNZIPPED) {
   let eocd = -1
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break }
   if (eocd < 0) throw new Error('Not a ZIP file (no end of central directory).')
   const count = buf.readUInt16LE(eocd + 10), files = new Map()
-  let p = buf.readUInt32LE(eocd + 16)
+  let p = buf.readUInt32LE(eocd + 16), budget = max
   for (let n = 0; n < count; n++) {
     if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('Damaged ZIP central directory.')
     const flags = buf.readUInt16LE(p + 8), method = buf.readUInt16LE(p + 10), csize = buf.readUInt32LE(p + 20)
@@ -18,7 +20,11 @@ export function unzip(buf) {
     if (name.endsWith('/')) continue
     const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28), data = buf.subarray(start, start + csize)
     if (method === 0) files.set(name, data)
-    else if (method === 8) files.set(name, inflateRawSync(data))
+    else if (method === 8) {   // capped, so a few KB that inflate to many GB (a zip bomb) can't exhaust memory
+      let out
+      try { out = inflateRawSync(data, { maxOutputLength: Math.max(1, budget) }) } catch (e) { if (e.code === 'ERR_BUFFER_TOO_LARGE' || e instanceof RangeError) throw new Error(`The package unzips to more than ${+(max / 1024 ** 3).toFixed(1)} GB, so it can't be opened.`); throw e }
+      budget -= out.length; files.set(name, out)
+    }
     else throw new Error(`${name} uses compression method ${method}, which isn't supported.`)
   }
   return files

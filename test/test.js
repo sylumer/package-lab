@@ -227,6 +227,7 @@ const levels = fixture('levels', d => {
 
 // ---- Unit ----
 const files = unzip(readFileSync(good))
+assert.throws(() => unzip(zip(new Map([['a.bin', Buffer.alloc(4096)], ['b.bin', Buffer.alloc(4096)]])), 6000), /unzips to more than/, 'unzip: a package that inflates past the cap is refused (zip bomb)')
 assert.ok(files.has('imsmanifest.xml') && files.has('lesson.js'), 'zip lists files')
 assert.match(files.get('lesson.html').toString(), /<html/i, 'zip inflates')
 assert.equal(pkgPath('a/b/', '../c/d.html?x=1#y'), 'a/c/d.html')
@@ -2572,6 +2573,9 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
     const cookie = login.headers.get('set-cookie').split(';')[0], H = { cookie }
     const invoke = async (name, arg) => { const r = await (await fetch(`${base}/api/invoke/${name}`, { method: 'POST', headers: H, body: JSON.stringify(arg ?? {}) })).json(); if (r.error) throw new Error(r.error); return r.value }
     assert.match(await (await fetch(base + '/', { headers: H })).text(), /bridge\.js/, 'web: UI served')
+    for (const extra of [{ origin: 'http://localhost:1' }, { 'sec-fetch-site': 'same-site' }, { origin: 'null' }])
+      assert.equal((await fetch(`${base}/api/invoke/state`, { method: 'POST', headers: { ...H, ...extra }, body: '{}' })).status, 403, `web: a POST from another origin is refused (${JSON.stringify(extra)})`)
+    assert.equal((await fetch(`${base}/api/invoke/state`, { method: 'POST', headers: { ...H, origin: base, 'sec-fetch-site': 'same-origin' }, body: '{}' })).status, 200, 'web: a POST from its own page is let through')
     // E3.3: the doc handler inlines the guide's PNGs, so a doc comes with no image paths left to fetch.
     const guide = await invoke('doc', { name: 'help/getting-started.md' })
     assert.ok(guide.includes('](data:image/png;base64,') && !/\]\(\.\.\/images\//.test(guide), 'web: the doc handler inlines the guide images')

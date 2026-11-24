@@ -56,6 +56,13 @@ export function startWeb({ host = '127.0.0.1', port = DEFAULT_PORT, uiDir, dataD
       }
       if (!same(cookie(req), secret))
         return send(res, 401, 'text/html; charset=utf-8', '<!doctype html><meta charset="utf-8"><title>Package Lab</title><p style="font:15px system-ui;margin:2em">Open the address Package Lab printed when it started (it ends <code>?token=…</code>). <code>package-lab serve --url</code> prints it again.</p>')
+      // SameSite=Strict still sends the cookie from another port on the same host (http://localhost:3000 is the same site), so a
+      // page there could POST here. Anything but a GET must come from this origin: Sec-Fetch-Site where the browser sends it, else Origin.
+      if (req.method !== 'GET') {
+        const site = req.headers['sec-fetch-site'], origin = req.headers.origin
+        let host = null; try { host = origin && new URL(origin).host } catch { /* "null" or junk */ }
+        if ((site && site !== 'same-origin') || (origin && host !== req.headers.host)) return send(res, 403, 'text/plain; charset=utf-8', 'Cross-origin request refused.')
+      }
       const p = u.pathname
       if (req.method === 'GET' && (p === '/' || files.has(p.slice(1)))) {
         const name = p === '/' ? 'index.html' : p.slice(1)
