@@ -32,10 +32,13 @@ jobs:
       - name: Unit tests
         run: node test/test.js --unit
 
-      # The live test clicks at a fraction of the run window, so the screen size matters if Windows shrinks the window.
+      # The runner's screen is 1024x768, smaller than the 1100x800 run window, so Windows shrinks the window and the tests'
+      # clicks (fractions of the window, measured on the sample at full size) miss. A 1920x1080 screen keeps the full size.
       - name: Screen size
         shell: pwsh
-        run: Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | Format-List DeviceName, Bounds, WorkingArea, Primary
+        run: |
+          Set-DisplayResolution -Width 1920 -Height 1080 -Force
+          Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | Format-List DeviceName, Bounds, WorkingArea, Primary
 
       - name: Full suite
         run: npm test
