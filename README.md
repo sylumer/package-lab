@@ -36,7 +36,7 @@ From the [latest release](https://github.com/sylumer/package-lab/releases/latest
 | Download | For |
 |---|---|
 | `Package-Lab-mac-arm64.zip` | Macs with Apple silicon (M1 and later). Signed and notarised: unzip, move to Applications, open. |
-| `Package-Lab-win-x64.zip` | Windows 10 and 11 on Intel or AMD. Portable: unzip and run `Package Lab.exe` ([Windows notes](docs/windows.md)). |
+| `Package-Lab-win-x64.zip` | Windows 10 and 11 on Intel or AMD. Portable: unzip and run `Package Lab.exe`. Not code-signed, so Windows warns on first run ([Windows notes](docs/windows.md)). |
 | `Package-Lab-win-arm64.zip` | Windows on Arm. |
 | `Package-Lab-User-Guide.pdf` | The User Guide, to read without the app. |
 

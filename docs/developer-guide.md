@@ -1641,8 +1641,10 @@ newest; the website (`package-lab-site`) links there.
 when chosen, compares its tag with `app.getVersion()` and offers the release page. Nothing is checked on its own.
 Electron's `autoUpdater` would need an installer (Squirrel) on Windows, not a portable zip, so it isn't used.
 
-**Windows signing.** Not yet. The plan is SignPath Foundation (free for open-source projects), which signs builds made
-by GitHub Actions from this repository.
+**Windows signing.** None: the Windows zips are not code-signed, so Windows warns about an unknown publisher on first
+run. Signing is left for a later release. Options then: SignPath Foundation (free for open-source projects; an
+application and review, and it signs only builds made by GitHub Actions, such as `.github/workflows/windows.yml`'s), or
+a paid certificate service such as Azure Artifact Signing.
 
 ## The Alfred workflow
 

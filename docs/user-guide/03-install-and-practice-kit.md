@@ -28,7 +28,7 @@ Ctrl+Alt+I. Where something works only on a Mac, the guide says so.
 1. Download Package Lab for Windows from the same places: `Package-Lab-win-x64.zip` for most PCs, or
    `Package-Lab-win-arm64.zip` for Windows on Arm. It is a portable app: a zip with no installer.
 2. Unzip it into any folder, a USB stick included.
-3. Run `Package Lab.exe` in that folder. The Windows app isn't code-signed yet, so Windows may warn that it comes from an unknown
+3. Run `Package Lab.exe` in that folder. The Windows app isn't code-signed, so Windows may warn that it comes from an unknown
    publisher: choose **More info**, then **Run anyway**.
 
 Nothing is written to the registry, and Package Lab doesn't make itself the app for `.zip` files. To uninstall it,

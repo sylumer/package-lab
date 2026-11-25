@@ -27,7 +27,7 @@ as before, and `--install` is for the Mac only.
 ## Run it
 
 1. Copy the zip to the Windows PC and unzip it. Any folder will do, including a USB stick.
-2. Run `Package Lab.exe`. Windows may warn that the app is from an unknown publisher: it isn't code-signed yet. Choose **More info**, then
+2. Run `Package Lab.exe`. Windows may warn that the app is from an unknown publisher: it isn't code-signed. Choose **More info**, then
    **Run anyway**.
 3. Open a package with Open, or drop a `.zip` on the window.
 
@@ -51,7 +51,7 @@ To move from one to the other, close Package Lab and copy the folder: from `%APP
 - No translucent sidebar (vibrancy), and no system accent colour. The window has its own frame and menu bar.
 - Ctrl replaces ⌘ and Alt replaces ⌥ in shortcuts; the docs in the app show the Windows keys.
 - WebKit runs work through Playwright, but WebKit on Windows is a weaker stand-in for Safari than on a Mac.
-- No installer, code signing or auto-update yet. **Help › Check for Updates…** says whether there is a newer release.
+- No installer, code signing or auto-update. **Help › Check for Updates…** says whether there is a newer release.
 
 ## Trying it on Windows
 

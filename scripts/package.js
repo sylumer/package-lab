@@ -7,6 +7,7 @@ import { packager } from '@electron/packager'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { DOCS, GUIDE } from '../src/docs.js'
 import { guideHtml } from './guide-html.js'
@@ -14,7 +15,7 @@ import { guidePdf } from './guide-pdf.js'
 import { zip } from '../src/zip.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url)), build = join(root, 'build')
-const electron = join(root, 'node_modules', '.bin', 'electron'), run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' })
+const electron = createRequire(import.meta.url)('electron'), run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' })
 
 const option = name => { const i = process.argv.findIndex(a => a === `--${name}` || a.startsWith(`--${name}=`)), a = process.argv[i]; if (i < 0) return undefined; const v = a.includes('=') ? a.slice(a.indexOf('=') + 1) : process.argv[i + 1]; if (!v || v.startsWith('--')) throw new Error(`--${name} needs a value.`); return v }
 const platform = option('platform') ?? 'darwin', arch = option('arch') ?? process.arch
@@ -43,7 +44,7 @@ const shown = [...DOCS, ...GUIDE]   // the Help panel's docs and the User Guide'
 const kept = new Set(shown.map(d => '/docs/' + d.name)), keptDirs = new Set(['/docs', ...shown.filter(d => d.name.includes('/')).map(d => '/docs/' + d.name.split('/')[0])])
 // The guide's light pictures (docs/images/*-light.png, E3.3) are kept too: the panel draws them from the packaged docs.
 const shot = p => p === '/docs/images' || /^\/docs\/images\/[^/]+-light\.png$/.test(p)
-const ignore = p => kept.has(p) || keptDirs.has(p) || shot(p) ? false : /^\/(dist|test|docs|scripts|build|alfred)(\/|$)/.test(p) || /^\/\.git/.test(p) || /\.md$/.test(p)
+const ignore = p => kept.has(p) || keptDirs.has(p) || shot(p) ? false : /^\/(dist|test|docs|scripts|build|alfred)(\/|$)/.test(p) || /^\/\.git/.test(p) || /\.md$/.test(p) || /^\/node_modules\/\.bin(\/|$)/.test(p)
 
 // Windows: the icon as .ico, from the PNG (icon.png is made first if it is missing).
 if (platform === 'win32' && !existsSync(join(build, 'icon.ico'))) {

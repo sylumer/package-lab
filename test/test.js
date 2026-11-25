@@ -57,7 +57,7 @@ const base = fileURLToPath(new URL('../src/sample/', import.meta.url)), work = m
 // (which has neither zip nor unzip) its built-in tar.exe, which writes zips and checks their CRCs as it extracts.
 const isWin = process.platform === 'win32'
 const zipDir = (dir, out) => isWin ? execFileSync('tar', ['-a', '-cf', out, ...readdirSync(dir)], { cwd: dir }) : execFileSync('zip', ['-qr', out, '.'], { cwd: dir })
-const unzipT = path => isWin ? spawnSync('tar', ['-xOf', path], { stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' }) : spawnSync('unzip', ['-t', path], { encoding: 'utf8' })
+const unzipT = path => spawnSync('unzip', ['-t', path], { encoding: 'utf8' })   // Info-ZIP on Windows too (the tests need its zip already); Windows' tar can't read non-ASCII names in a non-UTF-8 console
 function fixture(name, edit = () => {}) {
   const dir = join(work, name)
   cpSync(base, dir, { recursive: true })
@@ -1303,7 +1303,7 @@ assert.equal(drill({ trace: trace() }).findings[0].title, 'Why it stopped: nothi
   assert.ok(entries.every(e => e.csize <= e.size || e.method === 8) && entries[1].csize === noise.length, 'zip: stored only when deflate isn’t smaller')
   assert.deepEqual(entries.map(e => !!(e.flags & 0x800)), [false, false, false, true, true], 'zip: the UTF-8 flag is set for non-ASCII names only')
   const zf = join(work, 'writer.zip'); writeFileSync(zf, z)
-  const t = unzipT(zf); assert.equal(t.status, 0, 'zip: unzip -t accepts it: ' + t.stdout + t.stderr); if (!isWin) assert.match(t.stdout, /No errors detected/)
+  const t = unzipT(zf); assert.equal(t.status, 0, 'zip: unzip -t accepts it: ' + t.stdout + t.stderr); assert.match(t.stdout, /No errors detected/)
   assert.equal(crc32(Buffer.from('123456789')), 0xcbf43926, 'zip: crc32 check value'); assert.equal(crc32Table(Buffer.from('123456789')), 0xcbf43926, 'zip: the table fallback agrees')
   assert.equal(crc32Table(noise), crc32(noise), 'zip: the table fallback agrees on binary data')
   assert.equal(unzip(zip(new Map())).size, 0, 'zip: an empty archive')
