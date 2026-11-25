@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // xAPI 1.0.3 statement validation (P4.5), and what the statements of a run say. Pure.
 // validateStatement(s) → [{ sev: 'error' | 'warn', code, path, text }]: errors are what the spec says an LRS must reject; warnings are
 // what it only recommends. The texts never quote the statement's own values (they are course content: see redact.js).

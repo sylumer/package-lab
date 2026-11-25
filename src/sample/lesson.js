@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The lesson: four pages and a quiz. It bookmarks the page (cmi.core.lesson_location) and the answers so far
 // (cmi.suspend_data), records each answer as an interaction, and sets the score and passed or failed against the
 // mastery score from the manifest. Leaving before the quiz suspends the attempt, so the next launch resumes.

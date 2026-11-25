@@ -150,6 +150,11 @@ starts the course, never runs.
 SCORM API” and the uncaught `TypeError: undefined is not an object (evaluating 'navigator.userAgentData.brands')` at
 `lesson.js:1`.
 
+**Each run:** in Chromium it reaches **Finished**. In WebKit at the iPad size it stops after **Content shown**, with
+the error above. WebKit alone at the normal size stops in the same place: the fault is the engine, not the screen, so
+**Device size** makes no difference here. The **browsers** experiment agrees: Chromium reaches **Finished**, WebKit
+stops after **Content shown**.
+
 **The fix:** check that `navigator.userAgentData` exists before using it, or don't use it.
 
 ## 11-fails-in-some-lmss
@@ -242,7 +247,7 @@ has a verb id that isn't an IRI”, and “cmi5: The AU sent “completed” bef
 statement 4 as rejected.
 
 **Why the LMS never shows passed:** the LRS refused the “passed” statement with status 400, so it was never recorded. A
-cmi5 LMS may also ignore or reject the whole session for its order.
+cmi5 LMS may also ignore or reject the whole session for its order. (An AU is a launchable item in a cmi5 course.)
 
 **The fix:** use full verb IRIs, and send “initialized” first and “terminated” last.
 
@@ -288,7 +293,9 @@ nothing, fail the same way. The one setting they share is the frame depth.
 data 1.2** and **2004** fields change it. Some LMSs cut the data off silently instead of refusing it, which is worse:
 the course reads back broken data.
 
-**The fixes:** for the author, save less (or compress it); for the export, publish as SCORM 2004, which allows 64,000.
+**The fixes:** for the author, save less (or compress it); for the export, publish as SCORM 2004, where an LMS must accept at least
+64,000. That is a bigger change than it sounds: a different API, manifest and runtime, so check that your LMS supports
+2004 and test the whole course again.
 
 ## Other exercises
 

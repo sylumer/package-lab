@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Static analysis of a package: its manifest, launch paths and what its scripts say about how they find the LMS
 // and what they fetch. Pure: takes the files Map (name → Buffer) from unzip.
 import { xmlTree, xKid, xKids, xFind } from './xml.js'

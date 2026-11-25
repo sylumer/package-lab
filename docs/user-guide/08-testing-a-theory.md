@@ -22,7 +22,7 @@ three you'll use most:
 
 | Setting | Where | What it tests |
 |---|---|---|
-| **API** | LMS | Which API objects the test LMS offers: *as the manifest says*, *both*, *1.2 only*, *2004 only* or *none*. If *both* works where *as the manifest says* didn't, the manifest declares the wrong version. *None* shows what the course does with no LMS at all |
+| **API** | LMS | Which API objects the test LMS offers: *as the manifest says*, *both*, *1.2 only*, *2004 only* or *none*. If *both* works where *as the manifest says* didn't, the manifest and the scripts disagree about the version. *None* shows what the course does with no LMS at all |
 | **Frame depth** | Advanced | How many empty frames sit between the LMS's window and the course (0 to 3). A course that only searches a few parents fails when it's deeper. Many LMSs put content two or three frames deep |
 | **In a new window** | Advanced | The LMS opens the course with `window.open`, so the course has to find the API through its opener |
 
@@ -34,7 +34,7 @@ When you've finished testing, put them back. Most settings are remembered even a
 
 In chapter 7 you found that the manifest declares SCORM 2004 while the scripts use 1.2. Prove it.
 
-1. Open `03-not-tracked.zip` and run it for 10 seconds with the defaults. Note how far it got.
+1. Open `03-not-tracked.zip` and run it for 10 seconds with the default settings. Note how far it got.
 2. Set **API** (in **Settings › LMS**) to **Both**. The summary chip now shows it.
 3. Run again for 10 seconds. How far does it get now? What does **Lookups** show?
 4. Set **API** back to **As the manifest says**.
@@ -69,7 +69,9 @@ can be swapped with **Replace from a file…**.
    script still a problem?
 
 This is what most real diagnoses look like. One fault hides the next. Fix the first cause, run again, and read the
-first cause again, until the course gets as far as it should.
+first cause again, until the course gets as far as it should. This one is an exception: even fixed, **Content shown**
+keeps its cross, because the sample page has too little text for that rule, and the page never talks to the LMS.
+Stop when the page shows its text with no error ([the answer](appendix-a-answers.md#02-blank-page) explains).
 
 ## Tool 3: pinning a value
 
@@ -108,8 +110,8 @@ An **answer** gives the content a response to a request, so you can see what it 
 
 1. In **Network**, find the failed request, or the one to the server's root or another site, and choose **Answer this
    request…**.
-2. Check the pattern (a path, a glob with `*`, or a `/regex/`), the status, the content type and the body. A JSON
-   path starts with `{}`.
+2. Check the pattern (a path, a glob with `*`, or a `/regex/`), the status, the content type and the body. The body starts
+   as `{}`, an empty JSON object; put real values in if the course needs them.
 3. Choose **Add and run with these**. Answered requests are marked **answered** in Network.
 
 The list is in **Settings › Advanced › Answers**. The findings name the requests that were answered, and any answer

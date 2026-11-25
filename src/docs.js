@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 import { posix } from 'node:path'
 
 // The user-facing docs bundled with the app and shown in its Help panel; names are paths relative to docs/.

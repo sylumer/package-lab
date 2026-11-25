@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The xAPI practice and test packages: a cmi5 package (the cmi5 sample structure, one AU) and a Tin Can package, built in
 // memory. Shared by test/xapi.js (which asserts on them) and src/practice.js (the User Guide's practice packages),
 // so both describe the same packages. No assertions here.

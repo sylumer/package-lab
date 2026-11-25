@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Renders build/icon.svg to build/icon.png (1024 px) with Electron's own renderer: electron scripts/icon.cjs
 const { app, BrowserWindow, nativeImage } = require('electron')
 const { readFileSync, writeFileSync } = require('node:fs')

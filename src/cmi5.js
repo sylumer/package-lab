@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // cmi5 and Tin Can (xAPI) packages (P4.5): the course structure files (cmi5.xml, tincan.xml), the launch URL each format
 // uses, the LMS.LaunchData state document, and the cmi5 rules a run's statements must follow. Pure: no Electron, no files.
 // See docs/developer-guide.md ("cmi5 and xAPI") for the formats.

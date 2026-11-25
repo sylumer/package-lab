@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Source maps (P4.1). Pure. Finds a file's map (an inline data URL, or a file in the package), decodes its VLQ
 // "mappings" and answers "what is the original position of this generated one?". The original sources are only
 // shown when the map carries them (sourcesContent).

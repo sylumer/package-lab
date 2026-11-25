@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The test LMS. On host.html it makes the SCORM API objects the launch asks for, then frames the content (through
 // empty LMS frames, wrap.html?n#n, for depth) or opens it in a window. API calls go to the recorder through __labReport.
 // wrap.html loads this too: wrap.html?n#n is an LMS frame n frames above the content, which frames the next one down.

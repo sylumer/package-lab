@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Comparing two packages (P3.3): what changed between two exports, in files and in behaviour. Pure: takes two
 // packages ({ name, files (Map from unzip), analysis? }) and works out the rest. Not to be confused with diff.js,
 // which compares two recorded runs.

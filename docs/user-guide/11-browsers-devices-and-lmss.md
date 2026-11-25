@@ -13,7 +13,7 @@ environment, and Package Lab can imitate each part of it.
 
 - **Chromium**: Package Lab's own browser, the engine inside Chrome and Edge. Everything works.
 - **WebKit (Safari's engine)**: the engine of Safari, and of every browser on an iPhone and iPad. It needs Package Lab
-  run from its source, with Playwright ([chapter 3](03-install-and-practice-kit.md#check-your-computer)): the downloaded
+  run from its source code, with WebKit added ([chapter 14](14-working-at-scale.md#add-webkit)): the downloaded
   app can't run WebKit, and says so if you choose it.
 
 A WebKit run uses the same test LMS, files, changes, pins, answers, profile and storage setting. It records requests,
@@ -39,8 +39,8 @@ with WebKit for “fails on my iPad”.
 | Storage | What happens |
 |---|---|
 | **Normal** | Storage as usual. It lasts between runs while the app is open, shared by every package |
-| **Blocked (Safari-like)** | `localStorage` and `sessionStorage` throw a `SecurityError`, cookies read as empty, IndexedDB fails. As Safari does for a page inside another site's frame |
-| **Partitioned (empty)** | Nothing refused, but emptied before the run: a learner's first visit |
+| **Blocked (Safari-like)** | `localStorage` and `sessionStorage` throw a `SecurityError`, cookies read as empty, IndexedDB fails. The strictest case: Chrome with third-party cookies blocked, and some Safari versions and settings, for a page inside another site's frame |
+| **Partitioned (empty)** | Nothing refused, but emptied before the run: a learner's first visit, and how current Safari usually treats a frame from another site |
 
 If the course used blocked storage, the finding **The content needs storage the browser can block** lists every use,
 with its line. The fix is to keep the course's state in the LMS (`cmi.suspend_data`) and wrap browser storage in
@@ -52,7 +52,8 @@ Every LMS hosts a course a little differently. **Settings › LMS › Profile** 
 
 - **generic** is Package Lab's own test LMS, the default;
 - **moodle**, **scorm-cloud**, **cornerstone**, **successfactors**, **docebo**, **totara**, **blackboard** and **canvas**
-  are approximations, from each LMS's public documentation, of what it does by default. The notes under the list say
+  are approximations, from each LMS's public documentation and community reports, of what it does by default.
+  **canvas** is Canvas's SCORM tool showing a package in a frame inside the course page, its default. The notes under the list say
   which documents, and where they were silent.
 
 Choose a profile and its fields fill in. The ones that break courses:
@@ -71,8 +72,8 @@ Choose a profile and its fields fill in. The ones that break courses:
 | **Cookies** | Third-party cookies blocked | The same as blocked storage |
 
 Change any field to try a variation; choosing another profile clears your changes. An LMS's administrator can change
-most of these, so **treat a preset as a likely setup, not a fact**. When you know the real settings, write them down as
-your own profile ([chapter 14](14-working-at-scale.md#profiles-of-your-own)).
+most of these, so **treat a preset as a likely setup, not a fact**. When you know the real settings, set them here for each run, or write them down as
+your own profile file *(command line, [chapter 14](14-working-at-scale.md#profiles-of-your-own))*.
 
 ## Experiments for this chapter
 
@@ -86,18 +87,16 @@ Three experiment presets, from the **Experiments** view, try all of it at once:
 
 *“Fine on my PC, broken on my iPad.”*
 
-1. Run it for 10 seconds with the defaults. How far does it get?
-2. Set **Browser** to **WebKit** (it needs the source and Playwright's WebKit: see [chapter 3](03-install-and-practice-kit.md#check-your-computer))
+1. Run it for 10 seconds with the default settings. How far does it get?
+2. Set **Browser** to **WebKit** (it needs the source code with WebKit added: see [chapter 14](14-working-at-scale.md#add-webkit))
    and **Device size** to **iPad**, and run again. How far now? What does the course show? Would WebKit alone, at the
    normal size, have been enough?
 3. Read **Errors**. What is the error, and which line of which file? What does that code use?
 4. Now run the **browsers** experiment. Does the table agree?
 5. Put **Browser** and **Device size** back.
 
-With the downloaded app you can do step 1 only. Read the rest, then [the answer](appendix-a-answers.md#10-fails-in-safari),
-which says what each WebKit run shows.
-
-Check your answer in [the answers](appendix-a-answers.md#10-fails-in-safari).
+With the downloaded app you can do step 1 only: WebKit needs the source code. Read the other steps, then
+[the answer](appendix-a-answers.md#10-fails-in-safari), which gives what each WebKit run shows.
 
 ## Try it: `11-fails-in-some-lmss.zip`
 
@@ -124,8 +123,8 @@ which one mattered. That is the one-change rule again.
 2. Run the **lms** experiment. Which profiles get less far? Click one and read its findings.
 3. One of the failing rows, **scorm-cloud**, also blocks storage. Read its finding: does Package Lab blame storage?
    Why not?
-4. Find the one setting the failing profiles share. Test it on its own: profile **generic**, **Frame depth** 1, and
-   run. Then run the **frames** experiment.
+4. Find the one setting the failing profiles share. Test it on its own: set the profile back to **generic**, change
+   only that setting to the failing profiles' value, and run. Then run the **frames** experiment.
 5. Open **Lookups** for a failing run. How many windows did the course look at before it gave up? In `scorm.js`, find
    the line that decides how far it searches.
 6. Put **Frame depth** back to 0.
@@ -161,7 +160,8 @@ Check your answers in [the answers](appendix-a-answers.md#other-exercises).
 1. A course fails only in WebKit. What's the first view you read, and what are you looking for?
 2. Why can't you trace a WebKit run, and how do you get round it?
 3. What's the difference between **Blocked** and **Partitioned** storage?
-4. A course fails with the **scorm-cloud** profile. Name the one setting you'd try on its own first, and why.
+4. A course fails with the **scorm-cloud** profile, which changes both storage and frame depth. How do you find out
+   which of the two matters?
 5. Why should you treat a profile as an approximation?
 
 Next: [Going deeper](12-going-deeper.md).

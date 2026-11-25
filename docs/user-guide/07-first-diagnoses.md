@@ -9,7 +9,9 @@ Do this with every package, real or practice, before anything clever.
 
 1. **Open it and read the static findings.** Errors here (a misnamed manifest, a missing file, wrong capitals, a
    version mismatch) often explain everything downstream. Note them, but don't trust them blindly yet.
-2. **Run it with the defaults for 10 or 20 seconds** (**Stop after**: 10 s or 20 s). Don't touch the course.
+2. **Run it with the default settings for 10 or 20 seconds**: everything as it comes, except **Stop after** set to
+   10 s or 20 s (its own default is *I stop it*). Don't touch the course. Throughout this guide, “run it for 10
+   seconds” means this.
 3. **Read the banner sentence.** Where did it stop? That milestone tells you which kind of problem you have (see
    the table below).
 4. **Read the first finding that explains the stop**, and follow its evidence into the views ([chapter 6](06-reading-the-evidence.md#from-a-finding-to-the-evidence)).
@@ -20,14 +22,16 @@ Where it stopped, and where to look:
 
 | Stopped before | The kind of problem | Look in |
 |---|---|---|
+| Launch page loaded | The manifest's launch path is wrong, or that file is missing | Package, Network |
 | Scripts loaded | A file didn't load | Network, Boot path |
 | Content shown | The page never drew anything | The blank-page or loading-screen finding, Errors, Boot path |
 | Looked for the API | The LMS code never ran | Errors, Lookups, Package (mode switches) |
 | Found the API | It looked in the wrong place, or for the wrong name | Lookups |
-| Initialised to Committed | It found the LMS but the conversation went wrong | API |
+| Initialised | It found the LMS, but the first call failed | API (the call's result and error code) |
+| Read saved data, Wrote data or Committed | The conversation stopped part-way | API |
 | Finished | Often nothing: nobody left the course | Use it yourself, with **I stop it** |
 
-The [recipes](../recipes.md) are longer versions of this routine for the six commonest symptoms. Use them on real
+The [recipes](../recipes.md) are longer versions of this routine for six of the commonest symptoms. Use them on real
 courses.
 
 ## Exercise 1: `02-blank-page.zip`
@@ -55,8 +59,7 @@ Write your diagnosis, then check it in [the answers](appendix-a-answers.md#02-bl
    the evidence for **Content shown**). What does it say?
 3. Which milestone is the first cross?
 4. Open **Lookups**. What name did the content look for? What does the finding say the run *offered*?
-5. The finding's **Try:** suggests a test with “the Both APIs profile”. That means the **API** setting set to
-   **Both**, not an LMS profile. You'll learn to run it in [chapter 8](08-testing-a-theory.md); for now, write down what
+5. The finding's **Try:** suggests a test with the **API** setting set to **Both**. You'll learn to run it in [chapter 8](08-testing-a-theory.md); for now, write down what
    you expect it to show.
 
 Check your diagnosis in [the answers](appendix-a-answers.md#03-not-tracked).

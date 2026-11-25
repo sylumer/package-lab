@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Findings: evidence from the static analysis, a recorded run and (optionally) a comparison, turned into likely
 // causes. Pure. Each finding: { sev: 'error' | 'warn' | 'info', title, detail, evidence: [string], fix }.
 import { isLab, isLrs } from './diff.js'
@@ -26,7 +27,7 @@ export function staticFindings(a) {
     out.push({ sev: 'error', title: `The manifest says SCORM ${m.version}, but the scripts use the SCORM ${a.apiUse} API`,
       detail: `An LMS offers only ${API_NAME[m.version]} for a SCORM ${m.version} package, and the content looks for ${API_NAME[a.apiUse]}, so it finds no LMS.`,
       evidence: evidenceFrom(a.scan, a.apiUse === '1.2' ? 'api12' : 'api04', 3),
-      fix: `Republish for SCORM ${m.version}, or correct <schemaversion> in imsmanifest.xml to match the content (${a.apiUse === '1.2' ? '1.2' : '2004 4th Edition'}). Check with the Both APIs profile.`,
+      fix: `Republish for SCORM ${m.version}, or correct <schemaversion> in imsmanifest.xml to match the content (${a.apiUse === '1.2' ? '1.2' : '2004 4th Edition'}). Check with Settings › LMS › API set to Both.`,
       autofix: { id: 'manifest-version', params: { to: a.apiUse } } })
   if (m && a.apiUse === 'none' && m.items.some(i => i.type === 'sco'))
     out.push({ sev: 'warn', title: 'No script in the package mentions the SCORM API',
@@ -85,7 +86,7 @@ export function runFindings(trace, launch = {}, analysis = null) {
           : launch.expose && !names.some(n => n === API_NAME[launch.expose] || launch.expose === 'both') ? `This run offered ${launch.expose === 'none' ? 'no API' : API_NAME[launch.expose]}: the package and its manifest disagree on the SCORM version.`
             : 'It looked in frames where the LMS hadn’t put the API: check the lookups’ frames and the frame depth.',
         evidence: lookups.slice(0, 6).map(l => `${l.name} ${l.found ? 'found' : 'missing'} on ${short(l.frame)} from ${l.stack?.[0] ?? '?'}`),
-        fix: found ? 'Look at the first error after the lookup.' : 'Launch again with the Both APIs profile. If calls appear, the SCORM version is the cause.' })
+        fix: found ? 'Look at the first error after the lookup.' : 'Launch again with Settings › LMS › API set to Both. If calls appear, the SCORM version is the cause.' })
     }
   }
   // Notes from the macro player (main.js, E1.1).

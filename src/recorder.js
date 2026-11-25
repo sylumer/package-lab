@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Records one run through the Chrome DevTools Protocol: the page and, by auto-attach, every frame and worker it
 // starts (so cross-origin frames are recorded too). The trace is plain JSON: see DESIGN.md.
 import { readFileSync } from 'node:fs'

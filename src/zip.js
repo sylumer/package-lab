@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // A ZIP reader over the central directory: Map of entry name → Buffer. Stored and deflated entries only (all that
 // SCORM packages use); ZIP64 isn't supported.
 import * as zlib from 'node:zlib'

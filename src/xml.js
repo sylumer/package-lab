@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // A small XML parser for manifests: { name (local, no prefix), attrs (local names, lower case), kids, text }.
 // No DTDs or entities beyond the five predefined ones and numeric references.
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }

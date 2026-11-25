@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // SCORM 1.2 and 2004 run-time, copied from toolbox (assets/js/elearning.js and the time helpers in tools.js).
 // Loaded as a classic script by the host page; exposes scormRuntime on globalThis.
 function span12(s) { const m = String(s).match(/^(\d{2,4}):([0-5]\d):([0-5]\d)(\.\d{1,2})?$/); return m ? +m[1] * 3600 + +m[2] * 60 + +m[3] + +(m[4] || 0) : null }

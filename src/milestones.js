@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Milestones: where a run got to on the SCORM path (launch page, scripts, something shown, API lookup, initialise,
 // read, write, commit, finish), and how two runs compare. Pure: takes a trace and the boot graph of the launch page.
 import { isLab, isLrs } from './diff.js'

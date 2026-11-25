@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // iSpring (docs/packs/ispring.md: vendor article read; folder tree unconfirmed).
 import { score } from './util.js'
 

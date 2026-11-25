@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // LMS profiles (P2.1): how a particular LMS hosts content: the origin it serves the package from, its frames, how it
 // launches, where and when it puts the API, the headers on package files, how commits behave and its limits. Pure:
 // the presets, validating a profile, and working out the profile a launch runs with. See docs/developer-guide.md.

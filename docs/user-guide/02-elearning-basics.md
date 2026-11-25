@@ -50,7 +50,9 @@ you open a package:
 
 - It must be called exactly `imsmanifest.xml`, in lower case, at the top of the ZIP (not inside a folder).
 - Every file it names must be in the ZIP with exactly the same capitals.
-- The SCORM version it declares must match the one the course's scripts actually use.
+- The SCORM version it declares must match the one the course's scripts actually use. Many LMSs choose which API to
+  offer (`API` or `API_1484_11`) from the version the manifest declares, so a mismatch means the course looks for an
+  API that isn't there.
 
 ## The LMS and the API
 
@@ -90,10 +92,11 @@ see most:
 | The course's own saved state (answers, progress) | `cmi.suspend_data` | `cmi.suspend_data` |
 | Status | `cmi.core.lesson_status` (`passed`, `failed`, `completed`, `incomplete`…) | `cmi.completion_status` and `cmi.success_status` |
 | Score | `cmi.core.score.raw` | `cmi.score.raw`, `cmi.score.scaled` |
-| How the learner left | `cmi.core.exit` (`suspend`, or empty) | `cmi.exit` |
+| How the learner left | `cmi.core.exit` (`suspend`, `logout`, `time-out` or empty) | `cmi.exit` (also `normal`) |
 | The learner's name | `cmi.core.student_name` | `cmi.learner_name` |
 
-**Suspend data** has a size limit: 4,096 characters in SCORM 1.2 and 64,000 in SCORM 2004, and some LMSs set their own.
+**Suspend data** has a size limit: 4,096 characters in SCORM 1.2; in SCORM 2004 (3rd and 4th editions) an LMS must
+accept at least 64,000, and may accept more. Some LMSs set their own limit.
 
 ## A healthy session
 
@@ -123,8 +126,9 @@ host and port, such as `https://lms.example.com`. Many LMSs serve course files f
 server or CDN. Then the browser stops the course reaching the LMS's API at all, unless the LMS provides a bridge.
 
 **Storage and privacy.** Browsers let a page keep data of its own: cookies, `localStorage`, `sessionStorage`,
-IndexedDB. Safari, and Chrome in some settings, refuse that storage to a page shown inside another site's frame, which
-is exactly where a course sits in an LMS. A course that keeps its state there, rather than in `cmi.suspend_data`, can
+IndexedDB. Safari partitions or refuses that storage for a page shown inside another site's frame, and Chrome refuses it when
+third-party cookies are blocked; that frame is exactly where a course sits in an LMS. The details change between
+browser versions. A course that keeps its state there, rather than in `cmi.suspend_data`, can
 fail to start or forget everything in Safari or on an iPad.
 
 ## cmi5 and xAPI, briefly

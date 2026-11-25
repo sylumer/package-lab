@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Why it stalled (P1.6): when the content goes quiet short of a milestone, what it was still waiting for. Pure: takes a
 // trace (the probe's timers, listener, msg-run and post reports, plus the execution trace if there is one) and the
 // milestone list. The probe is src/host/probe.js; the formats are in docs/developer-guide.md.

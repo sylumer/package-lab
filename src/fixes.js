@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Autofixes (P3.1): the mechanical corrections a package can have, and the export of a corrected copy. A finding that a
 // fix addresses carries `autofix: { id, params }` (plain data, see rules.js); the functions live here. Each fix is
 // apply(files Map, params) → { files: new Map, changes: [string] } and does nothing (no changes) when there is nothing

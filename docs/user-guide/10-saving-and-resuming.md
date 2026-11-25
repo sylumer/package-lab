@@ -101,7 +101,7 @@ Check your answer in [the answers](appendix-a-answers.md#09-starts-over).
 - **It uses Package Lab's test LMS's rules.** It offers a resume only after exit is `suspend`, as many LMSs do. Some
   LMSs are more forgiving, some stricter. Confirm the behaviour in the real LMS.
 - **Suspend data has limits.** A finding “Suspend data is *N* characters” means an LMS may cut it off: 4,096 in SCORM
-  1.2, 64,000 in 2004, or a profile's own limit. A course that resumes in Package Lab but not in the LMS may be over it.
+  1.2, at least 64,000 in 2004, or a profile's own limit. A course that resumes in Package Lab but not in the LMS may be over it.
 
 ## Before you go on
 

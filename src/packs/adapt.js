@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Adapt (adapt-contrib-spoor). The config keys and defaults come from the plugin's README (docs/packs/adapt.md):
 // _spoor._isEnabled (true), _advancedSettings._scormVersion ("1.2"), _showDebugWindow (false).
 import { score, named, textOf, jsonOf } from './util.js'

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Formatting code for reading (P4.1). Pure. js-beautify (vendored, src/vendor/beautifier.cjs) lays out JavaScript,
 // HTML and CSS; the line map is built by walking the original and the formatted text together, skipping whitespace:
 // the n-th non-whitespace character of one is the n-th of the other, so any position can be carried across.

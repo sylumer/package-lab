@@ -5,9 +5,9 @@ From “what is a SCORM package?” to diagnosing a course nobody else can fix.
 *Edition 1.2, 22 November 2026, for Package Lab 0.3.0. See the [change log](changelog.md) for what changed.*
 
 This guide teaches Package Lab as a course, in order. Each chapter builds on the one before, and most have exercises
-on a set of practice packages that you build in [chapter 3](03-install-and-practice-kit.md). Each practice package
-has one fault in it. By the end you will have found every one of them, and you will have the method to find the faults
-in real courses.
+on a set of practice packages that you build in [chapter 3](03-install-and-practice-kit.md). Sixteen of the nineteen
+practice packages have one fault each; the other three are sound, and show you what “working” looks like. By the end
+you will have found every fault, and you will have the method to find the faults in real courses.
 
 ## The guide and Help
 
@@ -40,8 +40,11 @@ chapter are at the foot of each chapter. **Search the guide** searches every cha
   guide` writes it on its own. It's the whole guide on one page, with the screenshots, for any browser.
 - **A PDF:** every build also writes `Package Lab User Guide.pdf` beside it (and into the Windows zip), and `make
   guide-pdf` writes it on its own. It has a contents page, bookmarks for every chapter and heading, links between
-  chapters that work, page numbers, and each chapter on a new page.
+  chapters that work, page numbers, a cover with the logo, version and edition, and each chapter on a new page.
 - **On GitHub:** the chapters are plain Markdown, and read as they are.
+
+These copies are for reading. To do the exercises, open the guide in the app (**Help › User Guide**): building the
+practice kit, and the package names that open each package, work only there.
 
 ## Who it is for
 
@@ -87,13 +90,14 @@ covers what you need, and later chapters add the rest as you go.
 **Back matter**
 
 - [Appendix A: Exercise answers](appendix-a-answers.md): what is wrong with each practice package, and the answers to
-  every other exercise.
+  the other *Try it* exercises. The *Check yourself* questions at the end of each chapter are answered in that
+  chapter's text.
 - [Appendix B: Quick reference](appendix-b-quick-reference.md): the method, the milestones, symptoms, shortcuts and
   commands on one page.
 - [Appendix C: Troubleshooting Package Lab](appendix-c-troubleshooting.md): when the tool, not the course, is the
   problem.
-- [Glossary](glossary.md): every term this guide uses.
-- [Change log](changelog.md): what changed in each edition, and known issues.
+- [Glossary](glossary.md): the terms this guide uses.
+- [Change log](changelog.md): what changed in each edition.
 
 ## How long it takes
 
@@ -102,8 +106,8 @@ Part 4 is for dipping into as real courses bring you problems.
 
 ## Making a website or a PDF
 
-For a website of your own, or a PDF typeset with Pandoc and LaTeX instead of the one the build makes. The chapters are plain
-Markdown with relative links and no HTML, and combine into one document.
+This section is for building a website of your own, or a PDF typeset with Pandoc and LaTeX instead of the one the build
+makes. The chapters are plain Markdown with relative links and no HTML, and combine into one document.
 
 **The order.** This page, the chapters `01` to `15`, the appendices `A` to `C`, the glossary, then the change log.
 File names sort into that order, so a shell glob gives it.

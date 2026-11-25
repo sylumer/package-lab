@@ -57,10 +57,11 @@ query values, local file paths and the item's title.
 
 What stays: the verdict, the findings (worked out again from what's left), milestones, the timeline, API calls with
 their element names, numbers and times, function and property names, the package's name and file paths, and the first
-part of each error message.
+part of each error message. File and folder names can carry a client's or a course's name: the command line's
+`--redact-names` hashes them.
 
 A banner at the top of the report says what was taken out. **Read the report before you send it**: a browser's error
-message can still carry words the course wrote. On the command line, `report --redact --redact-names --key-out`
+message can still carry words the course wrote. *(Command line:)* `report --redact --redact-names --key-out`
 also replaces the file names with hashes, and gives you the key to match them back.
 
 ## Saved runs
@@ -70,7 +71,7 @@ brings one back, to read its views or to compare it with another run. Opening it
 package.
 
 A saved run also records the launch options it used: settings, changed files, pins, answers and macro. The command line
-can repeat it exactly:
+can repeat it exactly *(command line, [chapter 14](14-working-at-scale.md); the app has no button for this)*:
 
 ```bash
 package-lab run course.zip --options-from run.json

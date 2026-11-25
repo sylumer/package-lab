@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The macro editor's pure parts (E4.2): timing edits that keep the rest in place, the table's rows, and the name of a saved macro.
 // Every edit returns a new list that has been through normaliseOptions({ macro }), so a bad value throws the message the options give.
 import { normaliseOptions } from './options.js'

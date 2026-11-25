@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The web interface: the same UI as the desktop window, served over HTTP, so Package Lab can be used from another
 // machine. The UI's bridge (ui/bridge.js) turns lab.invoke into POST /api/invoke/<name> and lab.on into server-sent
 // events from /api/events. Content windows still run on this Mac; /api/live streams their frames and

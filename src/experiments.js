@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Experiments: one launch run several ways, and a table of how far each way got. Pure: planning the variants,
 // summarising results, and the findings that turn a hypothesis into a fact. Running them is up to the caller
 // (bin/package-lab.js headless, src/main.js in the apps).

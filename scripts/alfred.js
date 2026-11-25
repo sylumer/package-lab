@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Builds dist/Package Lab.alfredworkflow and opens it, so Alfred offers to import it. The workflow calls this repo's
 // CLI with the Node that ran this script, so rebuild it (npm run alfred) if either moves. The shell it runs is in
 // alfred-scripts.js. See docs/developer-guide.md (The Alfred workflow).

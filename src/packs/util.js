@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Helpers the packs share. Pure: they read the files Map (name → Buffer), the analysis and a trace.
 import { isLab } from '../diff.js'
 import { serverRequests } from '../shape.js'

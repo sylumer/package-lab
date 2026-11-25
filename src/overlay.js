@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Overrides: files of a package replaced for one run. Pure: building the file set a run is served from, and the
 // findings that say a run used changed files and whether the change helped. options.files is
 // { path: { content } | { base64 } } (see options.js); the original package is never changed.

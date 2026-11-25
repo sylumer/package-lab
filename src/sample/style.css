@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md. */
 body { margin: 0; font: 17px/1.5 system-ui, sans-serif; color: #1d2330; background: #fff; }
 main { max-width: 40rem; margin: 0 auto; padding: 1.5rem; }
 .status { padding: .5rem .75rem; background: #eef3fb; border-radius: 6px; font-size: 15px; }

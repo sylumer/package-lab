@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Rule packs: findings that know particular authoring tools and wrappers. A pack is
 //   { id, name, detect(analysis, files) → 0..1, staticRules(ctx) → findings, runRules(ctx, trace) → findings,
 //     detectRun?(trace) → 0..1, notes, sources }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // A minimal SCORM 1.2 wrapper: finds the LMS's API (in a parent frame or the window that opened this one) and keeps
 // track of the session's time.
 var scorm = (function () {

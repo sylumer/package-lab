@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // In the desktop window, preload.cjs provides window.lab over IPC. In a browser (the web interface) there is no
 // preload, so this provides the same window.lab over HTTP: invoke is a POST to /api/invoke/<name>, on listens to
 // server-sent events from /api/events. It also adds what only the web interface needs: upload, live and web.

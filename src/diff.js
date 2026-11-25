@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Compares two recorded runs: a reference (where the content works) and a run (where it doesn't). Pure functions.
 // Requests and scripts are matched by path, ignoring host and package root: the longest run of trailing path
 // segments decides, so https://host/content/abc/js/app.js matches lab://run/pkg/js/app.js.

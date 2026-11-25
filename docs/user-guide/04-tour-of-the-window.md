@@ -18,8 +18,8 @@ says, and read the steps.
 Any of these opens a package:
 
 - **Open package…** in the toolbar, or **File › Open Package…** (⌘O);
-- drag the `.zip` onto the window (it says **Drop to open**) or onto the Dock icon;
-- right-click the `.zip` in Finder and choose **Open With › Package Lab**;
+- drag the `.zip` onto the window (it says **Drop to open**), or, on a Mac, onto the Dock icon;
+- on a Mac, right-click the `.zip` in Finder and choose **Open With › Package Lab**;
 - **File › Open Recent**.
 
 Package Lab reads the ZIP in memory and never unpacks it to disk. The static findings appear at once.
@@ -38,6 +38,7 @@ From left to right:
 - **Item**: which item of the package to launch. The first SCO is chosen for you.
 - **Run** (⌘R), which becomes **Stop** (⌘.) while a run goes.
 - **Record** (only while a run goes): records your clicks as a macro ([chapter 9](09-macros.md)).
+- **Show in Package Lab** (only while a run goes): shows the course window inside Package Lab, in the **Live** view.
 - **Test saving** (⇧⌘R): the save-and-resume test ([chapter 10](10-saving-and-resuming.md)).
 - The **summary chip**, beside Run: a short list of the settings you've changed from their defaults, such as
   “SCORM 2004, Moodle, iPhone”. It's hidden when everything is at its default. Click it to see those settings.
@@ -50,7 +51,8 @@ From left to right:
 
 ### The sidebar (left)
 
-At the top, **Runs**: every run of this session, newest first, and any saved runs you open. Click one to show it. With
+At the top, **Runs**: every run of this session in the order you made them, newest at the bottom (and
+selected), and any saved runs you open. Click one to show it. With
 no run selected, the views show the package as read from its files; with a run selected, they show that run. This
 matters: the same view, **Boot path** say, shows different things before and after a run. Once you've run a package,
 a run stays selected; to see the files-only views again, open the package again (**File › Open Recent**).
@@ -80,7 +82,7 @@ corrected package…** ([chapter 13](13-delivering-the-answer.md)).
 **Inspector** in the toolbar (⌥⌘I) opens a panel with three segments:
 
 - **Settings**: everything the next run will use, in four groups: **LMS**, **Browser and device**, **Recording** and
-  **Advanced**. Chapters [8](08-testing-a-theory.md) and [10](11-browsers-devices-and-lmss.md) cover them.
+  **Advanced**. Chapters [8](08-testing-a-theory.md) to [11](11-browsers-devices-and-lmss.md) cover them.
 - **Macro**: the clicks and keys Package Lab plays into the course ([chapter 9](09-macros.md)).
 - **Help**: the docs, including this guide.
 
@@ -106,6 +108,8 @@ exercises. See [About this guide](README.md#reading-it-in-the-app) for what its 
 Both are inside the app, so they work offline.
 
 ## The menus
+
+On Windows the same menus are in the window's own menu bar, with **Package Lab** first.
 
 | Menu | What's there |
 |---|---|

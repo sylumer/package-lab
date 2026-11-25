@@ -111,7 +111,7 @@ src/
 scripts/
   package.js            Builds Package Lab.app (and --install); includes the DOCS and GUIDE from src/docs.js, and writes dist/Package Lab User Guide.html and .pdf (also into the Windows zip)
   guide-html.js         make guide: the User Guide as one self-contained HTML file, from the app's renderer
-  guide-pdf.js          make guide-pdf: that HTML printed to a PDF by Electron (printToPDF): contents page, bookmarks, working links, page numbers
+  guide-pdf.js          make guide-pdf: that HTML printed to a PDF by Electron (printToPDF): cover (build/icon.svg, version, edition from the guide README), contents page, bookmarks, working links, page numbers
   practice-kit.js       npm run practice: src/practice.js's kit into ./practice
   icon.cjs              Renders build/icon.svg to build/icon.png
   alfred.js             Builds the Alfred workflow
@@ -1608,7 +1608,7 @@ npm run package
 **A Windows build (E6.2).** `npm run package -- --platform win32 [--arch x64|arm64]` (`--platform darwin` is the default; `--arch` defaults to the host's) packages with `@electron/packager` without an `icon` (packager would run `rcedit`, which needs Wine off Windows), then:
 1. makes `build/icon.ico` if missing: `scripts/icon.cjs --ico` resizes `build/icon.png` (16, 32, 48, 256 px, with Electron's `nativeImage`) and `scripts/ico.cjs` writes the PNGs into an ICO file;
 2. uses `resedit` (a devDependency, pure JavaScript) to put the icon in `Package Lab.exe` and set `FileVersion`, `ProductVersion`, `ProductName`, `FileDescription` and the company and copyright text;
-3. zips the folder with `src/zip.js` into `dist/Package Lab-<version>-win32-<arch>.zip`, under a top folder named like the unpacked one, leaving out symlinks (`node_modules/.bin`).
+3. zips the folder with `src/zip.js` into `dist/Package-Lab-win-<arch>.zip`, under a top folder named like the unpacked one, leaving out symlinks (`node_modules/.bin`).
 
 `build/icon.ico` is kept in the Windows build for the window's `icon` option (`main.js`, off the Mac). See [windows.md](windows.md).
 
@@ -1616,7 +1616,33 @@ The bundle id is `com.sylumer.package-lab`. `Info.plist` declares `.zip` files w
 Open With without becoming the default.
 
 `npm run install-app` also quits a running copy, replaces `/Applications/Package Lab.app` and registers it with
-LaunchServices. It isn't notarised: for other Macs, sign it with a Developer ID and notarise it.
+LaunchServices. It is signed ad hoc, for this Mac only.
+
+## Releasing
+
+Downloads are GitHub release assets on [sylumer/package-lab](https://github.com/sylumer/package-lab/releases). Their
+names carry no version, so `https://github.com/sylumer/package-lab/releases/latest/download/<name>` always gets the
+newest; the website (`package-lab-site`) links there.
+
+1. Once per Mac: store notarisation credentials (an app-specific password from appleid.apple.com) as the
+   `package-lab` keychain profile: `xcrun notarytool store-credentials package-lab --apple-id <id> --team-id KK3DSQ53A6`.
+2. Bump `version` in `package.json` and add the changes to `docs/user-guide/changelog.md`. Commit.
+3. `make clean release`. `--release` (Mac only) signs with the Developer ID certificate, with the hardened runtime and
+   Electron's entitlements (`@electron/osx-sign`'s defaults), notarises through the keychain profile, staples, and
+   zips with `ditto` into `dist/Package-Lab-mac-arm64.zip`. The Windows zips are `dist/Package-Lab-win-<arch>.zip`.
+   There is no Intel Mac download (`make mac-x64` builds one).
+4. Tag and publish:
+   `git tag v<version> && git push --tags` then
+   `gh release create v<version> dist/Package-Lab-mac-arm64.zip dist/Package-Lab-win-x64.zip dist/Package-Lab-win-arm64.zip "dist/Package Lab User Guide.pdf#Package-Lab-User-Guide.pdf" --title "Package Lab <version>" --notes-file <notes>`.
+   Each zip is 160 to 200 MB; GitHub's limit is 2 GB per asset.
+5. In `package-lab-site`, run `scripts/sync-from-app.sh` (version and screenshots), commit and push.
+
+**Updates.** Help › Check for Updates… (`checkForUpdates` in `main.js`) asks the GitHub API for the latest release
+when chosen, compares its tag with `app.getVersion()` and offers the release page. Nothing is checked on its own.
+Electron's `autoUpdater` would need an installer (Squirrel) on Windows, not a portable zip, so it isn't used.
+
+**Windows signing.** Not yet. The plan is SignPath Foundation (free for open-source projects), which signs builds made
+by GitHub Actions from this repository.
 
 ## The Alfred workflow
 

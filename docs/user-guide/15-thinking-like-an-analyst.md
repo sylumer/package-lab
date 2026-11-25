@@ -37,13 +37,13 @@ Every diagnosis, however hard, follows the same loop.
 | Worked in the authoring tool | Run; Network for server-root requests | **Server needs**; answers; ask for an LMS export |
 | Nothing fails, nothing happens | **waiting for** finding | **Drill-down**; trace; **Execution** from the bottom |
 
-The [recipes](../recipes.md) are the long form of each row.
+The [recipes](../recipes.md) are the long form of six of these rows.
 
 ## Habits
 
 - **Glance at the summary chip before every run.** A setting left from the last test is the commonest cause of a
-  confusing result. So is a macro you forgot to clear, and a pin or an answer left in **Settings › Advanced**. Most
-  settings survive quitting the app, so check after a restart too.
+  confusing result. So is a macro you forgot to clear, and a pin or an answer left in **Settings › Advanced**. Most settings
+  survive quitting the app, so check after a restart too. (Pins, answers and the macro don't.)
 - **Name what changed.** One line per run in a log: the change, and how far it got.
 - **Start each theory from a clean baseline.** A run with the defaults, nothing changed, to compare against.
 - **Give the course a fair chance.** A 10-second run with nobody clicking can't call `LMSFinish`. Use **I stop it**
@@ -57,7 +57,7 @@ The [recipes](../recipes.md) are the long form of each row.
 **Static findings are predictions.** `05-error-in-the-console.zip` carries a static Problem, “Scripts run before what
 they need”. The error does happen, and it doesn't matter: the course starts properly a moment later. Severity says how
 bad a problem would be, not that it is. And the reverse: most of the practice packages have no static findings at all,
-and every one of them is broken.
+and every one of them except the three sound ones is broken.
 
 **A finding's Try: is the commonest fix, not this course's fix.** In `13-keeps-looking.zip` the finding suggests trying
 both APIs. That's right for most courses that show it, and wrong for that one.
@@ -76,7 +76,7 @@ to change something that didn't need changing.
 
 ## Authoring tools
 
-Package Lab knows eleven authoring tools: Xyleme, Articulate Storyline and Rise, Adobe Captivate, iSpring, Lectora,
+Package Lab knows eleven authoring tools and wrappers: Xyleme, Articulate Storyline and Rise, Adobe Captivate, iSpring, Lectora,
 Adapt, dominKnow, Evolve, the SCORM Driver and the pipwerks wrapper. When it recognises one, it adds findings that start
 with the tool's name (“Adapt: …”), and each says how sure it is:
 
@@ -103,9 +103,17 @@ A cmi5 or Tin Can package opens like any other. What changes:
   documents; and every request to the LRS.
 
 The LRS checks every statement against xAPI 1.0.3, and the cmi5 rules. A statement that breaks a MUST is refused with
-status 400, as a real LRS would. Most cmi5 faults are about order and context: “completed” before “initialized”,
+status 400, as the specification requires. Real LRSs vary: some are stricter, some store what they should refuse, so
+a statement your LRS accepted isn't proof it's valid. Most cmi5 faults are about order and context: “completed” before “initialized”,
 a missing session id, the auth token fetched twice. The [findings](../findings.md#from-a-cmi5-or-tin-can-run-the-lrs)
 list them all. Profiles, frame depth, device sizes, storage and WebKit all still apply.
+
+**cmi5 in one paragraph.** A cmi5 course is made of **AUs** (assignable units, cmi5's word for a launchable item).
+The LMS launches an AU with its LRS address, an actor, a **registration** (the learner's enrolment) and a one-use
+URL to fetch an **auth token**. The LMS sends a “launched” statement itself. The AU then fetches the token (once only),
+sends “initialized”, then “completed”, “passed” or “failed” as they happen, and “terminated” last. Every statement in
+that **session** carries the same session id in its `context`. The course's `moveOn` rule, in the package's
+`cmi5.xml`, says which of completed and passed the LMS needs before it counts the AU as done.
 
 ### Try it: `16-cmi5-never-passes.zip`
 
@@ -135,8 +143,8 @@ always read the xAPI view.
 You've diagnosed every practice package one chapter at a time, knowing which tools each chapter was about. Real courses don't
 come with a chapter. Three ways to finish:
 
-1. **Cold diagnosis.** Ask someone to rename the practice packages to `a.zip` to `m.zip` without telling you which is
-   which. Diagnose them all with the method above, then check against [the answers](appendix-a-answers.md).
+1. **Cold diagnosis.** Ask someone to rename the nineteen practice packages to `a.zip` to `s.zip` without telling you
+   which is which. Diagnose them all with the method above, then check against [the answers](appendix-a-answers.md).
 2. **Make a fault.** Open `01-works.zip`, change one file in **Files** to break it in a way this guide hasn't shown
    (a typo in an element name in `lesson.js`, `cmi.core.lesson_staus`, say; or `LMSCommit` removed), export the package,
    and give it to a colleague to diagnose. Then do the same with theirs. Before you hand it over, check that your fault
@@ -158,8 +166,11 @@ Some things an expert meets that this guide only touches:
   the other shows up oddly in LMS reports.
 - **Sequencing.** SCORM 2004 can carry rules for the order of SCOs and what unlocks what. Package Lab launches one item
   at a time and doesn't play sequencing rules: test those in the LMS.
+- **Several SCOs, and how the LMS reports them.** How an LMS rolls several SCOs' statuses up into one course result,
+  and how it treats `cmi.core.lesson_mode` and `credit`, are the LMS's business. Package Lab shows what each SCO
+  sends; what the LMS's reports make of it, test in the LMS.
 - **Authoring tools.** The [authoring tool notes](../packs/README.md), one page per tool.
-- **The Windows build.** `docs/windows.md` in the Package Lab folder covers building and running it.
+- **The Windows build.** `docs/windows.md` in the source code covers building and running it.
 
 ## Where to go from here
 

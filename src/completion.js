@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The command table (names, summaries, flags) and the zsh completion script (package-lab completion zsh). Pure. The
 // CLI's HELP text is the long form; the test checks that every command and flag here appears in it.
 import { PRESETS } from './experiments.js'

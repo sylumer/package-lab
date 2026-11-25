@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Makes the pictures the guide shows (E3.3): the desktop app's own windows at 1280 × 800, in light and dark, as docs/images/<view>-<theme>.png.
 // `npm run screenshots` runs it. It drives the app the way test/ui.js does (Playwright's Electron driver, a temporary data folder), so it
 // needs the same machine as the UI smoke test. Not part of the test suite: run it again when the UI changes.

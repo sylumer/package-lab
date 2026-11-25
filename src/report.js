@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Reports: a package's findings (and, after a run, what happened) as HTML, plus the verdict and counts the CLI and
 // the Concierge module show. Pure. renderReport gives a complete page, or with fragment: true a <div class="sl">
 // with its own scoped styles, for embedding (the Concierge module prints it inside its page).

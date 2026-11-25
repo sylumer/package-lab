@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // WebKit runs (P2.3): the same launch as an Electron run, in Safari's engine through Playwright. It runs in plain Node
 // (the CLI's process, or a child the apps start), not in Electron. The package and the test LMS's files are served from
 // memory through the browser's request routing at https://lms.lab.invalid/ (the LMS, as lab://run/ is) and

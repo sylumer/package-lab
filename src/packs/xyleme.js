@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Xyleme. Public information is thin (docs/packs/xyleme.md), so detection uses only the names the notes list, and the
 // rules rest on what Package Lab records anyway: requests to the platform's server root or another site, and content
 // that builds its own API object. Nothing here claims to know Xyleme's files.

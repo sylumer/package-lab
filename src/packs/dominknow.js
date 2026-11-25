@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // dominKnow (docs/packs/dominknow.md: no file names or keys known; detection is by name or text only).
 import { score } from './util.js'
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The shared code view (P4.1), a classic script (window.CodeView): one file with line numbers, the mode (formatted, original or from
 // its source map), coverage shading, trace markers, a search box and "go to line". Plain DOM. A file over 5,000 lines draws only
 // the lines in view. What it shows comes from the code-view handler (src/codeview.js).

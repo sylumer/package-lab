@@ -1,0 +1,17 @@
+Package Lab
+Copyright (C) 2026 Stephen Millard
+https://packagelab.thoughtasylum.com
+https://github.com/sylumer/package-lab
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General
+Public License as published by the Free Software Foundation, version 3 (see LICENSE).
+
+Additional terms under Sections 7(b) and 7(c) of that licence apply: see LINEAGE-AND-ATTRIBUTION.md. The project's
+provenance record is LINEAGE.md.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+details.
+
+Third-party components keep their own licences: src/vendor/*.LICENSE, and Electron and Chromium's notices in the app
+bundle (LICENSE and LICENSES.chromium.html).

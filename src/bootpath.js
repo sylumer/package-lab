@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // How a launch page should load, worked out from the files alone: the boot graph. Starting at the launch page it
 // follows every page, script, stylesheet, frame and data file the browser would load (tags in document order,
 // then the paths scripts load at run time), resolves each the way the browser would, and checks it against the

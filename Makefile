@@ -11,8 +11,8 @@ ELECTRON_CACHE           ?= $(HOME)/Library/Caches/electron
 PLAYWRIGHT_BROWSERS_PATH ?= $(HOME)/Library/Caches/ms-playwright
 
 .DEFAULT_GOAL := help
-.PHONY: help deps ci webkit start serve practice guide guide-pdf \
-        mac mac-arm64 mac-x64 mac-install mac-uninstall alfred link unlink \
+.PHONY: help deps ci webkit release start serve practice guide guide-pdf \
+        mac mac-arm64 mac-x64 mac-release mac-install mac-uninstall alfred link unlink \
         win win-x64 win-arm64 all \
         test test-unit test-slow test-ui test-all screenshots \
         clean clean-icons clean-caches distclean
@@ -62,6 +62,9 @@ mac-arm64: ## Build Package Lab.app for Apple silicon
 mac-x64: ## Build Package Lab.app for Intel Macs
 	$(PACKAGE) --arch x64
 
+mac-release: ## Build Package Lab.app for Apple silicon, signed with the Developer ID, notarised and zipped
+	$(PACKAGE) --arch arm64 --release
+
 mac-install: ## Build and install to /Applications, registered with Finder
 	$(PACKAGE) --install
 
@@ -89,6 +92,8 @@ win-arm64: ## Build the Windows app and zip for arm64
 	$(PACKAGE) --platform win32 --arch arm64
 
 ##@ Everything
+
+release: mac-release win-x64 win-arm64 ## Every release download: signed Mac (Apple silicon) and both Windows zips
 
 all: mac-arm64 mac-x64 win-x64 win-arm64 alfred ## Every build: both Mac architectures, both Windows ones, Alfred
 

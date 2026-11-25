@@ -12,7 +12,9 @@ Package Lab reads the package's files to work out how it should load. It then ru
 debugger, with its own test LMS, and records what the code actually does. It turns that evidence into findings: what
 went wrong, the evidence for it, the likely cause, and what to try.
 
-Everything runs on your Mac. No package content is sent anywhere.
+Everything runs on your computer (Mac or Windows). No package content is sent anywhere.
+
+Website: [packagelab.thoughtasylum.com](https://packagelab.thoughtasylum.com). Downloads: [latest release](https://github.com/sylumer/package-lab/releases/latest).
 
 ## Ways to use it
 
@@ -27,10 +29,30 @@ For step-by-step diagnoses of common problems, see [Recipes](docs/recipes.md).
 
 ## Install
 
+### Download
+
+From the [latest release](https://github.com/sylumer/package-lab/releases/latest):
+
+| Download | For |
+|---|---|
+| `Package-Lab-mac-arm64.zip` | Macs with Apple silicon (M1 and later). Signed and notarised: unzip, move to Applications, open. |
+| `Package-Lab-win-x64.zip` | Windows 10 and 11 on Intel or AMD. Portable: unzip and run `Package Lab.exe` ([Windows notes](docs/windows.md)). |
+| `Package-Lab-win-arm64.zip` | Windows on Arm. |
+| `Package-Lab-User-Guide.pdf` | The User Guide, to read without the app. |
+
+There is no Intel Mac download; build it from source with `make mac-x64`. To see whether there's a newer version,
+choose **Help › Check for Updates…** in the app.
+
+### From source
+
 You need macOS and [Node.js](https://nodejs.org) 20 or later.
 
 ```bash
-cd ~/github/package-lab
+git clone https://github.com/sylumer/package-lab.git
+```
+
+```bash
+cd package-lab
 npm install
 ```
 
@@ -167,3 +189,10 @@ This runs:
 
 It takes about two and a half minutes. `npm test -- --slow` adds the longer end-to-end checks (about 14 minutes), and
 `node test/test.js --unit` runs only the unit checks. See the [developer guide](docs/developer-guide.md#tests).
+
+## Licence
+
+Package Lab is free software, licensed under the [GNU Affero General Public License v3.0](LICENSE), with additional
+project lineage and attribution requirements ([LINEAGE-AND-ATTRIBUTION.md](LINEAGE-AND-ATTRIBUTION.md)). Derivative
+distributions must preserve the project's provenance and identify their upstream origins. See [NOTICE](NOTICE),
+[LINEAGE.md](LINEAGE.md) and [CONTRIBUTING.md](CONTRIBUTING.md).

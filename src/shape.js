@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // What the content wanted from its server (P1.3). Pure: no Electron, no files.
 //
 // A response answered with the body "@probe" (pins.js serves {} or the JSON after the marker) is handed to the content

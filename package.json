@@ -2,6 +2,13 @@
   "name": "package-lab",
   "version": "0.3.0",
   "description": "Find out why an e-learning package (SCORM, cmi5, xAPI) doesn't work: check its files, run it under the debugger, and get findings with causes and fixes.",
+  "license": "AGPL-3.0-only",
+  "author": "Stephen Millard",
+  "homepage": "https://packagelab.thoughtasylum.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sylumer/package-lab.git"
+  },
   "private": true,
   "type": "module",
   "main": "src/main.js",

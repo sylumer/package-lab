@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // SCORM Driver (Rustici). The layout and indexAPI.html's strContentLocation are from the vendor docs (docs/packs/scormdriver.md).
 // strLMSStandard's values are not in those docs, so that rule is info; "SCORM" is read as 1.2 and "SCORM2004" as 2004.
 import { score, named, textOf, dirOf, resolve, apiCalls, lookups } from './util.js'

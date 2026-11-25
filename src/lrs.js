@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The local LRS (P4.5): the learning record store a cmi5 or Tin Can package talks to, served at <lms origin>/__lrs/ (lab://run/__lrs/ in
 // Electron, https://lms.lab.invalid/__lrs/ in WebKit). Pure: createLrs(config) → { handle(request), snapshot() }. The same core serves
 // both browsers; main.js and webkit-runner.js only carry requests to it. One LRS per run, in memory; snapshot() is trace.lrs.

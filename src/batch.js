@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Batch checks (P4.3): every package in a folder, one row each. The rows, the table, the CSV and the HTML summary are pure;
 // checkPackage reads one file and staticRows checks many in worker threads (batchworker.js). The CLI runs the packages
 // with --run as child processes and merges each run in with runRow. See docs/developer-guide.md.

@@ -1,6 +1,9 @@
 # Package Lab on Windows
 
-Package Lab can be built for Windows on a Mac. The result is a portable app: a folder you unzip and run. There is no
+Download the Windows app from the [latest release](https://github.com/sylumer/package-lab/releases/latest):
+`Package-Lab-win-x64.zip` for Intel and AMD PCs, `Package-Lab-win-arm64.zip` for Windows on Arm.
+
+Package Lab can also be built for Windows on a Mac. The result is a portable app: a folder you unzip and run. There is no
 installer, nothing is written to the registry, and Package Lab doesn't register itself for `.zip` files.
 
 ## Build it
@@ -15,7 +18,7 @@ npm run package -- --platform win32 --arch x64 # or arm64
 This makes two things in `dist/`:
 
 - `Package Lab-win32-<arch>/`, the unpacked app, with `Package Lab.exe`;
-- `Package Lab-<version>-win32-<arch>.zip`, the same folder zipped.
+- `Package-Lab-win-<arch>.zip`, the same folder zipped.
 
 The first build downloads the Windows copy of Electron. The icon and version details are set on `Package Lab.exe`
 with `resedit`, a pure-JavaScript editor, so no Wine is needed. `--platform darwin` (the default) builds the Mac app
@@ -24,7 +27,8 @@ as before, and `--install` is for the Mac only.
 ## Run it
 
 1. Copy the zip to the Windows PC and unzip it. Any folder will do, including a USB stick.
-2. Run `Package Lab.exe`. Windows may warn that the app is from an unknown publisher: it isn't code-signed.
+2. Run `Package Lab.exe`. Windows may warn that the app is from an unknown publisher: it isn't code-signed yet. Choose **More info**, then
+   **Run anyway**.
 3. Open a package with Open, or drop a `.zip` on the window.
 
 For the command line, set `PACKAGE_LAB_APP` to the full path of `Package Lab.exe`, then run
@@ -47,7 +51,7 @@ To move from one to the other, close Package Lab and copy the folder: from `%APP
 - No translucent sidebar (vibrancy), and no system accent colour. The window has its own frame and menu bar.
 - Ctrl replaces ⌘ and Alt replaces ⌥ in shortcuts; the docs in the app show the Windows keys.
 - WebKit runs work through Playwright, but WebKit on Windows is a weaker stand-in for Safari than on a Mac.
-- No installer, code signing or auto-update.
+- No installer, code signing or auto-update yet. **Help › Check for Updates…** says whether there is a newer release.
 
 ## Trying it on Windows
 
@@ -56,7 +60,7 @@ version. Steps 6 and 7 also need Node.js and a copy of this repository on the PC
 line and the web interface run from the repository. The repository also has a workflow, `.github/workflows/windows.yml`,
 that runs the suite on a Windows runner once it is pushed.
 
-1. **Unzip and run.** Unzip `Package Lab-<version>-win32-<arch>.zip` and run `Package Lab.exe`. Note: any unknown-publisher
+1. **Unzip and run.** Unzip `Package-Lab-win-<arch>.zip` and run `Package Lab.exe`. Note: any unknown-publisher
    warning, whether the window opens, and whether the menu bar, toolbar and tabs fit.
 2. **Open `good.zip` and run it.** Make it from the files inside `test/fixtures/base` (the files, not the folder): select
    them, right-click, Send to, Compressed (zipped) folder, and name it `good.zip`. These are the same files the test

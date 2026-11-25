@@ -106,7 +106,7 @@ request, or **Discover all server requests**, works out what each one needs:
 1. It runs the course without an answer.
 2. It answers with a stand-in and watches every field the course reads from it, and how it uses each one.
 3. It runs again with those fields filled in (`""`, `false`, `0`, `[]`), and again, until a round finds no new field
-   (5 rounds at most by default).
+   (5 rounds at most; the command line's `--rounds` changes that).
 
 The result lists, per request, the code that made it, every field read with its type and where it was used, and a
 stand-in response. **Save as response** adds it to your answers; edit the values first if the course needs real ones.
@@ -121,8 +121,10 @@ anything from `/api/player/config`: this course only cares that the request *suc
 If the course works somewhere (the authoring tool's preview, another LMS, SCORM Cloud), record it there and compare.
 
 1. **File › Record a Working Copy…**, enter the course's address, and choose **Record**. The course opens in Package
-   Lab's browser, where you can sign in (sign-ins are kept). Use it the same way as before, then **Stop**. Real API
-   calls are recorded too.
+   Lab's browser, where you can sign in. Sign-ins are kept for the next recording, in Package Lab's own browser, separate from
+   your usual one. Use the course the
+   same way as before, then **Stop**. Package Lab watches every page in its browser, so the course's calls to the real
+   LMS's API are recorded too.
 2. In **Runs**, mark the working run **R** (reference) and the failing run **F**.
 3. Open **Compare**.
 

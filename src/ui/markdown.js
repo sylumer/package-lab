@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Small Markdown to HTML renderer for the docs panel. Line-based blocks, one inline function, no DOM.
 // Covers what the repo's docs use: headings, paragraphs, nested lists, fenced code, tables, code/bold/italic/links/images.
 // Not CommonMark: no raw HTML, blockquotes or rules; underscores are never emphasis.

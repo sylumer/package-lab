@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Timeline (P4.2): one run's events on a shared time axis, as lanes. Pure. timelineModel(trace, milestones?) gives each
 // lane's items in ms from the start of the run. timelineView(trace, milestones?, { from, to }) gives the same items as
 // fractions (x, x2) of the window shown, with ticks and the density buckets, for the Timeline tab and the report to draw.

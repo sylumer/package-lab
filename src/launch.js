@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // What every browser's run shares, in plain Node (no Electron): the files the test LMS serves for a launch, the launch
 // plan (the test LMS's configuration, the content's address, headers, label) and the findings a finished run gets.
 // src/main.js (Electron runs) and src/webkit-runner.js (WebKit runs, P2.3) both build on it. See docs/developer-guide.md.

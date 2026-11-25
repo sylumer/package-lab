@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Code views (P4.1). Pure. What the shared code view shows for one file: its text as it was written, formatted, or as the
 // source map's original; which lines ran (coverage) and what the trace saw at them; and the small excerpts the report
 // embeds. The interfaces draw it (src/ui/codeview.js, report.js); nothing here makes HTML.

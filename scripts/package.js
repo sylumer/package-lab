@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Builds Package Lab.app in dist/ (for this Mac's architecture) with its icon, signed ad hoc so it runs on this Mac.
 // With --platform win32 (and --arch x64 or arm64) it builds the portable Windows app instead: dist/Package Lab-win32-<arch>/ and a zip of it, see docs/windows.md.
 // With --install, also copies it to /Applications (replacing an older copy) and registers it with Finder, so // darwin-only
@@ -18,6 +19,9 @@ const electron = join(root, 'node_modules', '.bin', 'electron'), run = (cmd, arg
 const option = name => { const i = process.argv.findIndex(a => a === `--${name}` || a.startsWith(`--${name}=`)), a = process.argv[i]; if (i < 0) return undefined; const v = a.includes('=') ? a.slice(a.indexOf('=') + 1) : process.argv[i + 1]; if (!v || v.startsWith('--')) throw new Error(`--${name} needs a value.`); return v }
 const platform = option('platform') ?? 'darwin', arch = option('arch') ?? process.arch
 if (platform !== 'darwin' && process.argv.includes('--install')) throw new Error('--install is for the Mac build only.')
+// --release (Mac): sign with the Developer ID certificate, notarise with the `package-lab` notarytool keychain profile,
+// staple, and zip as dist/Package-Lab-mac-<arch>.zip. Without it the app is signed ad hoc, for this Mac only.
+const release = platform === 'darwin' && process.argv.includes('--release')
 if (!['darwin', 'win32'].includes(platform)) throw new Error(`--platform is darwin or win32, not ${platform}.`)
 if (!['x64', 'arm64'].includes(arch)) throw new Error(`--arch is x64 or arm64, not ${arch}.`)
 
@@ -57,6 +61,7 @@ const [out] = await packager({
     appBundleId: 'com.sylumer.package-lab', appCategoryType: 'public.app-category.developer-tools', icon: join(build, 'icon.icns'),   // darwin-only
     // Lets Finder offer Package Lab under Open With for .zip files, without making it the default.
     extendInfo: { CFBundleDocumentTypes: [{ CFBundleTypeName: 'ZIP archive', CFBundleTypeRole: 'Viewer', LSHandlerRank: 'Alternate', LSItemContentTypes: ['public.zip-archive'] }] },   // darwin-only
+    ...(release ? { osxSign: { identity: 'Developer ID Application: STEPHEN MILLARD (KK3DSQ53A6)' }, osxNotarize: { keychainProfile: 'package-lab' } } : {}),   // hardened runtime and Electron's entitlements are @electron/osx-sign's defaults
   } : {}),   // no icon for win32: packager would run rcedit, which needs Wine off Windows
   ignore: ignoreAll,
 })
@@ -79,7 +84,7 @@ if (platform === 'win32') {
   files.set(`${top}/Package Lab User Guide.html`, Buffer.from(guideHtml()))   // the User Guide to read without the app (scripts/guide-html.js)
   await guidePdf(join(root, 'dist', 'Package Lab User Guide.pdf'))   // and as a PDF (scripts/guide-pdf.js)
   files.set(`${top}/Package Lab User Guide.pdf`, readFileSync(join(root, 'dist', 'Package Lab User Guide.pdf')))
-  const zipPath = join(root, 'dist', `Package Lab-${version}-win32-${arch}.zip`)
+  const zipPath = join(root, 'dist', `Package-Lab-win-${arch}.zip`)   // no version in the name, so releases/latest/download/ links never change
   writeFileSync(zipPath, zip(files))
   console.log(`Built ${out}\nand ${zipPath}`)
   process.exit(0)
@@ -88,8 +93,14 @@ if (platform === 'win32') {
 writeFileSync(join(root, 'dist', 'Package Lab User Guide.html'), guideHtml())
 await guidePdf(join(root, 'dist', 'Package Lab User Guide.pdf'))
 const app = join(out, 'Package Lab.app')
-run('codesign', ['--force', '--deep', '--sign', '-', app])
-console.log(`Built ${app}`)
+if (release) {
+  const zipPath = join(root, 'dist', `Package-Lab-mac-${arch}.zip`)
+  run('ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', app, zipPath])
+  console.log(`Built, signed and notarised ${app}\nand ${zipPath}`)
+} else {
+  run('codesign', ['--force', '--deep', '--sign', '-', app])
+  console.log(`Built ${app}`)
+}
 
 if (process.argv.includes('--install')) {
   try { execFileSync('osascript', ['-e', 'if application id "com.sylumer.package-lab" is running then tell application id "com.sylumer.package-lab" to quit']) } catch { /* not running */ }

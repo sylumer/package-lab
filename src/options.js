@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Launch options: the one structure for everything that changes how a run is set up. The desktop and web UI, the
 // launch handler, the CLI (flags and --options file) and the saved run's launch.options all use it. Pure; no Electron.
 // Later work packages add fields here and nowhere else. Defaults live here and only here.

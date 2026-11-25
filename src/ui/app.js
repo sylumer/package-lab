@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Package Lab's window: toolbar, runs list and the views (grouped in the sidebar) that show a run.
 import { markdown, headings, searchDocs, keysFor } from './markdown.js'
 const $ = id => document.getElementById(id)

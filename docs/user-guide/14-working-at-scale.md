@@ -6,11 +6,51 @@ packages, repeat a diagnosis exactly, script it and keep the results. And how to
 The desktop app is the best place to explore one course. When you have twenty courses, or the same check to run every
 time a vendor sends an update, or a colleague who needs to repeat exactly what you did, the command line is better.
 
-## The command line in five commands
+## Before you start: the source code
 
-The command line and the web interface come with the Package Lab source, not the downloaded app: set them up with
-[If you have the source](03-install-and-practice-kit.md#if-you-have-the-source) in chapter 3 first. The app's
-**Check a folder…** does the same as `batch` without them.
+Everything else in this guide works in the downloaded app. The command line and the web interface in this chapter, and
+the WebKit runs in [chapter 11](11-browsers-devices-and-lmss.md), don't: they need Package Lab's **source code**, the
+developer copy of Package Lab. It is a folder of files rather than an app, and it runs with
+[Node.js](https://nodejs.org). If you don't have the source, read this chapter for interest. The app does most of
+it: **Check a folder…** does the same as `batch`, and the analyses have buttons in the window. What only the command
+line can do: repeat a saved run exactly (`--options-from`), run under a profile of your own LMS (`--profile-file`),
+print a macro (`macro show`), hash file names in a report (`--redact-names`), and give results to scripts (`--json`,
+`--strict`). Each is marked *(command line)* where the guide mentions it.
+
+If you do have the source, set it up once. You need Node.js 20 or later: open **Terminal** (Applications › Utilities),
+type `node --version` and press Return. If it says “command not found”, install Node from its website first. Then type
+`cd` and a space, drag the source folder from Finder onto the Terminal window, and press Return. Now run these, one at
+a time:
+
+```bash
+npm install
+```
+
+```bash
+npm link
+```
+
+The first installs what Package Lab needs, which takes a minute or two. The second makes the `package-lab` command work
+in any folder. To check everything is in place:
+
+```bash
+package-lab doctor
+```
+
+It ends with a **To do** list of anything missing. On Windows, `docs/windows.md` in the source explains the same steps.
+
+### Add WebKit
+
+Only for the WebKit runs in [chapter 11](11-browsers-devices-and-lmss.md). In the source folder:
+
+```bash
+make webkit
+```
+
+That downloads Safari's engine. WebKit runs then work when you open Package Lab from the source, with
+`package-lab open`, not from the app in Applications.
+
+## The command line in five commands
 
 Every command starts with `package-lab`. Add `--help` to any of them for its options.
 
@@ -49,11 +89,14 @@ and get the furthest milestone of each.
 
 ### Try it
 
-From the Package Lab folder:
+Give it the practice kit's folder. On a Mac that is:
 
 ```bash
-package-lab batch practice --run --wait 8
+package-lab batch ~/Library/Application\ Support/Package\ Lab/practice --run --wait 8
 ```
+
+On Windows, use `%APPDATA%\Package Lab\practice`. **Show folder**, under the guide's contents, opens it if you're
+not sure.
 
 It takes a couple of minutes. Compare the **Furthest milestone** column with the **Verdict** column, and with what
 you've learnt about each package. Which packages does `--run` catch that the plain batch in chapter 13 didn't?
@@ -160,11 +203,12 @@ how far a run got, read `furthest` from the JSON (`launched`, `scripts`, `shown`
 `read`, `wrote`, `committed`, `finished`):
 
 ```bash
-package-lab run course.zip --profile-file our-lms.json --wait 20 --json | jq -e '.furthest == "committed"'
+package-lab run course.zip --profile-file our-lms.json --wait 20 --json | jq -e '.furthest == "committed" or .furthest == "finished"'
 ```
 
-`jq -e` exits 1 when the answer is false, so a vendor's package that doesn't reach **Committed** under your LMS's
-profile can stop a pipeline before it's uploaded.
+`jq -e` exits 1 when the answer is false, so a vendor's package that doesn't reach **Committed** (or go past it to
+**Finished**) under your LMS's profile can stop a pipeline before it's uploaded. `jq` is a separate download from
+[jqlang.org](https://jqlang.org), on the Mac or Windows.
 
 ## The web interface: Package Lab from another device
 
@@ -174,18 +218,19 @@ package-lab serve
 
 This prints an address with a sign-in token, such as `http://127.0.0.1:4880/?token=…`. Open it in a browser: it's
 nearly the whole app, plus a **Live** view of the course window that you can click and type into. Courses still run on
-the Mac. The differences that matter:
+the computer running `serve`. The differences that matter:
 
 - **Open package…** uploads a ZIP from the device you're on, and it replaces the package open on the Mac *for everyone*
   using it.
-- There's no **Check a folder…** (use `package-lab batch` on the Mac), no **Record** button and no menu bar. Record
+- There's no **Check a folder…** (use `package-lab batch` on that computer), no **Record** button and no menu bar. Record
   macros with **Record clicks** in the Live view.
 - Settings, pins, answers and the macro are kept in that browser's page: reloading clears pins, answers and the macro.
 
 The [web interface guide](../web.md#using-it) lists every difference.
 
 To reach it from an iPad or another computer, see [Reaching it from another device](../web.md#reaching-it-from-another-device).
-Read the [security notes](../web.md#security) first: anyone with the address and token can use it.
+Read the [security notes](../web.md#security) first: anyone with the address and token can use it, and the token
+is in the address, so it can end up in a browser's history. Don't paste it into chat or a ticket.
 
 ## Check yourself
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // make guide (npm run guide [file]): the User Guide as one self-contained HTML file, for reading outside the app, on a
 // website, or printed to PDF from a browser. Built with the app's own renderer (src/ui/markdown.js) and the chapter list
 // in src/docs.js, so it needs nothing installed. Links between chapters become links within the page; links to Help and

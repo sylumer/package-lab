@@ -76,7 +76,7 @@ On Windows, Ctrl replaces ⌘ and Alt replaces ⌥.
 
 ## The commands
 
-These need the Package Lab source ([chapter 3](03-install-and-practice-kit.md#if-you-have-the-source)).
+These need the Package Lab source code ([chapter 14](14-working-at-scale.md#before-you-start-the-source-code)).
 
 | Command | Does |
 |---|---|
@@ -103,4 +103,4 @@ These need the Package Lab source ([chapter 3](03-install-and-practice-kit.md#if
 | Bookmark | `cmi.core.lesson_location` | `cmi.location` |
 | Resume? | `cmi.core.entry` | `cmi.entry` |
 | Left early | `cmi.core.exit` = `suspend` | `cmi.exit` = `suspend` |
-| Suspend data limit | 4,096 characters | 64,000 characters |
+| Suspend data limit | 4,096 characters | At least 64,000 characters (3rd and 4th editions) |

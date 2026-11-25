@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Package Lab's main process: the window, the package server (lab://run/), runs and their recorders, and the three
 // ways of driving them: the desktop window (IPC), the web interface (src/web.js) and headless runs for the CLI
 // (--run=<job.json>). See docs/developer-guide.md.
@@ -984,6 +985,22 @@ function createWindow() {
   ui.webContents.once('did-finish-load', () => { if (pendingOpen) { openPath(pendingOpen); pendingOpen = null } })
 }
 
+// Help › Check for Updates…: asks GitHub for the latest release only when chosen (nothing is checked on its own) and
+// offers its download page. ponytail: tells you and links; no auto-update (needs a Windows installer, see developer guide).
+const RELEASES = 'https://github.com/sylumer/package-lab/releases/latest'
+const newer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false }
+async function checkForUpdates() {
+  const win = BrowserWindow.getFocusedWindow() ?? undefined, current = app.getVersion()
+  try {
+    const r = await net.fetch('https://api.github.com/repos/sylumer/package-lab/releases/latest', { headers: { accept: 'application/vnd.github+json' } })
+    if (!r.ok) throw new Error(`GitHub answered ${r.status}.`)
+    const latest = String((await r.json()).tag_name || '').replace(/^v/, '')
+    if (!newer(latest, current)) return dialog.showMessageBox(win, { message: 'Package Lab is up to date.', detail: `You have version ${current}, the latest release.` })
+    const { response } = await dialog.showMessageBox(win, { message: `Package Lab ${latest} is available.`, detail: `You have version ${current}.`, buttons: ['Open Download Page', 'Later'], defaultId: 0, cancelId: 1 })
+    if (response === 0) shell.openExternal(RELEASES)
+  } catch (e) { dialog.showMessageBox(win, { type: 'warning', message: 'Couldn’t check for updates.', detail: `${e.message}\n\nThe latest release is always at ${RELEASES}`, buttons: ['Open Releases Page', 'OK'], defaultId: 1 }).then(({ response }) => response === 0 && shell.openExternal(RELEASES)) }
+}
+
 function buildMenu() {
   const send = action => () => { if (ui && !ui.isDestroyed()) ui.webContents.send('menu', { action }) }
   const item = (label, accelerator, action) => ({ label, accelerator, click: send(action) })
@@ -1010,12 +1027,15 @@ function buildMenu() {
     { role: 'help', submenu: [
       { label: 'User Guide', accelerator: 'Shift+CmdOrCtrl+G', click: () => openGuide() }, { type: 'separator' },
       docs('Show Help', 'README.md', 'Shift+CmdOrCtrl+H'), docs('Help Topics', 'help.md'), docs('Recipes', 'recipes.md'), docs('Findings', 'findings.md'),
-      { type: 'separator' }, { label: 'Show Data Folder', click: () => shell.openPath(app.getPath('userData')) } ] },
+      { type: 'separator' }, { label: 'Check for Updates…', click: () => checkForUpdates() },
+      { label: 'Show Data Folder', click: () => shell.openPath(app.getPath('userData')) } ] },
   ]))
 }
 
 app.whenReady().then(async () => {
   if (WINDOW) buildMenu()
+  app.setAboutPanelOptions({ applicationName: 'Package Lab', applicationVersion: app.getVersion(), version: '', website: 'https://packagelab.thoughtasylum.com',
+    copyright: 'Copyright © 2026 Stephen Millard. Free software under the GNU AGPL v3.0, with additional attribution terms (LINEAGE-AND-ATTRIBUTION.md). No warranty. Source: https://github.com/sylumer/package-lab' })
   applyTheme()   // the setting, or PACKAGE_LAB_THEME (the screenshots, scripts/screenshots.js)
   const lab = session.fromPartition('lab')
   lab.protocol.handle('lab', serve)

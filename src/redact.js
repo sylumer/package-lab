@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Redacted reports (P4.4). redactRun(input, opts) takes a saved run (or the inputs of a static report: boot graph, analysis) and
 // returns a copy with the course content taken out, and the findings rebuilt from that copy. Pure: no files, no Electron.
 //

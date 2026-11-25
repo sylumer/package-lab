@@ -1,38 +1,41 @@
 # 3. Install, and build your practice kit
 
-**What you'll learn:** how to install the Package Lab app, make the practice packages the rest of this guide uses, and,
-if you have the Package Lab source, set up the command line too.
+**What you'll learn:** how to install the Package Lab app and make the practice packages the rest of this guide uses.
 
 ## What you need
 
-A Mac, or a Windows PC. Most people download the app. That is all this chapter's main steps need, and it does
-every exercise except the WebKit steps in chapter 11 and the command line in chapter 14. This guide uses Mac keys: on Windows, Ctrl replaces ⌘ and Alt replaces ⌥.
+A Mac or a Windows PC, and the Package Lab app. That is all for every chapter except two optional extras: the WebKit
+(Safari engine) steps in chapter 11 and the command line in chapter 14 need Package Lab's source code, and
+[chapter 14](14-working-at-scale.md#before-you-start-the-source-code) explains them. Nothing else needs installing,
+and no Terminal.
 
-A few things need the Package Lab source instead, and Node.js: the `package-lab` command line
-([chapter 14](14-working-at-scale.md)), the web interface, and WebKit runs, which stand in for Safari in
-[chapter 11](11-browsers-devices-and-lmss.md). If you have the source, see
-[If you have the source](#if-you-have-the-source) below. If you don't, you can come back to it when you reach those
-chapters.
+This guide uses Mac keys: on Windows, Ctrl replaces ⌘, Alt replaces ⌥ and Shift replaces ⇧, so ⌥⌘I is
+Ctrl+Alt+I. Where something works only on a Mac, the guide says so.
 
 ## Install the app
 
 **On a Mac:**
 
-1. Download Package Lab for Mac. If your browser didn't unzip it, double-click the zip.
+1. Download `Package-Lab-mac-arm64.zip` from [packagelab.thoughtasylum.com](https://packagelab.thoughtasylum.com) or
+   the [latest release](https://github.com/sylumer/package-lab/releases/latest). It is for Macs with Apple silicon (M1
+   and later). If your browser didn't unzip it, double-click the zip.
 2. Drag **Package Lab** into your **Applications** folder.
-3. Open it. The app isn't signed by Apple, so the first time macOS may say it can't check it for malicious software.
-   Choose **Done**, then go to **System Settings › Privacy & Security**, scroll down, and choose **Open Anyway** beside
-   the message about Package Lab. You need to do this only once.
+3. Open it. The app is signed and notarised by Apple, so macOS opens it after asking once whether you want to open an
+   app downloaded from the internet.
 
 **On Windows:**
 
-1. Download Package Lab for Windows. It is a portable app: a zip with no installer.
+1. Download Package Lab for Windows from the same places: `Package-Lab-win-x64.zip` for most PCs, or
+   `Package-Lab-win-arm64.zip` for Windows on Arm. It is a portable app: a zip with no installer.
 2. Unzip it into any folder, a USB stick included.
-3. Run `Package Lab.exe` in that folder. The app isn't code-signed, so Windows may warn that it comes from an unknown
+3. Run `Package Lab.exe` in that folder. The Windows app isn't code-signed yet, so Windows may warn that it comes from an unknown
    publisher: choose **More info**, then **Run anyway**.
 
 Nothing is written to the registry, and Package Lab doesn't make itself the app for `.zip` files. To uninstall it,
 delete the folder.
+
+To see whether there is a newer version, choose **Help › Check for Updates…**. Package Lab asks GitHub only when you
+choose it, and offers to open the download page.
 
 ## Open Package Lab
 
@@ -51,9 +54,6 @@ Build it in the app, on a Mac or Windows: open this guide in its own window (**H
 **Build practice kit**, under the contents. The packages go in the `practice` folder of Package Lab's data folder, and
 **Show folder** opens it. From then on, every practice package name in the guide's text is a button that opens that
 package in Package Lab. Build the kit again at any time to get fresh copies.
-
-If you have the source, you can also build the kit from Terminal into a folder of your own: see
-[Practice packages from Terminal](#practice-packages-from-terminal).
 
 These are the packages:
 
@@ -83,7 +83,8 @@ Packages 14 and 15 come with a macro file each (`14-next-button-late.macro.json`
 their course has nothing wrong with it: the exercise is the macro. Packages 16 and 17 are cmi5 and Tin Can (xAPI)
 courses, for the last chapter.
 
-Each package has exactly one fault (the first has none). The names tell you the symptom, never the cause. Diagnose with
+Each package has exactly one fault, except `01-works.zip`, `14-next-button-late.zip` and `15-button-moves.zip`, whose
+courses are sound. The names tell you the symptom, never the cause. Diagnose with
 Package Lab's findings and views first, as you would on a real course where the code is 40,000 lines of minified
 JavaScript; read the code when an exercise sends you there, and not before. When you have a diagnosis, check it in
 [the answers](appendix-a-answers.md).
@@ -101,79 +102,6 @@ instead, so that nothing is left on the PC. **Help › Show Data Folder** opens 
 - `settings.json`: the app's own settings.
 
 Saved runs hold the course's scripts and the values it stored. Treat them as you would the course itself.
-
-## If you have the source
-
-This section is for people with a copy of the Package Lab source, the repository, rather than the downloaded app.
-It gives you the `package-lab` command line, the web interface and WebKit runs as well as the app. Skip it if you
-downloaded the app.
-
-You need:
-
-- a Mac (on Windows, the command line runs from the source too; `docs/windows.md` in the source explains how);
-- [Node.js](https://nodejs.org) 20 or later. To see if you have it, open **Terminal** (in Applications › Utilities)
-  and type `node --version`. If it says “command not found”, install Node from its website first;
-- the source folder. These steps assume it is at `~/github/package-lab`; use your own path if it is elsewhere.
-
-If you have never used Terminal: you type a command, press Return, and it prints its answer. Each grey box below is one
-command. Copy it exactly.
-
-### Install from the source
-
-Go to the folder and install what Package Lab needs:
-
-```bash
-cd ~/github/package-lab
-```
-
-```bash
-npm install
-```
-
-This takes a minute or two the first time. Then make the `package-lab` command available everywhere:
-
-```bash
-npm link
-```
-
-And, if you'd like Package Lab in your Applications folder, Launchpad and Finder's **Open With** menu:
-
-```bash
-npm run install-app
-```
-
-From the source you can open Package Lab with `package-lab open` in Terminal, or `npm start` in the source folder, as
-well as from Applications if you ran `install-app`.
-
-### Check your computer
-
-```bash
-package-lab doctor
-```
-
-`doctor` checks Node, Electron (the browser Package Lab is built on), the data folder and the rest, and ends with a
-**To do** list of anything missing. One item is optional: **WebKit**, Safari's engine, which you need only in
-[chapter 11](11-browsers-devices-and-lmss.md). To add it now:
-
-```bash
-make webkit
-```
-
-That downloads Playwright's copy of WebKit. (If `doctor` says Playwright itself is missing, run `npm install` again
-first.) WebKit runs work only when Package Lab runs from the source: `npm start` or `package-lab open`, not the app
-that `install-app` copies to Applications.
-
-### Practice packages from Terminal
-
-The app's **Build practice kit** is all you need, but from the source folder you can also build the kit into the
-source's own `practice` folder:
-
-```bash
-npm run practice
-```
-
-It prints `19 practice packages and 2 macros in …/package-lab/practice`. To put them somewhere else, give a folder:
-`node scripts/practice-kit.js ~/Desktop/practice`.
 
 ## Check yourself
 

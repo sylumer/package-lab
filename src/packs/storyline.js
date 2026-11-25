@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Articulate Storyline (docs/packs/storyline.md: forum reports, low confidence).
 import { score, named, apiCalls, lookups } from './util.js'
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Drill-down (P1.5): from a traced run (P1.4), the decisions that led to the dead end, each with its values, and where
 // each undefined came from, as a numbered chain. Pure: the caller runs the content, twice (traced, then again with
 // watch pins on the paths drill() asks for) and passes both traces.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Evolve Authoring (docs/packs/evolve.md: no markers confirmed; this is not the Evolve LMS).
 import { score } from './util.js'
 

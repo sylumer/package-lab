@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The save-and-resume cycle (P2.4), pure: reading a macro file, making a macro from the clicks a run recorded, and the
 // findings from a run that left the way a learner does and a second run that resumed from what the first left.
 // Running the two launches is up to the caller (src/main.js in the apps, bin/package-lab.js headless).

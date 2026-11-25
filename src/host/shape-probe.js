@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // What the content reads from a server's response (P1.3). Injected ahead of probe.js when a run answers requests with
 // "@probe" (see src/shape.js): the recorder puts the patterns of those requests in globalThis.__labShape. For a
 // response whose URL matches, Response.json(), Response.text() followed by JSON.parse, and XMLHttpRequest's response

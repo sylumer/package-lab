@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Where things live on each platform. Pure: everything comes in as an argument, so the Mac can test the Windows answers.
 // The only file besides the darwin-only scripts that may name /Applications or Library/Application Support (test/test.js lints this).
 import { posix, win32 } from 'node:path'

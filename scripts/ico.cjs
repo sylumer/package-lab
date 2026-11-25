@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // An ICO file holding PNG images: a 6-byte header, one 16-byte entry per image, then the PNG bytes. `pngs` is [{ size, data }] (size 1 to 256 px, square).
 module.exports = function ico(pngs) {
   const head = Buffer.alloc(6 + 16 * pngs.length)

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Lectora (docs/packs/lectora.md: one knowledge-base article read, low confidence).
 import { score, named } from './util.js'
 

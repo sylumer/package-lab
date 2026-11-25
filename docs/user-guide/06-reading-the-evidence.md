@@ -1,7 +1,8 @@
 # 6. Reading the evidence
 
 **What you'll learn:** what each of the main views records, what normal looks like in each, and how to move from a
-finding to the evidence behind it. Keep your first run of `01-works.zip` selected while you read.
+finding to the evidence behind it. Keep a run of `01-works.zip` from chapter 5 selected while you read: the one where you chose
+**Save and exit**.
 
 Findings are Package Lab's conclusions. The views are its evidence. An analyst reads both: the findings to know where
 to look, the views to check the findings are right and to see what they don't say.
@@ -135,16 +136,18 @@ Every finding names its evidence. The skill is following it:
 
 ## Try it
 
-Use your run of `01-works.zip` where you went through the course and chose **Save and exit**.
+Use your run of `01-works.zip` from chapter 5 where you chose **Save and exit** at page 3, before the quiz. **Runs** lists
+runs in the order you made them, newest at the bottom.
 
 1. In **API**, find the calls made when you chose **Save and exit**. Which element was set to `suspend`?
 2. In **Lookups**, how many times did the content look for `API` before it found it? On which line of `scorm.js`?
 3. In **Boot path**, which file is loaded with `defer`, and what does **Script order** say about when it runs?
 4. In the code view of `lesson.js`, with your run chosen, find a line coverage shows in red. Why didn't it run?
    (Hint: did you get every question right?)
+5. In **Timeline**, use a run where you submitted the quiz, and hover over the API dots around that time. What was
+   written?
 6. In **Frames**, how many frames does the run have, and which one is the course in? Compare with what chapter 2
    said about where an LMS puts a course.
-5. In **Timeline**, hover over the API dots around the time you submitted the quiz. What was written?
 
 ## Check yourself
 

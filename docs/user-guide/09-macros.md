@@ -29,7 +29,7 @@ fault that only appears on page 5.
 2. Choose **Record** in the toolbar. It reads **Recording…**.
 3. Click through the course as a learner would, in the course's own window (not Package Lab's).
 4. Choose **Record** again, or **Stop**. Package Lab asks “Save 6 steps as the macro?”. **Save** replaces the macro
-   you had; **Discard** keeps it.
+   you had with the new recording; **Discard** throws the recording away and keeps your previous macro.
 
 Only clicks made after you pressed **Record** are kept.
 
@@ -94,13 +94,14 @@ three-second intro isn't there when the click comes. A **wait** step blocks the 
 
 | Wait for | Means |
 |---|---|
-| **Text** | Some text appears on the page, in any of the course's frames |
+| **Text** | Some text is visible on the page, in any of the course's frames. Text that is there but hidden doesn't count |
 | **A milestone** | The run reaches a step, such as *Initialised* |
 | **Quiet network** | No request has been pending for so long |
 | **A time** | Some milliseconds, no matter what |
 
-A text, milestone or quiet wait gives up after its timeout (30 s unless you set another). Then the macro stops there,
-the run says “The macro stopped at step 1: waited 30 s for “Next” and it never appeared”, and carries on to its end.
+A text, milestone or quiet wait gives up after its timeout (30 s unless you set another). Then the macro stops there
+and the rest of its steps are skipped. The run says “The macro stopped at step 1: waited 30 s for “Next” and it never
+appeared”, and goes on recording until **Stop after** ends it.
 
 **Add wait** puts a wait after the chosen row (at the end if none is chosen). Use **↑** to move it earlier.
 
@@ -148,7 +149,7 @@ quicker than re-recording:
   window. Edit `sel` to point a click at another element.
 - Other types are `key` (`Enter`, `Tab`, arrows…), `text`, `wheel` and `move`.
 
-To print a macro file as the editor's table:
+To print a macro file as the editor's table *(command line, [chapter 14](14-working-at-scale.md))*:
 
 ```bash
 package-lab macro show macro.json
@@ -189,7 +190,7 @@ Check your answer in [the answers](appendix-a-answers.md#14-next-button-late).
 2. Set **Device size** to **iPhone** and run again. Read the note about the size. Did the clicks still work? Why?
 3. Now break the tie: **Export…** the macro, open the file in a text editor, change both `"#next"` to `"#nope"`, save
    it and **Import…** it again. Run at **iPhone** size. Did it still work? Read the notes.
-4. Set **Device size** to **Custom size…** 2400 × 800, and run again. What happened this time? Where is **Next** at
+4. With the `#nope` macro still loaded, set **Device size** to **Custom size…** 2400 × 800, and run again. What happened this time? Where is **Next** at
    that width, compared with where the macro's position says?
 5. Put **Device size** back to **Window as it is**, and **Clear** the macro.
 

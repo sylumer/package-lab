@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The User Guide's practice packages (docs/user-guide/03-install-and-practice-kit.md): the sample SCORM 1.2 course in
 // src/sample, as it is, and with one fault each. The faults are the same as the test suite's fixtures (test/test.js),
 // so what the guide says about them is what the tests check. Names say the symptom, not the cause: the cause is the

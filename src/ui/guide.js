@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The User Guide window (guide.html): docs/user-guide/ as a book, apart from the Help panel. Contents by part, one chapter
 // at a time with Previous and Next, On this page, search, a tick for each “Try it” done, the place you were, and the
 // practice kit: package names in the text open that package in Package Lab, and macro file names load that macro.

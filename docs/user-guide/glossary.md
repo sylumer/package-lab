@@ -10,6 +10,9 @@
 
 **AU (assignable unit).** cmi5's name for a launchable part of a course.
 
+**Banner.** The verdict at the top of **Findings**: one word (such as *Works* or *Warning*) and a sentence saying how
+far the run got.
+
 **Boot path.** How the launch page should load, worked out from the files: every file in order, with what loads it and
 whether it's there.
 
@@ -45,12 +48,17 @@ only after it.
 **Finding.** Package Lab's conclusion about a package or a run: a severity, a title, an explanation, evidence and what
 to try.
 
+**Folder check.** **File › Check a Folder…**: the static findings for every package in a folder at once, and
+optionally a run of each. `batch` on the command line.
+
 **Frame.** A page shown inside another page. LMSs usually show courses in frames, sometimes several deep.
 
 **Frame depth.** How many frames sit between the LMS's window and the course.
 
 **Help.** Package Lab's reference: what each view, button and setting does, in the inspector's Help panel. For while you
 work, where this User Guide is for learning.
+
+**Inspector.** The panel at the right of the window (⌥⌘I), with **Settings**, **Help** and **Macro**.
 
 **Item.** An entry in a package's structure that an LMS can launch.
 
@@ -78,6 +86,9 @@ is where to start looking.
 **Mode switch.** A name in a course's code, such as `previewMode`, that decides whether it behaves as if it's in an
 LMS.
 
+**Options file.** A JSON file of launch settings, pins, answers and changed files, for repeating a run on the command
+line. See [chapter 14](14-working-at-scale.md#options-files-a-diagnosis-you-can-repeat).
+
 **Origin.** The scheme, host and port a page comes from, such as `https://lms.example.com`. Pages from different
 origins can't reach into each other's windows.
 
@@ -90,7 +101,8 @@ origins can't reach into each other's windows.
 **Profile.** An imitation of the way a particular LMS hosts courses: origin, frames, sandbox, launch, API placement,
 headers, commits and limits.
 
-**Redacted report.** An HTML report with the course content taken out, safe to send to a vendor.
+**Redacted report.** An HTML report with the course content taken out, for sending to a vendor. Read it before you
+send it: file paths and parts of error messages stay. See [chapter 13](13-delivering-the-answer.md).
 
 **Resume.** Starting a course again from where the learner left, using the bookmark and suspend data the LMS kept.
 
@@ -103,7 +115,8 @@ headers, commits and limits.
 **SCO (sharable content object).** An item that tracks the learner through the SCORM API.
 
 **SCORM.** The most widely used standard for packaging e-learning and tracking it in an LMS, in two versions: 1.2 and
-2004.
+2004. SCORM 2004 has four editions; most LMSs and tools use the 3rd or 4th, and this guide's 2004 details are
+from those.
 
 **Server needs.** A Package Lab tool that works out what the content wants from its server, and a stand-in response.
 
@@ -113,12 +126,20 @@ completed Fire Safety”.
 **Static finding.** A finding from the package's files alone, before anything runs. A prediction, to be confirmed by a
 run.
 
+**Stop after.** The setting that ends a run: *I stop it* (the default), or a time from 10 s to 5 min, after which
+Package Lab stops and analyses the run.
+
+**Storage.** The setting that imitates a browser's privacy rules for a course in a frame: *Normal*, *Blocked* or
+*Partitioned*. See [chapter 11](11-browsers-devices-and-lmss.md).
+
 **Summary chip.** The label beside **Run** listing every setting that isn't at its default.
 
-**Suspend data.** `cmi.suspend_data`: the course's own saved state. Limited to 4,096 characters in SCORM 1.2 and 64,000
+**Suspend data.** `cmi.suspend_data`: the course's own saved state. Limited to 4,096 characters in SCORM 1.2 and at least 64,000
 in 2004.
 
 **Test saving.** Package Lab's save-and-resume test: a run that leaves the way a learner does, then a run that resumes.
+
+**Timeline.** The view that draws a run's requests, API calls, errors and milestones against time.
 
 **Tin Can.** The original name of xAPI. A Tin Can package has a `tincan.xml`.
 

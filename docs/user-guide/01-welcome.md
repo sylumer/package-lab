@@ -20,7 +20,9 @@ and records everything the course does: every file it loads, every message it se
 was on the screen. Then it turns that record into **findings**: what went wrong, the evidence, the likely cause and
 what to try.
 
-Everything happens on your own computer. No course content is sent anywhere.
+Everything happens on your own computer. Package Lab itself sends nothing anywhere. The course runs in Package Lab's
+browser as it would in a learner's, so the course's own requests (fonts, analytics, its vendor's servers) still go
+out, and the **Network** view shows every one. Treat a course you don't trust as you would on any web page.
 
 ## How Package Lab thinks
 

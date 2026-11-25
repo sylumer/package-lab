@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Code instrumentation (P1.4): the ordered execution trace. Pure; no Electron.
 //
 // instrument() parses a script with acorn and inserts calls by text position, without generating code, so everything

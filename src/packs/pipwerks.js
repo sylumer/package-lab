@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // pipwerks SCORM API wrapper (docs/packs/pipwerks.md): SCORM.API.find / SCORM.API.get, version-agnostic.
 import { score, named, scriptHits, apiCalls, lookups } from './util.js'
 

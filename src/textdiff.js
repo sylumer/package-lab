@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // A line diff (Myers, O(ND)) for showing what changed in a text file. Pure.
 // diffLines(a, b) → [{ op: ' ' | '-' | '+', text }]; unified(a, b) → text with @@ hunks, '' when equal.
 // Line endings are not changes (CRLF counts as LF). Past MAX_EDITS edits the middle is shown as replaced, not

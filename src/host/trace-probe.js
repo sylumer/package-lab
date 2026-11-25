@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // The execution trace, page side (P1.4). Injected ahead of probe.js in every frame when a run is traced
 // (options.trace). The package's scripts are served instrumented (src/instrument.js) and call these three:
 //   __labT(1 | 2, site)          a function started or ended

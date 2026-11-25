@@ -3,6 +3,13 @@
 What changed in each edition of this guide, newest first. The guide describes **Package Lab 0.3.0**, with the fixes
 listed under edition 1.2. Where the app and the guide disagree, the app is right: please report it.
 
+## Edition 1.3 (25 November 2026)
+
+**New**
+
+- Chapter 3 says where to download Package Lab (the website and GitHub releases), that the Mac app is signed and
+  notarised, and that **Help › Check for Updates…** says whether there is a newer version.
+
 ## Edition 1.2 (22 November 2026)
 
 The guide becomes a book of its own, and the app problems the last edition listed as known issues are fixed.
@@ -15,7 +22,9 @@ The guide becomes a book of its own, and the app problems the last edition liste
 - The practice kit builds from the guide's window (**Build practice kit**), on the Mac or Windows, with no Terminal.
   Practice package names in the text open the package in Package Lab; macro file names load the macro.
 - `Package Lab User Guide.html`: the whole guide in one file, written into `dist/` and the Windows zip by every build,
-  and by `make guide`. Print it from a browser for a PDF.
+  and by `make guide`.
+- `Package Lab User Guide.pdf`: the guide as a PDF, with a cover, contents, bookmarks and working links, written
+  beside it by every build, and by `make guide-pdf`.
 
 **Changed**
 
@@ -23,11 +32,17 @@ The guide becomes a book of its own, and the app problems the last edition liste
   reference, one task to a page) is now **Help**, and stays in the inspector's Help panel. The Help menu's **Show Docs**
   is now **Show Help**, and **Help Topics** opens Help's index.
 - About this guide explains the guide and Help, and the guide's window. Chapters 3, 4 and 9 use the window: building
-  the kit, opening packages and loading macros. Windows users can now do every exercise.
+  the kit, opening packages and loading macros. Windows users can now do every exercise the Mac app can.
 - Appendix C has a section on the guide's window.
-- Chapter 3 starts from the downloaded app, on the Mac or Windows, and its first-open warnings. Installing from the
-  source, `doctor`, `make webkit` and `npm run practice` move to **If you have the source**. Chapters 1, 11 and 14,
-  Appendices B and C say what needs the source: the command line, the web interface and WebKit runs.
+- A review as a new reader: the counts of faulty and sound practice packages agree everywhere; what needs the source
+  code is said up front, with each command-line-only feature marked; “run it for 10 seconds” is defined; the run list
+  is oldest first, as the app shows it; a fixed pipeline gate (`jq`), Windows paths and menus, suspend data limits
+  as minimums, softer claims about Safari storage and real LRSs, a short cmi5 primer before exercise 16, and more
+  glossary terms. The findings' **Try:** says “API set to Both”, not “the Both APIs profile”.
+- Chapter 3 is about the downloaded app only, on the Mac or Windows, and its first-open warnings: no Terminal, no
+  source code. Setting up the source code (Node.js, `npm install`, `npm link`, `doctor`, `make webkit`) moves to the
+  start of chapter 14, the only chapter that needs it, with WebKit for chapter 11. Chapters 1 and 11, Appendices B and
+  C say what needs the source: the command line, the web interface and WebKit runs.
 
 **Fixed in Package Lab, and so no longer known issues**
 
@@ -73,7 +88,7 @@ A revision after a full review of the first edition, against the app, its refere
 - Chapter 6: SCORM 1.2 and 2004 error codes side by side; the API table marked as shortened; a **Frames** exercise.
 - Chapter 13: the corrected-package fixes under their real checklist names, including the Xyleme fix.
 - Chapter 14: more flags, `--variants`, `discover --request`, `items`, exit statuses, how to gate a pipeline on a
-  milestone, what the web interface can't do, Alfred's keywords and the Concierge module.
+  milestone, what the web interface can't do, and two integrations since taken out of the docs.
 
 **Corrected**
 

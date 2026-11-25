@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // package-lab: the command-line interface. Static analysis runs here in Node; runs, the desktop window and the web
 // interface start Electron (this repo's, or the installed Package Lab.app). See docs/cli.md.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, openSync, closeSync } from 'node:fs'

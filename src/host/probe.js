@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only. Copyright (C) 2026 Stephen Millard. Additional terms apply: see LINEAGE-AND-ATTRIBUTION.md.
 // Injected into every frame before its own scripts run (Page.addScriptToEvaluateOnNewDocument). It watches the two
 // names SCORM content looks for, API and API_1484_11, on this frame's window: every lookup (with the stack that made
 // it and whether something was there) and every assignment. Values pass through untouched, so an LMS that sets
