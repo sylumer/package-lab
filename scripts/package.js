@@ -23,6 +23,8 @@ if (platform !== 'darwin' && process.argv.includes('--install')) throw new Error
 // --release (Mac): sign with the Developer ID certificate, notarise with the `package-lab` notarytool keychain profile,
 // staple, and zip as dist/Package-Lab-mac-<arch>.zip. Without it the app is signed ad hoc, for this Mac only.
 const release = platform === 'darwin' && process.argv.includes('--release')
+// A release ships the docs inside the app, so it must be built from a committed tree that the tag and the website match.
+if (release && execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim()) throw new Error('--release needs a clean working tree: commit first, so the app, its docs and the tag match.')
 if (!['darwin', 'win32'].includes(platform)) throw new Error(`--platform is darwin or win32, not ${platform}.`)
 if (!['x64', 'arm64'].includes(arch)) throw new Error(`--arch is x64 or arm64, not ${arch}.`)
 
