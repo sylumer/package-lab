@@ -2439,6 +2439,8 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
   let stdout = ''; child.stdout.on('data', d => { stdout += d })
   const until = async (test, ms, what) => { for (const end = Date.now() + ms; Date.now() < end; await new Promise(r => setTimeout(r, 200))) if (test()) return; throw new Error('timed out: ' + what) }
   await until(() => existsSync(join(live, 'frame.jpg')), 30000, 'first frame')
+  // The first frame can come before the course has loaded (GitHub's Windows runner is slow): click once it has called the API.
+  await until(() => { try { return JSON.parse(readFileSync(join(live, 'status.json'), 'utf8')).api > 0 } catch { return false } }, 30000, 'the course calling the API')
   const started = Date.now()
   writeFileSync(join(live, 'input', '1.json'), JSON.stringify({ type: 'click', x: 0.631, y: 0.328 }))
   await new Promise(r => setTimeout(r, 1500))
