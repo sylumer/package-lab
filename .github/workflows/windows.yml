@@ -1,5 +1,5 @@
-# Windows check. Added in E6.3. It runs the suite on a Windows runner, builds the portable zip and uploads it.
-# Nothing here has run yet: the first run is the first look at Package Lab on Windows. Read the log of each step.
+# Windows check. Added in E6.3. It runs the suite and the UI tests on a Windows runner, builds the portable zip and
+# uploads it. Release downloads are built on the Mac (make release); this zip is the one a signing service would sign.
 name: Windows
 
 on:
@@ -24,8 +24,7 @@ jobs:
 
       - run: npm ci
 
-      # ponytail: the tests make fixture zips with `zip` and check them with `unzip -t` (test/test.js: fixture(), unzipT).
-      # The Windows runner may not have either on PATH, so they come from Chocolatey. Not yet checked on a real runner.
+      # The tests check written zips with `unzip -t` (test/test.js: unzipT), so Info-ZIP comes from Chocolatey.
       - name: Install Info-ZIP
         run: choco install zip unzip -y
 
@@ -65,10 +64,11 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
-      # Allowed to fail. The UI tests drive Electron through the desktop session, which a hosted runner may not give
-      # them, and they were written for the Mac. A failure here is information for the owner, not a broken build.
-      # Runs even when a test failed, so the UI result is still reported.
-      - name: UI tests (may fail)
+      # The UI tests' web checks drive Playwright's own Chromium. Run even when a test failed, so the UI result is reported.
+      - name: Install Chromium for the UI tests
+        if: ${{ !cancelled() }}
+        run: npx playwright install chromium
+
+      - name: UI tests
         if: ${{ !cancelled() }}
         run: npm run test:ui
-        continue-on-error: true

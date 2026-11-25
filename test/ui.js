@@ -11,7 +11,9 @@ import electron from 'electron'
 import { _electron, chromium } from 'playwright'
 import { VIEWPORTS } from '../src/options.js'
 
-const root = fileURLToPath(new URL('..', import.meta.url))
+// No trailing separator: on Windows Playwright quotes the app path as "C:\…\package-lab\", the \" escapes the quote and
+// Electron never starts (the launch hangs until the timeout).
+const root = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 let app = null, win = null, work = null
 export const errors = []   // uncaught errors from any window this file opened
 const dir = () => work ??= mkdtempSync(join(tmpdir(), 'package-lab-ui-'))
@@ -250,7 +252,7 @@ async function checks() {
   assert.equal(await win.getByRole('tab', { name: 'Settings', exact: true }).getAttribute('aria-selected'), 'true', 'the chip opens Settings')
   const before = new Set(readdirSync(join(dir(), 'data', 'runs')))
   await launch(); await win.waitForTimeout(1500); await stop()
-  await win.waitForFunction(() => document.querySelector('#view').innerText.includes('Saved to /'))
+  await win.waitForFunction(() => /Saved to (\/|[A-Z]:\\)/.test(document.querySelector('#view').innerText))   // a Mac or a Windows path
   const saved = readdirSync(join(dir(), 'data', 'runs')).filter(f => !before.has(f))
   assert.equal(saved.length, 1, 'the run was saved')
   assert.deepEqual(JSON.parse(readFileSync(join(dir(), 'data', 'runs', saved[0]), 'utf8')).launch.options.viewport, VIEWPORTS.iphone, 'the run saved the iPhone preset as launch.options.viewport')
