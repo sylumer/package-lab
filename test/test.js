@@ -2445,7 +2445,10 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
   // On GitHub Actions, keep the frames and sizes around the click for the workflow's diagnostics artifact.
   const diag = process.env.GITHUB_ACTIONS ? join(root, 'dist', 'diag') : null, keep = name => { if (diag) try { mkdirSync(diag, { recursive: true }); for (const f of ['frame.jpg', 'frame.json', 'status.json']) cpSync(join(live, f), join(diag, `${name}-${f}`)) } catch { /* best effort */ } }
   keep('before')
-  writeFileSync(join(live, 'input', '1.json'), JSON.stringify({ type: 'click', x: 0.631, y: 0.328 }))
+  // Next sits 146 px right of centre and 253 px down (the sample's fixed-width column), whatever the window size: a
+  // smaller screen (GitHub's Windows runner is 1024×768) shrinks the run window, so fixed fractions would miss it.
+  const fr = JSON.parse(readFileSync(join(live, 'frame.json'), 'utf8'))
+  writeFileSync(join(live, 'input', '1.json'), JSON.stringify({ type: 'click', x: 0.5 + 146 / fr.w, y: 253 / fr.h }))
   await new Promise(r => setTimeout(r, 1500))
   const clickTaken = !existsSync(join(live, 'input', '1.json'))
   keep('after')
