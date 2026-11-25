@@ -32,8 +32,22 @@ jobs:
       - name: Unit tests
         run: node test/test.js --unit
 
+      # The live test clicks at a fraction of the run window, so the screen size matters if Windows shrinks the window.
+      - name: Screen size
+        shell: pwsh
+        run: Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | Format-List DeviceName, Bounds, WorkingArea, Primary
+
       - name: Full suite
         run: npm test
+
+      # Frames and sizes around the live test's click (test/test.js keeps them on GitHub Actions).
+      - name: Upload live-test diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-diagnostics
+          path: dist/diag/
+          if-no-files-found: ignore
 
       # Runs even when a test failed, so the first run still gives a build and a UI result.
       - name: Build the portable Windows zip

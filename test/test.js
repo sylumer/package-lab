@@ -2442,13 +2442,19 @@ console.log('SEEN ' + JSON.stringify({ protocol: location.protocol, host: locati
   // The first frame can come before the course has loaded (GitHub's Windows runner is slow): click once it has called the API.
   await until(() => { try { return JSON.parse(readFileSync(join(live, 'status.json'), 'utf8')).api > 0 } catch { return false } }, 30000, 'the course calling the API')
   const started = Date.now()
+  // On GitHub Actions, keep the frames and sizes around the click for the workflow's diagnostics artifact.
+  const diag = process.env.GITHUB_ACTIONS ? join(root, 'dist', 'diag') : null, keep = name => { if (diag) try { mkdirSync(diag, { recursive: true }); for (const f of ['frame.jpg', 'frame.json', 'status.json']) cpSync(join(live, f), join(diag, `${name}-${f}`)) } catch { /* best effort */ } }
+  keep('before')
   writeFileSync(join(live, 'input', '1.json'), JSON.stringify({ type: 'click', x: 0.631, y: 0.328 }))
   await new Promise(r => setTimeout(r, 1500))
+  const clickTaken = !existsSync(join(live, 'input', '1.json'))
+  keep('after')
   writeFileSync(join(live, 'input', '2.json'), JSON.stringify({ type: 'stop' }))
   await new Promise(r => child.on('exit', r))
   assert.ok(Date.now() - started < 30000, 'live: stop ended it early')
   const lv = JSON.parse(stdout)
-  assert.ok(lv.api.some(a => a.el === 'cmi.core.lesson_location' && a.value === '2'), 'live: the click reached Next')
+  const liveInfo = () => JSON.stringify({ clickTaken, frame: (() => { try { return JSON.parse(readFileSync(join(live, 'frame.json'), 'utf8')) } catch { return null } })(), location: lv.api.filter(a => a.el === 'cmi.core.lesson_location').map(a => a.value), furthest: lv.furthest })
+  assert.ok(lv.api.some(a => a.el === 'cmi.core.lesson_location' && a.value === '2'), 'live: the click reached Next: ' + liveInfo())
   assert.ok(STEPS.findIndex(s => s[0] === lv.furthest) >= STEPS.findIndex(s => s[0] === 'wrote'), 'live: reaches at least wrote: ' + lv.furthest)
   console.log('live: ok')
 
